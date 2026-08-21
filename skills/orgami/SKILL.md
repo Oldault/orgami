@@ -37,7 +37,7 @@ its recent merged pull requests, and links to any `AGENTS.md` it already has.
 | Question | Where |
 |---|---|
 | One repo, in depth | `orgami card <repo>`, or `~/.orgami/<c>/map/repos/<repo>.md` |
-| One node and its edges | `orgami query <repo\|host\|tool\|service\|vendor>` |
+| One node and its edges | `orgami query <repo\|host\|tool\|service\|vendor>`, `--json` to read it in a script |
 | The whole org | `~/.orgami/<c>/map/ARCHITECTURE.md` |
 | How they write code here | `~/.orgami/<c>/map/CONVENTIONS.md` |
 | Why something is the way it is | `~/.orgami/<c>/map/DECISIONS.md` |

@@ -60,7 +60,7 @@ The map
   orgami doc [--narrate]                render ARCHITECTURE.md and the repo cards
   orgami html                           the map as one page you can open
   orgami view                           browse the map in the terminal
-  orgami query <repo|host|tool|service|vendor>
+  orgami query <repo|host|tool|service|vendor> [--json]
                                         print one node and its edges
   orgami card <repo>                    the repo's page: stack, commands, links
   orgami runbook [<repo>]               how to run, ship and unbreak it
