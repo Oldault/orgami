@@ -61,6 +61,23 @@
       "reviews": { "nodes": [] },
       "reviewThreads": { "nodes": [] },
       "files": { "nodes": [{ "path": "Dockerfile" }] }
+    },
+    {
+      "number": 133,
+      "title": "chore(main): release warehouse-jobs 2.4.0",
+      "url": "https://github.com/example-org/warehouse-jobs/pull/133",
+      "repository": { "name": "warehouse-jobs" },
+      "author": { "login": "release-please[bot]" },
+      "createdAt": "2026-05-17T04:00:00Z",
+      "mergedAt": "2026-05-17T04:05:00Z",
+      "additions": 18,
+      "deletions": 3,
+      "changedFiles": 2,
+      "body": "",
+      "labels": { "nodes": [{ "name": "release" }] },
+      "reviews": { "nodes": [] },
+      "reviewThreads": { "nodes": [] },
+      "files": { "nodes": [{ "path": "CHANGELOG.md" }, { "path": "version.rb" }] }
     }
   ]
 }

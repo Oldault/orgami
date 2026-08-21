@@ -2,8 +2,6 @@
 # Which repos keep changing together. Read out of the cached pull requests,
 # so it grows sharper every week the timer runs. Nothing static can see this.
 
-BOT_AUTHORS='dependabot|renovate|github-actions|snyk-bot|-bot$|\[bot\]'
-
 cmd_coupling() {
   load_company
 
@@ -15,14 +13,16 @@ cmd_coupling() {
 
   # Same author, same week, more than one repo: those repos moved together.
   # Bots are excluded — a dependency bump across ten repos is not coupling.
-  echo "$weeks" | xargs cat | jq -s --arg bots "$BOT_AUTHORS" '
+  # Which logins those are is lib/bots.jq's answer, the same one the numbers use.
+  echo "$weeks" | xargs cat | jq -L "$ROOT/lib" -s '
+    include "bots";
     def combos($rs; $bucket; $author):
       [range(0; ($rs | length)) as $i
        | range($i + 1; ($rs | length)) as $j
        | {a: $rs[$i], b: $rs[$j], bucket: $bucket, author: $author}];
 
     [.[] | .week as $w | (.prs // [])[]
-     | select((.author.login // "unknown") | test($bots; "i") | not)
+     | select(.author.login | is_human)
      | select(.mergedAt != null)
      | {week: $w, day: .mergedAt[0:10],
         author: (.author.login // "unknown"), repo: .repository.name}] as $ev

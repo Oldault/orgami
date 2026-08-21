@@ -55,7 +55,7 @@ cmd_report() {
   [[ $count -gt 0 ]] || die "no merged PRs in $week"
 
   local stats="$DIR/cache/prs/$week.stats.json"
-  jq -f "$ROOT/lib/stats.jq" "$src" >"$stats"
+  jq -L "$ROOT/lib" -f "$ROOT/lib/stats.jq" "$src" >"$stats"
 
   if [[ ${STATS_ONLY:-0} == 1 ]]; then
     cat "$stats"
@@ -98,11 +98,17 @@ cmd_report() {
   report_decisions "$week" "$digest" "$model"
   rm -f "$digest"
 
+  # The headline counts people, because that is what `merged` now means. An
+  # organization running no bots should not read a zero saying so every week.
+  local bot_note="" bot_merged
+  bot_merged=$(jq -r .merged_by_bots "$stats")
+  if [[ $bot_merged != 0 ]]; then bot_note=" (+$bot_merged by bots)"; fi
+
   {
     echo "# $COMPANY — week $week"
     echo
     echo "\`$(jq -r .since "$stats")\` to \`$(jq -r .until "$stats")\` · \
-$(jq -r .merged "$stats") merged PRs · \
+$(jq -r .merged "$stats") merged PRs$bot_note · \
 $(jq -r .repos_touched "$stats") repos · \
 median $(jq -r .median_hours_to_merge "$stats")h to merge"
     echo

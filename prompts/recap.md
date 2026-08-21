@@ -6,6 +6,13 @@ Rules:
 
 - Never compute or restate a number that is not in STATS. If you want a number
   that is not there, leave it out.
+- STATS counts people. `merged`, `merged_by_people` and every other figure are
+  the human pull requests only; the bots of the week are the single figure
+  `merged_by_bots`, and PULL_REQUESTS still holds all of them. So a bot's pull
+  request is never a theme, never an author, and never part of "the team merged
+  N changes". Say what the bots did in one clause under debt and maintenance —
+  "`merged_by_bots` dependency and release pull requests merged alongside" — and
+  nowhere else. If `merged_by_bots` is 0, do not mention bots at all.
 - Answer *why*, not *what changed*. "Checkout dropped card errors" beats
   "updated PaymentIntent handling in stripe.rb".
 - Group by intent, not by repository. A theme spanning three repos is one theme.
@@ -74,8 +81,10 @@ The style read, from STATS. Cover, only where the data supports it: PR size,
 time to merge, how much review actually happened, who reviews whom, whether
 review is concentrated on one person, files that keep attracting review
 comments, and PR hygiene (empty descriptions, missing labels). Be specific and
-name the numbers from STATS. This section is the one the engineering lead reads
-first — make it worth reading.
+name the numbers from STATS. These are human numbers — a median diff or an
+unreviewed count here describes what people did, not what a bump bot did.
+This section is the one the engineering lead reads first — make it worth
+reading.
 
 ## Watch list
 

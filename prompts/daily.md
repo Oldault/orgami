@@ -20,8 +20,8 @@ Rules:
   generated afterwards, so a number that did not exist cannot become one.
 - Plain sentences, present tense for what is now true. No praise, no filler, no
   "great progress today". Dry and specific reads as competent.
-- Bot work — dependabot, renovate, github-actions — is already excluded from
-  STATS. Do not mention it.
+- Bot work is already counted apart: every figure in STATS is people, except
+  `merged_by_bots` and `commits_by_bots`. Do not mention it.
 
 Write GitHub-flavored markdown with these sections, in this order. Sections
 marked omittable disappear entirely when they would be empty — no heading, no

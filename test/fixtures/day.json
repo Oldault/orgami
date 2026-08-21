@@ -82,6 +82,11 @@
       "repository": { "name": "ops-scripts" }, "author": { "login": "github-actions" },
       "message": "chore: regenerate the changelog", "sha": "1122334",
       "at": "2026-05-14T18:00:00Z", "pull_request": null
+    },
+    {
+      "repository": { "name": "ops-scripts" }, "author": { "login": "backport-bot" },
+      "message": "chore: sync the release branch", "sha": "5566778",
+      "at": "2026-05-14T19:20:00Z", "pull_request": null
     }
   ]
 }

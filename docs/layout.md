@@ -6,6 +6,7 @@ lib/common.sh          paths, config, company selection
 lib/init.sh            init / use / list
 lib/pull.sh            GraphQL fetch of merged PRs
 lib/prs.graphql        the query
+lib/bots.jq            what counts as a bot — the one definition, included
 lib/stats.jq           every number in the report
 lib/report.sh          stats + Claude -> reports/
 lib/daily.jq           every number in the daily digest
