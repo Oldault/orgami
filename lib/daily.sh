@@ -90,7 +90,7 @@ cmd_daily() {
   fi
 
   local stats
-  stats=$(jq -f "$ROOT/lib/daily.jq" "$src")
+  stats=$(jq -L "$ROOT/lib" -f "$ROOT/lib/daily.jq" "$src")
 
   if [[ $stats_only == 1 ]]; then
     echo "$stats"

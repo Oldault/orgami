@@ -14,6 +14,8 @@ bin/orgami         dispatcher — flag parsing lives in the subcommands, not her
 lib/common.sh      paths, config, company selection, die/log/linkify
 lib/<topic>.sh     one file per area, exporting cmd_<name> functions
 lib/*.jq           jq programs long enough to deserve their own file
+lib/bots.jq        what counts as a bot — one definition, included by the
+                   others, so a jq program here is run with `jq -L lib`
 prompts/*.md       every prompt sent to a model, versioned like code
 skills/orgami/     the Claude Code skill
 systemd/           the weekly timer

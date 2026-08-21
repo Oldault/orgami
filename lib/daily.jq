@@ -1,19 +1,20 @@
 # Every number in the daily digest. The model is handed these and told to write
 # around them, never to count. Same rule as lib/stats.jq.
 
-def bots: ["dependabot", "dependabot[bot]", "renovate", "renovate[bot]",
-           "github-actions", "github-actions[bot]", "snyk-bot", "greenkeeper[bot]"];
-def human: . as $who | (bots | index($who)) | not;
+# What counts as a bot lives in lib/bots.jq, shared with lib/stats.jq and the
+# coupling pass. Included, so this program is run as `jq -L lib -f lib/daily.jq`.
+include "bots";
+
 def tally(f): map(f) | group_by(.) | map({key: .[0], count: length})
   | sort_by(-.count) | map({(.key): .count}) | add // {};
 def hours($from; $to): (($to | fromdateiso8601) - ($from | fromdateiso8601)) / 3600;
 
 .date as $date
 | ((.date + "T23:59:59Z") | fromdateiso8601) as $eod
-| [.merged[] | select(.author.login // "unknown" | human)] as $merged
-| [.opened[] | select(.author.login // "unknown" | human)] as $opened
-| [.open[] | select(.author.login // "unknown" | human)] as $open
-| [.commits[] | select(.author.login // "unknown" | human)] as $commits
+| [.merged[] | select(.author.login | is_human)] as $merged
+| [.opened[] | select(.author.login | is_human)] as $opened
+| [.open[] | select(.author.login | is_human)] as $open
+| [.commits[] | select(.author.login | is_human)] as $commits
 # A commit that belongs to a merged pull request is already counted as that pull
 # request. What merges cannot see is the rest: work pushed to a branch with no
 # pull request behind it.
@@ -24,13 +25,13 @@ def hours($from; $to): (($to | fromdateiso8601) - ($from | fromdateiso8601)) / 3
     org: .org,
 
     merged: ($merged | length),
-    merged_by_bots: ([.merged[] | select(.author.login // "unknown" | human | not)] | length),
+    merged_by_bots: ([.merged[] | select(.author.login | is_bot)] | length),
     opened: ($opened | length),
     open_touched: ($open | length),
 
     commits: ($commits | length),
     commits_outside_prs: ($loose | length),
-    commits_by_bots: ([.commits[] | select(.author.login // "unknown" | human | not)] | length),
+    commits_by_bots: ([.commits[] | select(.author.login | is_bot)] | length),
     repos_touched: ($repos | length),
     by_repo: ($repos | map(. as $r
               | {($r): (([$merged[] | select(.repository.name == $r)] | length)
