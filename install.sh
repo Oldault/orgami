@@ -63,6 +63,26 @@ mkdir -p "$BIN_DIR"
 ln -sf "$REPO/bin/orgami" "$BIN_DIR/orgami"
 echo "linked $BIN_DIR/orgami -> $REPO/bin/orgami"
 
+# Shell completions go where the shell already looks, and nowhere else: these
+# directories are never created here, because a completion file dropped into a
+# directory no shell reads is a file nobody will ever think to delete.
+BASH_COMP_DIR="${BASH_COMPLETION_USER_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/bash-completion}/completions"
+if [[ -d $BASH_COMP_DIR ]]; then
+  ln -sf "$REPO/completions/orgami.bash" "$BASH_COMP_DIR/orgami"
+  echo "linked $BASH_COMP_DIR/orgami"
+fi
+
+# zsh autoloads by function name, so the link is called _orgami. The first
+# directory that exists wins — a second copy on $fpath would only shadow this one.
+ZSH_COMP_DIRS=("$HOME/.zsh/completions" "${XDG_DATA_HOME:-$HOME/.local/share}/zsh/site-functions")
+[[ $MGR == brew ]] && ZSH_COMP_DIRS+=("$(brew --prefix)/share/zsh/site-functions")
+for d in "${ZSH_COMP_DIRS[@]}"; do
+  [[ -d $d ]] || continue
+  ln -sf "$REPO/completions/orgami.zsh" "$d/_orgami"
+  echo "linked $d/_orgami"
+  break
+done
+
 # Installed as a Claude Code plugin? Then the plugin already supplies the skill,
 # the slash commands and the session hook — linking it again would duplicate it.
 if [[ $REPO == *"/.claude/plugins/"* ]]; then
