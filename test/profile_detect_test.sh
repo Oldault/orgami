@@ -7,7 +7,7 @@
 # quietly change the answer for another. This is the harness those additions
 # assert against.
 #
-# Six things are under test, and the third is the quiet one:
+# Seven things are under test, and the third is the quiet one:
 #
 #   - a dependency, a `manage.py`, a `go.mod` each name the framework behind
 #     them, and a tree with none of them reports an empty list rather than a
@@ -25,6 +25,9 @@
 #     never lands in something a reader might run
 #   - package_manager follows the documented precedence all the way down, one
 #     lockfile at a time
+#   - a repo with no package.json is read from the manifest it does have —
+#     composer.json through jq, mix.exs through grep — and the name a bare
+#     composer.json earns is a fallback, not a fourth PHP framework
 #
 # Fixture trees in a temp directory. No checkout, no network, no token.
 set -euo pipefail
@@ -154,6 +157,97 @@ assert "bullmq is a Bull queue" '. == ["Bull queue"]' "$(framework "$(deps bullm
 assert "a package that merely starts with bull is not a queue" \
   '. == []' "$(framework "$(deps bullseye)")"
 
+# --- PHP: a framework named by a file, or by composer.json ----------------------
+
+# `artisan`, `bin/console` and `wp-config.php` are each the whole signal on
+# their own: a WordPress site repo often has no manifest at all, and a checkout
+# that never committed composer.json is still what it is.
+d=$(tree)
+printf '#!/usr/bin/env php\n' >"$d/artisan"
+assert "artisan at the root is Laravel" '. == ["Laravel"]' "$(framework "$d")"
+
+d=$(tree)
+mkdir -p "$d/bin"
+printf '#!/usr/bin/env php\n' >"$d/bin/console"
+assert "bin/console is Symfony" '. == ["Symfony"]' "$(framework "$d")"
+
+d=$(tree)
+printf "<?php\ndefine('DB_NAME', 'wp');\n" >"$d/wp-config.php"
+assert "wp-config.php is WordPress" '. == ["WordPress"]' "$(framework "$d")"
+
+d=$(tree)
+mkdir -p "$d/wp-content/themes/site"
+assert "a committed wp-content is WordPress" '. == ["WordPress"]' "$(framework "$d")"
+
+# A checkout whose whole content is a composer.json requiring these packages.
+requires() {
+  local d
+  d=$(tree)
+  printf '%s\n' "$@" | jq -Rn '{require: ([inputs | {(.): "*"}] | add // {})}' >"$d/composer.json"
+  echo "$d"
+}
+
+assert "laravel/framework in composer.json is Laravel" \
+  '. == ["Laravel"]' "$(framework "$(requires php laravel/framework)")"
+assert "symfony/framework-bundle in composer.json is Symfony" \
+  '. == ["Symfony"]' "$(framework "$(requires php symfony/framework-bundle)")"
+
+d=$(tree)
+cat >"$d/composer.json" <<'JSON'
+{"require-dev": {"symfony/framework-bundle": "^7.0"}}
+JSON
+assert "a framework declared under require-dev counts too" \
+  '. == ["Symfony"]' "$(framework "$d")"
+
+# The fallback, and the pair of assertions a new PHP branch is most likely to
+# break: a composer.json naming none of the three is the plain project, and one
+# that names a framework is that framework and not the plain project as well.
+d=$(tree)
+cat >"$d/composer.json" <<'JSON'
+{"require": {"php": "^8.2", "guzzlehttp/guzzle": "^7.8"}}
+JSON
+out=$(framework "$d")
+assert "a bare composer.json is a plain Composer project" \
+  '. == ["Composer project"]' "$out"
+assert "a plain Composer project is not Laravel or Symfony" \
+  '(index("Laravel")) == null and (index("Symfony")) == null' "$out"
+assert "Laravel is not reported as a plain Composer project beside itself" \
+  '. == ["Laravel"]' "$(framework "$(requires laravel/framework)")"
+
+# --- Elixir: mix.exs, and what it says ------------------------------------------
+
+# mix.exs is Elixir source rather than JSON, so grep is its reader. A checkout
+# whose whole content is a mix.exs declaring these dependency lines.
+mixfile() {
+  local d
+  d=$(tree)
+  {
+    printf 'defmodule M.MixProject do\n  defp deps do\n    [\n'
+    printf '      %s,\n' "$@"
+    printf '    ]\n  end\nend\n'
+  } >"$d/mix.exs"
+  echo "$d"
+}
+
+out=$(framework "$(mixfile '{:jason, "~> 1.4"}')")
+assert "mix.exs on its own is an Elixir project" '. == ["Elixir project"]' "$out"
+assert "an Elixir project without phoenix is not Phoenix" \
+  '(index("Phoenix")) == null' "$out"
+
+# Same guard as SvelteKit over Svelte: Phoenix is the concrete name, and
+# "Elixir project" beside it would only repeat the category.
+assert "{:phoenix, in mix.exs is Phoenix and not Elixir project" \
+  '. == ["Phoenix"]' "$(framework "$(mixfile '{:phoenix, "~> 1.7"}')")"
+
+d=$(mixfile '{:jason, "~> 1.4"}')
+mkdir -p "$d/lib/my_app_web/controllers"
+assert "a committed lib/<app>_web is Phoenix with no dependency line to read" \
+  '. == ["Phoenix"]' "$(framework "$d")"
+
+assert "ecto lands beside the framework, never instead of it" \
+  '(sort) == ["Ecto","Phoenix"]' \
+  "$(framework "$(mixfile '{:phoenix, "~> 1.7"}' '{:ecto_sql, "~> 3.11"}')")"
+
 # --- profile_commands ----------------------------------------------------------
 
 # Ten scripts match the vocabulary and three do not. Eight is the cap, and the
@@ -204,10 +298,12 @@ assert "a target outside the vocabulary never lands" '(.scripts | has("deploy"))
 d=$(tree)
 touch "$d/pnpm-lock.yaml" "$d/yarn.lock" "$d/package-lock.json" "$d/Gemfile" \
   "$d/poetry.lock" "$d/requirements.txt"
+touch "$d/composer.lock"
 printf 'module example.com/m\n\ngo 1.22\n' >"$d/go.mod"
 printf '[package]\nname = "m"\n' >"$d/Cargo.toml"
 for m in pnpm-lock.yaml:pnpm yarn.lock:yarn package-lock.json:npm Gemfile:bundler \
-  poetry.lock:poetry requirements.txt:pip go.mod:go Cargo.toml:cargo; do
+  poetry.lock:poetry requirements.txt:pip go.mod:go Cargo.toml:cargo \
+  composer.lock:composer; do
   assert "${m#*:} wins while ${m%%:*} is there" \
     ".package_manager == \"${m#*:}\"" "$(profile_commands "$d")"
   rm "$d/${m%%:*}"
@@ -226,6 +322,50 @@ release: ./bin/migrate
 PROC
 assert "every Procfile process is named, in file order" \
   '.procfile == ["web","worker","release"]' "$(profile_commands "$d")"
+
+# composer.json scripts are read the way package.json scripts are: same
+# vocabulary, same cap. A composer script may also be a list, which composer
+# runs in order.
+d=$(tree)
+cat >"$d/composer.json" <<'JSON'
+{"scripts": {
+  "post-install-cmd": "@php artisan package:discover",
+  "test": "phpunit",
+  "lint": ["php-cs-fixer fix --dry-run", "phpstan analyse"],
+  "migrate": "@php artisan migrate"
+}}
+JSON
+out=$(profile_commands "$d")
+assert "a composer script keeps the command it runs" '.scripts.test == "phpunit"' "$out"
+assert "a composer script that is a list is joined in file order" \
+  '.scripts.lint == "php-cs-fixer fix --dry-run && phpstan analyse"' "$out"
+assert "a composer script outside the vocabulary never lands" \
+  '(.scripts | has("post-install-cmd")) | not' "$out"
+
+# Both manifests in one repo — a Laravel front end is the common case. composer
+# fills what package.json did not say and never rewrites what it did.
+d=$(tree)
+printf '{"scripts": {"test": "vitest run"}}\n' >"$d/package.json"
+printf '{"scripts": {"test": "phpunit", "migrate": "@php artisan migrate"}}\n' >"$d/composer.json"
+out=$(profile_commands "$d")
+assert "package.json keeps a name both manifests define" \
+  '.scripts.test == "vitest run"' "$out"
+assert "composer still contributes the names package.json left out" \
+  '.scripts.migrate == "@php artisan migrate"' "$out"
+
+# mix runs the tests of every Elixir project; phx.server exists only where
+# Phoenix does.
+d=$(tree)
+printf 'defmodule M.MixProject do\nend\n' >"$d/mix.exs"
+out=$(profile_commands "$d")
+assert "mix.exs contributes mix test" '.scripts.test == "mix test"' "$out"
+assert "a project with no Phoenix in it gets no server command" \
+  '(.scripts | has("dev")) | not' "$out"
+
+d=$(tree)
+printf 'defmodule M.MixProject do\n  {:phoenix, "~> 1.7"}\nend\n' >"$d/mix.exs"
+assert "a Phoenix project also gets mix phx.server" \
+  '.scripts == {"dev": "mix phx.server", "test": "mix test"}' "$(profile_commands "$d")"
 
 d=$(tree)
 printf 'a repo with nothing to run\n' >"$d/README.md"
