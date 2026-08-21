@@ -107,8 +107,11 @@ orgami agents --all      # both, explicitly
 ```
 
 It writes a marked block and rewrites only that block on later runs, so anything
-you wrote by hand around it survives. These files live in the repo, so commit
-them only if the team wants them there.
+you wrote by hand around it survives, and so does the file's mode. If the closing
+`<!-- orgami:end -->` marker has gone — deleted, or eaten by a merge — the block
+has no bottom, so the file is left exactly as it is and the run says which file
+and what to put back. These files live in the repo, so commit them only if the
+team wants them there.
 
 A written block is a snapshot, so it drifts as soon as the map moves. Two ways to
 keep it current, and they compose:

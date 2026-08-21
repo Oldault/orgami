@@ -159,6 +159,14 @@ publish() {
   echo "publish: refuses without a docs repo, on a dry run, on a declined prompt and on an unknown flag"
 }
 
+# `agents_splice` rewrites a file in somebody else's repository, unattended,
+# from the weekly timer. What it must never do is take the user's own lines or
+# their file mode with it. Runs against fixture files in a temp directory.
+agents() {
+  ./test/agents_splice_test.sh >/dev/null
+  echo "agents: user text and file mode preserved, an unclosed block refused"
+}
+
 # A note left in an unmerged pull request is a note nobody wrote. Runs against a
 # stub gh and a stub git — no network, no repository, no push.
 notes() {
@@ -216,6 +224,7 @@ CHECKS=(
   --update:update
   --publish:publish
   --notes:notes
+  --agents:agents
   --playbook:playbook
   --query:query
   --html:html
