@@ -7,7 +7,7 @@
 # quietly change the answer for another. This is the harness those additions
 # assert against.
 #
-# Five things are under test, and the third is the quiet one:
+# Six things are under test, and the third is the quiet one:
 #
 #   - a dependency, a `manage.py`, a `go.mod` each name the framework behind
 #     them, and a tree with none of them reports an empty list rather than a
@@ -16,6 +16,9 @@
 #     React Native and Expo, so reporting it beside them would say the repo is
 #     two frameworks. That is the `[[ ${#out[@]} -eq 0 ]]` guard, and it is what
 #     a new meta-framework branch is most likely to walk past
+#   - a meta-framework outranks the library it ships — SvelteKit over Svelte,
+#     Nuxt over Vue, Astro over React — while a database client or an API layer
+#     is reported beside the framework instead of displacing it
 #   - the caps are caps, not coincidences: eight package.json scripts and six
 #     Makefile targets, taken in file order
 #   - `make` contributes only targets in the vocabulary, so a `deploy:` target
@@ -87,6 +90,69 @@ assert "go.mod is a Go module" '. == ["Go module"]' "$(framework "$d")"
 d=$(tree)
 printf 'a repo with nothing to go on\n' >"$d/README.md"
 assert "a tree with no framework reports none" '. == []' "$(framework "$d")"
+
+# --- frameworks that arrive as one dependency name -----------------------------
+
+# A checkout whose whole content is a package.json declaring these dependencies.
+# No version is ever read, so every one of them is "*".
+deps() {
+  local d
+  d=$(tree)
+  printf '%s\n' "$@" | jq -Rn '{dependencies: ([inputs | {(.): "*"}] | add // {})}' >"$d/package.json"
+  echo "$d"
+}
+
+for f in astro:Astro nuxt:Nuxt '@sveltejs/kit:SvelteKit' '@remix-run/react:Remix' \
+  '@angular/core:Angular' '@solidjs/start:SolidStart' '@builder.io/qwik:Qwik' \
+  hono:Hono elysia:Elysia; do
+  assert "${f%:*} in dependencies is ${f##*:}" \
+    ". == [\"${f##*:}\"]" "$(framework "$(deps "${f%:*}")")"
+done
+
+d=$(tree)
+cat >"$d/package.json" <<'JSON'
+{"devDependencies": {"@sveltejs/kit": "2.5.0"}}
+JSON
+assert "a framework declared as a devDependency counts too" \
+  '. == ["SvelteKit"]' "$(framework "$d")"
+
+# Each of these ships the library it is built on, so both names are in the
+# dependency list and only the order of the branches keeps the repo from being
+# reported as two things at once. This is the assertion a new meta-framework
+# breaks by landing below the guarded line instead of above it.
+assert "@sveltejs/kit beside svelte is SvelteKit and not Svelte" \
+  '. == ["SvelteKit"]' "$(framework "$(deps @sveltejs/kit svelte)")"
+assert "nuxt beside vue is Nuxt and not Vue" \
+  '. == ["Nuxt"]' "$(framework "$(deps nuxt vue)")"
+assert "astro beside react is Astro and not React" \
+  '. == ["Astro"]' "$(framework "$(deps astro react react-dom)")"
+assert "svelte on its own is still Svelte" '. == ["Svelte"]' "$(framework "$(deps svelte)")"
+assert "vue on its own is still Vue" '. == ["Vue"]' "$(framework "$(deps vue)")"
+
+# React Router is a framework only in framework mode. Every React SPA that
+# routes at all has `react-router` in it, so the dependency on its own says
+# nothing and `@react-router/dev` is the whole signal.
+assert "react-router with @react-router/dev is React Router" \
+  '. == ["React Router"]' "$(framework "$(deps react-router @react-router/dev react)")"
+assert "react-router on its own leaves a React repo a React repo" \
+  '. == ["React"]' "$(framework "$(deps react-router react react-dom)")"
+
+# The other direction: a database client or an API layer says how the repo
+# reaches its data, not what it is, so it is reported beside the framework
+# rather than swallowing it. Sorted in jq, because the sort in the function is
+# the shell's and follows the locale.
+assert "a data or API library lands beside the framework, never instead of it" \
+  '(sort) == ["Drizzle","Prisma","React","tRPC"]' \
+  "$(framework "$(deps react react-dom prisma drizzle-orm @trpc/server)")"
+assert "@prisma/client without the CLI is still Prisma" \
+  '. == ["Prisma"]' "$(framework "$(deps @prisma/client)")"
+
+# Both queue packages are named, and `-x` is what keeps the shorter one from
+# matching the front of a longer package name.
+assert "bull is a Bull queue" '. == ["Bull queue"]' "$(framework "$(deps bull)")"
+assert "bullmq is a Bull queue" '. == ["Bull queue"]' "$(framework "$(deps bullmq)")"
+assert "a package that merely starts with bull is not a queue" \
+  '. == []' "$(framework "$(deps bullseye)")"
 
 # --- profile_commands ----------------------------------------------------------
 

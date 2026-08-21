@@ -27,20 +27,48 @@ profile_framework() {
   if [[ -f $pkg ]]; then
     local deps
     deps=$(jq -r '[(.dependencies // {}), (.devDependencies // {})] | add // {} | keys[]' "$pkg" 2>/dev/null || true)
+    # Meta-frameworks lead the list. Each of them ships the library it is built
+    # on as a dependency of its own, and the guarded `react`, `vue` and
+    # `svelte` lines below only fire when nothing more specific matched — so a
+    # SvelteKit repo has to reach `out` before the `svelte` line reads it, or
+    # it reports the library instead of the framework.
     grep -qx 'next' <<<"$deps" && out+=("Next.js")
+    grep -qx 'nuxt' <<<"$deps" && out+=("Nuxt")
+    grep -qx '@sveltejs/kit' <<<"$deps" && out+=("SvelteKit")
+    grep -qx 'astro' <<<"$deps" && out+=("Astro")
+    grep -qx '@remix-run/react' <<<"$deps" && out+=("Remix")
+    # React Router is the framework only in its framework mode. As a plain
+    # dependency it is the router a React SPA imports, and the repo is a React
+    # repo; `@react-router/dev` is what tells the two apart.
+    grep -qx 'react-router' <<<"$deps" && grep -qx '@react-router/dev' <<<"$deps" &&
+      out+=("React Router")
+    grep -qx '@angular/core' <<<"$deps" && out+=("Angular")
+    grep -qx '@solidjs/start' <<<"$deps" && out+=("SolidStart")
+    grep -qx '@builder.io/qwik' <<<"$deps" && out+=("Qwik")
     grep -qx '@nestjs/core' <<<"$deps" && out+=("NestJS")
     grep -qx 'express' <<<"$deps" && out+=("Express")
     grep -qx 'fastify' <<<"$deps" && out+=("Fastify")
     grep -qx 'koa' <<<"$deps" && out+=("Koa")
+    grep -qx 'hono' <<<"$deps" && out+=("Hono")
+    grep -qx 'elysia' <<<"$deps" && out+=("Elysia")
     grep -qx 'parse-server' <<<"$deps" && out+=("Parse Server")
     grep -qx 'parse' <<<"$deps" && out+=("Parse SDK")
     grep -qx 'react-native' <<<"$deps" && out+=("React Native")
     grep -qx 'expo' <<<"$deps" && out+=("Expo")
     grep -qx 'react' <<<"$deps" && [[ ${#out[@]} -eq 0 ]] && out+=("React")
-    grep -qx 'vue' <<<"$deps" && out+=("Vue")
-    grep -qx 'svelte' <<<"$deps" && out+=("Svelte")
+    grep -qx 'vue' <<<"$deps" && [[ ${#out[@]} -eq 0 ]] && out+=("Vue")
+    grep -qx 'svelte' <<<"$deps" && [[ ${#out[@]} -eq 0 ]] && out+=("Svelte")
+    # These name how a repo reaches its database or its own API, not what it
+    # is, so they sit beside the framework rather than instead of it — after
+    # the guarded lines, never before them.
+    grep -qx '@trpc/server' <<<"$deps" && out+=("tRPC")
+    grep -qxE 'prisma|@prisma/client' <<<"$deps" && out+=("Prisma")
+    grep -qx 'drizzle-orm' <<<"$deps" && out+=("Drizzle")
     grep -qx 'agenda' <<<"$deps" && out+=("Agenda jobs")
-    grep -qx 'bullmq\|bull' <<<"$deps" && out+=("Bull queue")
+    # `-x` takes one whole-line pattern, and `\|` is a GNU extension to BRE
+    # that BSD grep reads as a literal pipe — so on macOS this line matched
+    # nothing at all. -E says alternation in the one dialect both agree on.
+    grep -qxE 'bullmq|bull' <<<"$deps" && out+=("Bull queue")
     grep -qx 'serverless' <<<"$deps" && out+=("Serverless")
   fi
   [[ -f $src/manage.py ]] && out+=("Django")
