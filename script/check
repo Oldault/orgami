@@ -4,7 +4,9 @@ set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 
-SCRIPTS=(bin/orgami install.sh script/check)
+# completions/orgami.zsh is not here on purpose: bash -n and shellcheck do not
+# read zsh. test/completions_test.sh runs `zsh -n` over it instead.
+SCRIPTS=(bin/orgami install.sh script/check completions/orgami.bash)
 while IFS= read -r f; do SCRIPTS+=("$f"); done < <(
   find lib hooks test -name '*.sh' -type f | sort
 )
@@ -162,6 +164,14 @@ html() {
   echo "html: self-contained, and every edge keeps its confidence"
 }
 
+# The shell completions may only offer what `orgami help --all` and the files
+# under $ORGAMI_HOME already say. Runs against a fixture home and this checkout
+# — no map, no token, no network.
+completions() {
+  ./test/completions_test.sh >/dev/null
+  echo "completions: commands, companies and repos offered from what is on disk"
+}
+
 # The check registry. One line per check: the flag that runs it on its own, and
 # the function behind it. Bare `script/check` walks this list in order, so a new
 # check is one self-contained line here plus its function above — nothing else
@@ -184,6 +194,7 @@ CHECKS=(
   --playbook:playbook
   --query:query
   --html:html
+  --completions:completions
 )
 
 # Generated from the registry, four flags to a line, so the usage block cannot
