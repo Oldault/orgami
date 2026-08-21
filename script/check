@@ -140,6 +140,14 @@ playbook() {
   echo "playbook: instances counted, one instance refused, the same job matched"
 }
 
+# `orgami query --json` is what anything built on the map reads, so its shape
+# is pinned, and so is the confidence on every edge it hands out. Runs against a
+# hand-written graph.json under a temp ORGAMI_HOME.
+query() {
+  ./test/query_json_test.sh >/dev/null
+  echo "query: the node and both directions of its edges, evidence and confidence intact"
+}
+
 # map/graph.html must open with no network and say what graph.json says.
 html() {
   ./test/html_render_test.sh >/dev/null
@@ -165,6 +173,7 @@ CHECKS=(
   --update:update
   --notes:notes
   --playbook:playbook
+  --query:query
   --html:html
 )
 

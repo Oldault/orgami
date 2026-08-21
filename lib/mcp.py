@@ -119,9 +119,10 @@ TOOLS = [
         "description": (
             "One node of the map and both directions of its edges — a repository, a "
             "host, a deployment tool such as kamal or terraform, a backing service "
-            "such as postgres, or a third-party vendor such as stripe. Most edges are "
-            "extracted and carry the file:line they "
-            "were found on. An edge marked ~ is inferred: nothing declared it, it was "
+            "such as postgres, or a third-party vendor such as stripe. Returns JSON: "
+            "the node, and both directions of its edges. Most edges are "
+            "\"confidence\": \"extracted\" and carry the file:line they "
+            "were found on. An \"inferred\" edge is one nothing declared: it was "
             "resolved by matching one repo's reading against another's, and there is "
             "no line to open. Say which kind you are relying on."
         ),
@@ -199,6 +200,10 @@ TOOLS = [
         "inputSchema": {"type": "object", "properties": {}},
     },
 ]
+
+
+# The tools whose output is JSON, not prose.
+JSON_TOOLS = {"orgami_query"}
 
 
 def run(args, stdin=None):
@@ -401,7 +406,7 @@ def call(name, args):
         repo = args.get("repo")
         return run(["context", repo] if repo else ["context"])
     if name == "orgami_query":
-        return run(["query", args.get("name", "")])
+        return run(["query", args.get("name", ""), "--json"])
     if name == "orgami_notes":
         argv = ["notes"]
         if args.get("repo"):
@@ -490,8 +495,19 @@ def main():
             reply(msg_id, {"tools": TOOLS})
         elif method == "tools/call":
             params = msg.get("params") or {}
-            text = call(params.get("name", ""), params.get("arguments") or {})
-            reply(msg_id, {"content": [{"type": "text", "text": text}]})
+            tool = params.get("name", "")
+            text = call(tool, params.get("arguments") or {})
+            result = {"content": [{"type": "text", "text": text}]}
+            # A tool whose CLI side prints JSON also hands the client the parsed
+            # object, so a client that can read structured results does not have
+            # to parse the text back. A `die` on the other side arrives as its
+            # message rather than JSON, and then the text is all there is.
+            if tool in JSON_TOOLS:
+                try:
+                    result["structuredContent"] = json.loads(text)
+                except ValueError:
+                    pass
+            reply(msg_id, result)
         elif method == "ping":
             reply(msg_id, {})
         elif msg_id is not None:

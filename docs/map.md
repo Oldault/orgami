@@ -122,6 +122,35 @@ orgami query 51.158.10.20
 Colour is on when a terminal is attached and off when the output is piped, so
 `orgami query x | grep` stays clean. `NO_COLOR` turns it off everywhere.
 
+`--json` prints the same node and the same two directions of edges as one
+object, so a dashboard, a CI screen or an agent's tool reads the map without
+parsing the pane or re-implementing the lookup:
+
+```bash
+orgami query thruster --json | jq '.edges.out[] | select(.kind == "deploys-to")'
+```
+
+```json
+{
+  "id": "repo:thruster",
+  "kind": "repo",
+  "name": "thruster",
+  "meta": { "language": "Ruby" },
+  "edges": {
+    "out": [{ "to": "host:api.example.com", "kind": "deploys-to",
+              "evidence": "config/deploy.yml:12", "confidence": "extracted" }],
+    "in": [{ "from": "repo:web", "kind": "calls",
+             "evidence": "src/api.ts:31", "confidence": "inferred" }]
+  }
+}
+```
+
+Every edge carries its `evidence` and its `confidence`, in both directions, and
+`signal` where the scan recorded which kind of fact matched. A consumer that
+cannot tell an extracted edge from an inferred one is reading the map wrong, so
+the JSON never leaves the distinction out — an edge nobody tagged is classified
+by its kind, the same way the text pane and `graph.html` classify it.
+
 ## The files beside the map
 
 - **`CONVENTIONS.md`** — every `AGENTS.md`, `CLAUDE.md` and `CONTRIBUTING.md`

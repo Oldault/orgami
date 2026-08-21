@@ -70,7 +70,9 @@ orgami mcp --config cursor      # or opencode, codex, claude-code, windsurf, zed
 
 That prints the snippet for the client, and `orgami mcp` is the server itself —
 stdio JSON-RPC, Python standard library only, shelling out to the same CLI so
-there is no second implementation to drift. The `orgami_note` tool is described
+there is no second implementation to drift. `orgami_query` shells out to
+`orgami query --json` and returns the object as `structuredContent` as well as
+text, so a client that reads structured results does not parse it back. The `orgami_note` tool is described
 to the model as requiring the user's agreement first, the same rule the Claude
 skill carries.
 
