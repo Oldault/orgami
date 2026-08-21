@@ -30,16 +30,38 @@ TAIL
 }
 
 # Replaces the managed block in place, leaving everything else alone.
+#
+# A start marker with no end marker below it is refused, not rewritten: the
+# marker promises the user that everything under it is theirs, and awk would
+# swallow the rest of the file looking for a bottom that is not there. Returns
+# 1 with the file untouched; the caller decides whether that is fatal.
 agents_splice() {
   local file=$1 block=$2
   if [[ -f $file ]] && grep -qF "$MARK_START" "$file"; then
-    local tmp
-    tmp=$(mktemp)
+    grep -qF "$MARK_END" "$file" || {
+      log "$file: an orgami:start marker with nothing closing it — left untouched"
+      log "put the '$MARK_END' line back, or delete the start marker, then re-run"
+      return 1
+    }
+    local tmp mode
+    # The file belongs to somebody else, so its mode has to survive the move.
+    # BSD stat has no -c and GNU stat has no -f.
+    mode=$(stat -c %a "$file" 2>/dev/null || stat -f %Lp "$file" 2>/dev/null || true)
+    # Beside the target rather than in $TMPDIR: the move stays on one
+    # filesystem, so it is still atomic, and it cannot cross a mount point.
+    tmp=$(mktemp "$file.orgami.XXXXXX")
+    # fflush before handing stdout to `cat`, or the block lands wherever awk's
+    # own buffer happens to have got to.
     awk -v start="$MARK_START" -v end="$MARK_END" -v blockfile="$block" '
-      index($0, start) { system("cat " blockfile); skip = 1; next }
+      index($0, start) { fflush(); system("cat \"" blockfile "\""); skip = 1; next }
       index($0, end) { skip = 0; next }
       !skip { print }
-    ' "$file" >"$tmp"
+    ' "$file" >"$tmp" || {
+      rm -f "$tmp"
+      log "$file: the rewrite failed — left untouched"
+      return 1
+    }
+    [[ -n $mode ]] && chmod "$mode" "$tmp"
     mv "$tmp" "$file"
   else
     [[ -f $file ]] && printf '\n' >>"$file"
@@ -93,7 +115,8 @@ cmd_agents() {
   for t in "${targets[@]}"; do
     case $t in
       agents)
-        agents_splice "$dir/AGENTS.md" "$block"
+        agents_splice "$dir/AGENTS.md" "$block" ||
+          die "$dir/AGENTS.md: unbalanced orgami markers — nothing was written"
         echo "$dir/AGENTS.md"
         ;;
       cursor)
@@ -194,7 +217,7 @@ agents_refresh() {
     mv "$tmp" "$DIR/config.json"
   fi
 
-  local root checkout repo block n=0
+  local root checkout repo block n=0 refused=0
   block=$(mktemp)
   for root in "${roots[@]}"; do
     root=${root/#\~/$HOME}
@@ -207,8 +230,12 @@ agents_refresh() {
       local touched=0
       if [[ -f $checkout/AGENTS.md ]] && grep -qF "$MARK_START" "$checkout/AGENTS.md"; then
         agents_block "$repo" >"$block"
-        agents_splice "$checkout/AGENTS.md" "$block"
-        touched=1
+        if agents_splice "$checkout/AGENTS.md" "$block"; then
+          touched=1
+        else
+          # One checkout with a mangled block does not stop the other thirty.
+          refused=$((refused + 1))
+        fi
       fi
       if [[ -f $checkout/.cursor/rules/orgami.mdc ]]; then
         agents_block "$repo" >"$block"
@@ -227,6 +254,9 @@ agents_refresh() {
   done
   rm -f "$block"
   echo "$n checkout(s) refreshed"
+  if [[ $refused -gt 0 ]]; then
+    log "$refused file(s) left untouched — see above"
+  fi
 }
 
 # Cursor fires sessionStart and takes {"additional_context": "..."} on stdout.
