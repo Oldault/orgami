@@ -21,6 +21,12 @@ PROFILE_TEST_EXCL=(--exclude-dir=test --exclude-dir=tests --exclude-dir=spec
 # Env vars that say nothing about the system.
 ENV_NOISE='^(NODE_ENV|ENV|ENVIRONMENT|PORT|HOST|DEBUG|LOG_LEVEL|TZ|HOME|PATH|USER|PWD|CI|npm_.*|NEXT_RUNTIME|VERCEL.*)$'
 
+# make targets, just recipes and Task tasks are all free-form names in a file
+# that lists everything the repo ever does, deploys included. The same handful
+# of names is what somebody actually needs in order to run the thing, so all
+# three branches ask the same question and it is written down once.
+RUN_VOCAB='^(dev|run|start|build|test|lint|check|setup|install|migrate)$'
+
 # Phoenix leaves two marks and either one is enough: the dependency in mix.exs,
 # or the `lib/<app>_web/` tree its generator writes. Both the framework list and
 # the command list ask the question, so it is answered in one place.
@@ -32,6 +38,18 @@ profile_is_phoenix() {
     [[ -d $d ]] && return 0
   done
   return 1
+}
+
+# The .NET project and solution files a checkout committed. A solution keeps its
+# projects a directory or two below the root and anything deeper is a vendored
+# copy rather than the repo's own, so the walk stops there — and it prunes
+# instead of filtering, because this runs against every repo in the scan and
+# most of them have no .NET in them at all. The framework list, the command list
+# and the runtime line all ask, so it is answered in one place, in path order so
+# that the answer is the same on the next scan.
+profile_dotnet_files() {
+  find "$1" -maxdepth 3 \( -name .git -o -name node_modules \) -prune -o \
+    \( -name '*.csproj' -o -name '*.sln' \) -print 2>/dev/null | sort | head -10
 }
 
 profile_framework() {
@@ -120,6 +138,35 @@ profile_framework() {
     grep -q '{:ecto' "$src/mix.exs" && out+=("Ecto")
   fi
 
+  # The JVM. pom.xml is XML and a Gradle build file is its own Groovy or Kotlin
+  # DSL, so grep reads them — the rule that keeps grep off package.json is about
+  # JSON. The build system and the framework written on top of it are two
+  # different facts about a repo, so Spring Boot is reported beside Maven or
+  # Gradle rather than instead of either, the way Prisma sits beside React.
+  local builds=()
+  [[ -f $src/pom.xml ]] && { out+=("Maven"); builds+=("$src/pom.xml"); }
+  [[ -f $src/build.gradle ]] && builds+=("$src/build.gradle")
+  [[ -f $src/build.gradle.kts ]] && builds+=("$src/build.gradle.kts")
+  [[ -f $src/build.gradle || -f $src/build.gradle.kts ]] && out+=("Gradle")
+  [[ ${#builds[@]} -gt 0 ]] && grep -q 'spring-boot-starter' "${builds[@]}" 2>/dev/null &&
+    out+=("Spring Boot")
+
+  # .NET. A committed project or solution file is the whole signal. ASP.NET
+  # names itself inside the project file, either as the web SDK the project
+  # builds with or as a package it references — a class library names neither,
+  # and stays plain .NET.
+  local dotnet f
+  dotnet=$(profile_dotnet_files "$src")
+  if [[ -n $dotnet ]]; then
+    out+=(".NET")
+    while IFS= read -r f; do
+      if grep -qE 'Microsoft\.AspNetCore|Microsoft\.NET\.Sdk\.Web' "$f" 2>/dev/null; then
+        out+=("ASP.NET")
+        break
+      fi
+    done <<<"$dotnet"
+  fi
+
   printf '%s\n' "${out[@]:-}" | grep -v '^$' | sort -u | jq -Rn '[inputs]'
 }
 
@@ -153,13 +200,66 @@ profile_commands() {
     profile_is_phoenix "$src" && cmds=$(jq -c '.dev //= "mix phx.server"' <<<"$cmds")
   fi
 
+  # mvn, gradle and dotnet each run a project's tests off the build file alone,
+  # with nothing anywhere in the repo declaring a script for it.
+  [[ -f $src/pom.xml ]] && cmds=$(jq -c '.test //= "mvn test"' <<<"$cmds")
+  if [[ -f $src/build.gradle || -f $src/build.gradle.kts ]]; then
+    # The wrapper is how a Gradle project is meant to be run, and the only way
+    # that works without Gradle installed — but a repo that never committed one
+    # leaves plain `gradle` as what the reader actually has.
+    if [[ -f $src/gradlew ]]; then
+      cmds=$(jq -c '.test //= "./gradlew test"' <<<"$cmds")
+    else
+      cmds=$(jq -c '.test //= "gradle test"' <<<"$cmds")
+    fi
+  fi
+  local dotnet
+  dotnet=$(profile_dotnet_files "$src")
+  [[ -n $dotnet ]] && cmds=$(jq -c '.test //= "dotnet test"' <<<"$cmds")
+
   if [[ -f $src/Makefile ]]; then
     local targets
     targets=$(grep -oE '^[a-z][a-z0-9_-]*:' "$src/Makefile" | tr -d ':' |
-      grep -E '^(dev|run|start|build|test|lint|check|setup|install|migrate)$' | head -6 || true)
+      grep -E "$RUN_VOCAB" | head -6 || true)
     [[ -n $targets ]] && cmds=$(jq -c --argjson t "$(jq -Rn '[inputs]' <<<"$targets")" \
       '. + ($t | map({(.): ("make " + .)}) | add // {})' <<<"$cmds")
   fi
+
+  # just is make's shape with a different runner: recipe names read the same
+  # way, so the vocabulary and the cap are the Makefile branch's. What it adds
+  # is added the way composer.json's scripts are — a name package.json already
+  # gave a command keeps it, because a second manifest says what the first left
+  # out rather than rewriting it.
+  local justfile=""
+  [[ -f $src/justfile ]] && justfile="$src/justfile"
+  [[ -z $justfile && -f $src/Justfile ]] && justfile="$src/Justfile"
+  if [[ -n $justfile ]]; then
+    local recipes
+    recipes=$(grep -oE '^[a-z][a-z0-9_-]*:' "$justfile" | tr -d ':' |
+      grep -E "$RUN_VOCAB" | head -6 || true)
+    [[ -n $recipes ]] && cmds=$(jq -c --argjson t "$(jq -Rn '[inputs]' <<<"$recipes")" \
+      '($t | map({(.): ("just " + .)}) | add // {}) + .' <<<"$cmds")
+  fi
+
+  local taskfile=""
+  [[ -f $src/Taskfile.yml ]] && taskfile="$src/Taskfile.yml"
+  [[ -z $taskfile && -f $src/Taskfile.yaml ]] && taskfile="$src/Taskfile.yaml"
+  if [[ -n $taskfile ]]; then
+    # Deliberately shallow, because orgami takes no YAML parser: the task names
+    # are the two-space-indented keys under `tasks:`, the block ends at the next
+    # key in column one, and everything a task itself declares — `cmds:`,
+    # `desc:` — is indented deeper than that. Nesting beyond those two facts is
+    # not attempted, and a Taskfile that formats itself differently reads as a
+    # Taskfile with no tasks rather than as one with the wrong ones.
+    local tasks
+    tasks=$(awk '/^tasks:/ { in_tasks = 1; next }
+                 /^[^[:space:]]/ { in_tasks = 0 }
+                 in_tasks && /^  [a-z][a-z0-9_-]*:/ { sub(/:.*/, ""); sub(/^  /, ""); print }' \
+      "$taskfile" | grep -E "$RUN_VOCAB" | head -6 || true)
+    [[ -n $tasks ]] && cmds=$(jq -c --argjson t "$(jq -Rn '[inputs]' <<<"$tasks")" \
+      '($t | map({(.): ("task " + .)}) | add // {}) + .' <<<"$cmds")
+  fi
+
   local b
   for b in setup dev test start console migrate; do
     [[ -x $src/bin/$b ]] && cmds=$(jq -c --arg k "$b" --arg v "bin/$b" '.[$k] //= $v' <<<"$cmds")
@@ -182,6 +282,23 @@ profile_commands() {
   [[ -z $runtime && -f $src/.python-version ]] && runtime="python $(head -1 "$src/.python-version")"
   [[ -z $runtime && -f $src/.ruby-version ]] && runtime="ruby $(head -1 "$src/.ruby-version")"
   [[ -z $runtime && -f $src/go.mod ]] && runtime=$(grep -m1 '^go ' "$src/go.mod" | sed 's/^go /go /' || true)
+  [[ -z $runtime && -f $src/pom.xml ]] &&
+    runtime=$(grep -m1 -oE '<java\.version>[^<]+' "$src/pom.xml" |
+      sed -E 's|<java\.version>|java |' || true)
+  # `net8.0` is already the name the toolchain uses for itself, so it is
+  # reported as it stands rather than guessed into a version number — the same
+  # string is `netstandard2.1` or `net48` in the repo next door.
+  if [[ -z $runtime && -n $dotnet ]]; then
+    local f tf
+    while IFS= read -r f; do
+      tf=$(grep -m1 -oE '<TargetFrameworks?>[^<]+' "$f" |
+        sed -E 's|<TargetFrameworks?>||' || true)
+      if [[ -n $tf ]]; then
+        runtime="dotnet $tf"
+        break
+      fi
+    done <<<"$dotnet"
+  fi
 
   local procfile="[]"
   [[ -f $src/Procfile ]] &&

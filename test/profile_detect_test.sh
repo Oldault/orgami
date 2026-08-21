@@ -7,7 +7,7 @@
 # quietly change the answer for another. This is the harness those additions
 # assert against.
 #
-# Seven things are under test, and the third is the quiet one:
+# Nine things are under test, and the third is the quiet one:
 #
 #   - a dependency, a `manage.py`, a `go.mod` each name the framework behind
 #     them, and a tree with none of them reports an empty list rather than a
@@ -28,6 +28,12 @@
 #   - a repo with no package.json is read from the manifest it does have —
 #     composer.json through jq, mix.exs through grep — and the name a bare
 #     composer.json earns is a fallback, not a fourth PHP framework
+#   - a build system and the framework built on top of it are separate facts and
+#     both are said: Maven beside Spring Boot, .NET beside ASP.NET, with the
+#     runtime version read out of the same file
+#   - just and Task are read the way make is, down to the vocabulary, and the
+#     Taskfile read is shallow on purpose — a key nested under a task is not a
+#     task, and neither is a key in the block after `tasks:`
 #
 # Fixture trees in a temp directory. No checkout, no network, no token.
 set -euo pipefail
@@ -248,6 +254,70 @@ assert "ecto lands beside the framework, never instead of it" \
   '(sort) == ["Ecto","Phoenix"]' \
   "$(framework "$(mixfile '{:phoenix, "~> 1.7"}' '{:ecto_sql, "~> 3.11"}')")"
 
+# --- the JVM: a build file, and the framework named inside it -------------------
+
+# pom.xml is XML and a Gradle build file is Groovy or Kotlin, so grep reads
+# both. The build system and the framework are separate facts about the repo,
+# which is why Spring Boot arrives beside Maven and not instead of it.
+d=$(tree)
+cat >"$d/pom.xml" <<'XML'
+<project>
+  <properties><java.version>21</java.version></properties>
+  <dependencies>
+    <dependency><artifactId>spring-boot-starter-web</artifactId></dependency>
+  </dependencies>
+</project>
+XML
+assert "spring-boot-starter in a pom.xml is Spring Boot, beside Maven" \
+  '(sort) == ["Maven","Spring Boot"]' "$(framework "$d")"
+
+d=$(tree)
+printf '<project><modelVersion>4.0.0</modelVersion></project>\n' >"$d/pom.xml"
+out=$(framework "$d")
+assert "a bare pom.xml is Maven" '. == ["Maven"]' "$out"
+assert "a bare pom.xml is not Spring Boot" '(index("Spring Boot")) == null' "$out"
+
+d=$(tree)
+printf 'plugins { id "java" }\n' >"$d/build.gradle"
+assert "build.gradle is Gradle" '. == ["Gradle"]' "$(framework "$d")"
+
+d=$(tree)
+printf 'dependencies { implementation("org.springframework.boot:spring-boot-starter-web") }\n' \
+  >"$d/build.gradle.kts"
+assert "the Kotlin build file is read for both facts too" \
+  '(sort) == ["Gradle","Spring Boot"]' "$(framework "$d")"
+
+# --- .NET: a project or solution file, and the SDK it builds with --------------
+
+# A solution keeps its projects a directory or two down, so the fixture puts one
+# there. ASP.NET is named twice over in a web project — the SDK and the package
+# reference — and either one on its own is the signal.
+d=$(tree)
+mkdir -p "$d/src/Api"
+cat >"$d/src/Api/Api.csproj" <<'XML'
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+  <ItemGroup><PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" /></ItemGroup>
+</Project>
+XML
+assert "a .csproj naming Microsoft.AspNetCore is ASP.NET, beside .NET" \
+  '(sort) == [".NET","ASP.NET"]' "$(framework "$d")"
+
+d=$(tree)
+cat >"$d/Lib.csproj" <<'XML'
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><TargetFramework>netstandard2.1</TargetFramework></PropertyGroup>
+</Project>
+XML
+out=$(framework "$d")
+assert "a class library is .NET" '. == [".NET"]' "$out"
+assert "a class library is not ASP.NET" '(index("ASP.NET")) == null' "$out"
+
+d=$(tree)
+printf 'Microsoft Visual Studio Solution File, Format Version 12.00\n' >"$d/App.sln"
+assert "a solution file with no project beside it is still .NET" \
+  '. == [".NET"]' "$(framework "$d")"
+
 # --- profile_commands ----------------------------------------------------------
 
 # Ten scripts match the vocabulary and three do not. Eight is the cap, and the
@@ -366,6 +436,110 @@ d=$(tree)
 printf 'defmodule M.MixProject do\n  {:phoenix, "~> 1.7"}\nend\n' >"$d/mix.exs"
 assert "a Phoenix project also gets mix phx.server" \
   '.scripts == {"dev": "mix phx.server", "test": "mix test"}' "$(profile_commands "$d")"
+
+# mvn, gradle and dotnet run a project's tests with no script declaring it, and
+# the same file carries the runtime version.
+d=$(tree)
+printf '<project><properties><java.version>21</java.version></properties></project>\n' >"$d/pom.xml"
+out=$(profile_commands "$d")
+assert "a pom.xml contributes mvn test" '.scripts.test == "mvn test"' "$out"
+assert "<java.version> is the runtime" '.runtime == "java 21"' "$out"
+
+# The wrapper is the command where the repo committed one, and only there.
+d=$(tree)
+printf 'plugins { id "java" }\n' >"$d/build.gradle"
+assert "a Gradle project with no wrapper committed runs plain gradle" \
+  '.scripts.test == "gradle test"' "$(profile_commands "$d")"
+printf '#!/bin/sh\nexec gradle "$@"\n' >"$d/gradlew"
+assert "a committed wrapper is what the command uses" \
+  '.scripts.test == "./gradlew test"' "$(profile_commands "$d")"
+
+d=$(tree)
+mkdir -p "$d/src/Api"
+cat >"$d/src/Api/Api.csproj" <<'XML'
+<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup>
+  <TargetFramework>net8.0</TargetFramework>
+</PropertyGroup></Project>
+XML
+out=$(profile_commands "$d")
+assert "a .csproj contributes dotnet test" '.scripts.test == "dotnet test"' "$out"
+assert "<TargetFramework> is the runtime, as the toolchain writes it" \
+  '.runtime == "dotnet net8.0"' "$out"
+
+# just is read the way make is: the same vocabulary, the same cap, and a
+# `deploy` recipe leading the file so only the vocabulary can keep it out.
+d=$(tree)
+cat >"$d/justfile" <<'JUST'
+deploy:
+    ./deploy.sh
+_private:
+    @echo hidden
+test:
+    cargo test
+build:
+    cargo build --release
+JUST
+out=$(profile_commands "$d")
+assert "a justfile recipe becomes just <recipe>" \
+  '.scripts.test == "just test" and .scripts.build == "just build"' "$out"
+assert "a recipe outside the vocabulary never lands" \
+  '(.scripts | has("deploy") or has("_private")) | not' "$out"
+
+d=$(tree)
+printf 'test:\n    pytest\n' >"$d/Justfile"
+assert "a capitalized Justfile is read too" \
+  '.scripts.test == "just test"' "$(profile_commands "$d")"
+
+# The rule composer.json follows: a second file says what the first left out
+# rather than rewriting it.
+d=$(tree)
+printf '{"scripts": {"test": "vitest run"}}\n' >"$d/package.json"
+printf 'test:\n    just-test\nlint:\n    just-lint\n' >"$d/justfile"
+out=$(profile_commands "$d")
+assert "package.json keeps a name the justfile also defines" \
+  '.scripts.test == "vitest run"' "$out"
+assert "the justfile still contributes what package.json left out" \
+  '.scripts.lint == "just lint"' "$out"
+
+# The Taskfile read is two facts wide and no wider: two-space-indented keys
+# under `tasks:`, ending at the next key in column one. `desc:` and `cmds:` are
+# a task's own keys, and the `includes:` block deliberately follows `tasks:` so
+# that a name in the vocabulary sits outside it.
+d=$(tree)
+cat >"$d/Taskfile.yml" <<'YAML'
+version: '3'
+
+vars:
+  BIN: ./out/app
+
+tasks:
+  build:
+    desc: compile the binary
+    cmds:
+      - go build -o {{.BIN}} .
+  test:
+    cmds:
+      - go test ./...
+  deploy:
+    cmds:
+      - ./deploy.sh
+
+includes:
+  lint: ./lint/Taskfile.yml
+YAML
+out=$(profile_commands "$d")
+assert "a Taskfile task becomes task <name>" \
+  '.scripts.build == "task build" and .scripts.test == "task test"' "$out"
+assert "a task outside the vocabulary never lands" '(.scripts | has("deploy")) | not' "$out"
+assert "a key nested under a task is not a task" \
+  '(.scripts | has("cmds") or has("desc")) | not' "$out"
+assert "the block after tasks: is not read as more tasks" \
+  '(.scripts | has("lint")) | not' "$out"
+
+d=$(tree)
+printf "version: '3'\ntasks:\n  check:\n    cmds:\n      - ./script/check\n" >"$d/Taskfile.yaml"
+assert "the .yaml spelling of the file is read too" \
+  '.scripts.check == "task check"' "$(profile_commands "$d")"
 
 d=$(tree)
 printf 'a repo with nothing to run\n' >"$d/README.md"
