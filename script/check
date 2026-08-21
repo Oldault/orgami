@@ -72,6 +72,14 @@ profile() {
   echo "profile_routes: test paths excluded from endpoints list"
 }
 
+# `profile_framework` and `profile_commands` are where every new detection
+# branch lands, so what they already read off a checkout is pinned: one fixture
+# tree per case, no clone, no network.
+detect() {
+  ./test/profile_detect_test.sh >/dev/null
+  echo "detect: frameworks, scripts, package manager and runtime read off a tree"
+}
+
 # A vendor edge says an organization is paying somebody, so it may only exist
 # where a committed file says so. Runs against three hand-written checkouts —
 # no clone, no network, no token.
@@ -138,25 +146,70 @@ html() {
   echo "html: self-contained, and every edge keeps its confidence"
 }
 
+# The check registry. One line per check: the flag that runs it on its own, and
+# the function behind it. Bare `script/check` walks this list in order, so a new
+# check is one self-contained line here plus its function above — nothing else
+# to edit, and two branches each adding a check touch different lines instead of
+# fighting over one.
+CHECKS=(
+  --syntax-only:syntax
+  --lint-only:lint
+  --stats:stats
+  --profile:profile
+  --detect:detect
+  --vendors:vendors
+  --advise:advise
+  --dns:dns
+  --live:live
+  --depth:depth
+  --update:update
+  --notes:notes
+  --playbook:playbook
+  --html:html
+)
+
+# Generated from the registry, four flags to a line, so the usage block cannot
+# drift out of date with what the script actually runs.
+usage() {
+  local e flags=() line="" lines=() n=0 i prefix suffix
+  for e in "${CHECKS[@]}"; do flags+=("${e%%:*}"); done
+  for e in "${flags[@]}"; do
+    line+="${line:+ | }$e"
+    n=$((n + 1))
+    if (( n % 4 == 0 )); then lines+=("$line"); line=""; fi
+  done
+  [[ -n $line ]] && lines+=("$line")
+  for i in "${!lines[@]}"; do
+    prefix="                     "
+    suffix=" |"
+    (( i == 0 )) && prefix="usage: script/check ["
+    (( i == ${#lines[@]} - 1 )) && suffix="]"
+    echo "$prefix${lines[i]}$suffix" >&2
+  done
+}
+
+# Every check, in registry order, stopping at the first failure. The flags exist
+# to re-run one of them on its own.
+run_all() {
+  local e
+  for e in "${CHECKS[@]}"; do
+    "${e#*:}" || return $?
+  done
+}
+
+run_one() {
+  local flag=$1 e
+  for e in "${CHECKS[@]}"; do
+    if [[ ${e%%:*} == "$flag" ]]; then
+      "${e#*:}"
+      return $?
+    fi
+  done
+  usage
+  exit 2
+}
+
 case ${1-} in
-  --syntax-only) syntax ;;
-  --lint-only) lint ;;
-  --stats) stats ;;
-  --profile) profile ;;
-  --vendors) vendors ;;
-  --advise) advise ;;
-  --dns) dns ;;
-  --live) live ;;
-  --depth) depth ;;
-  --update) update ;;
-  --notes) notes ;;
-  --playbook) playbook ;;
-  --html) html ;;
-  "") syntax && lint && stats && profile && vendors && advise && dns && live && depth && update && notes && playbook && html ;;
-  *)
-    echo "usage: script/check [--syntax-only | --lint-only | --stats | --profile |" >&2
-    echo "                     --vendors | --advise | --dns | --live | --depth |" >&2
-    echo "                     --update | --notes | --playbook | --html]" >&2
-    exit 2
-    ;;
+  "") run_all ;;
+  *) run_one "$1" ;;
 esac

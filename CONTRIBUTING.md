@@ -49,6 +49,12 @@ jq -f lib/stats.jq test/fixtures/week.json          # every number in the report
 If your change touches `lib/stats.jq`, add a case to the fixture and an assertion
 to `script/check`.
 
+A new gate is one line in the `CHECKS` registry at the foot of `script/check` —
+the flag that runs it on its own, and the function behind it — plus that
+function, and a `test/<name>_test.sh` beside the others once it needs more than
+a couple of assertions. The usage block is generated from the registry, so two
+branches each adding a gate no longer land on the same line.
+
 ## Testing the parts that need an org
 
 Point orgami at any organization your `gh` token can see — your own account's
