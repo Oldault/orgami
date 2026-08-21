@@ -150,6 +150,15 @@ update() {
   echo "update: refuses dirty, diverged, untracked and the plugin clone"
 }
 
+# `orgami publish` holds the only `git push` in the tool, and the weekly timer
+# calls it with `--yes` — so it runs unattended too, and what matters is what it
+# refuses. Runs against a stub git that records every call and refuses a push
+# nobody asked for — no network, no repository, no push.
+publish() {
+  ./test/publish_test.sh >/dev/null
+  echo "publish: refuses without a docs repo, on a dry run, on a declined prompt and on an unknown flag"
+}
+
 # A note left in an unmerged pull request is a note nobody wrote. Runs against a
 # stub gh and a stub git — no network, no repository, no push.
 notes() {
@@ -205,6 +214,7 @@ CHECKS=(
   --depth:depth
   --coupling:coupling
   --update:update
+  --publish:publish
   --notes:notes
   --playbook:playbook
   --query:query
