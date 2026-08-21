@@ -181,6 +181,15 @@ playbook() {
   echo "playbook: instances counted, one instance refused, the same job matched"
 }
 
+# A runbook is the document an agent reads immediately before it touches a
+# repository, and it claims in its own body that no model wrote any of it. Runs
+# the generator over a hand-written map under a temp ORGAMI_HOME, with a stub
+# `claude` on PATH that records the call it must never receive.
+runbook() {
+  ./test/runbook_test.sh >/dev/null
+  echo "runbook: quotes traceable, tags placed, absence stated, no empty headings, no model"
+}
+
 # `orgami query --json` is what anything built on the map reads, so its shape
 # is pinned, and so is the confidence on every edge it hands out. Runs against a
 # hand-written graph.json under a temp ORGAMI_HOME.
@@ -226,6 +235,7 @@ CHECKS=(
   --notes:notes
   --agents:agents
   --playbook:playbook
+  --runbook:runbook
   --query:query
   --html:html
   --completions:completions
