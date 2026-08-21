@@ -43,8 +43,12 @@ pull requests — the same shape `orgami pull` caches — so anything that reads
 requests can be exercised against it:
 
 ```bash
-jq -f lib/stats.jq test/fixtures/week.json          # every number in the report
+jq -L lib -f lib/stats.jq test/fixtures/week.json   # every number in the report
 ```
+
+`-L lib` is how `lib/bots.jq` is found: what counts as a bot is defined there
+once and included by `lib/stats.jq`, `lib/daily.jq` and the coupling pass, so
+the three cannot drift apart.
 
 If your change touches `lib/stats.jq`, add a case to the fixture and an assertion
 to `script/check`.

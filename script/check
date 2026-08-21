@@ -38,18 +38,23 @@ lint() {
 # The whole deterministic half of the weekly report, on a fixture week. No
 # GitHub token, no org, no model.
 stats() {
-  local out
-  out=$(jq -f lib/stats.jq test/fixtures/week.json)
-  local merged reviewless
-  merged=$(jq -r .merged <<<"$out")
-  reviewless=$(jq -r .merged_without_review <<<"$out")
-  [[ $merged == 3 ]] || { echo "expected 3 merged, got $merged" >&2; return 1; }
-  [[ $reviewless == 2 ]] || { echo "expected 2 unreviewed, got $reviewless" >&2; return 1; }
+  local out want got k
+  out=$(jq -L lib -f lib/stats.jq test/fixtures/week.json)
+  # The fixture week is four merged pull requests, two of them bots: one named
+  # `dependabot`, one that is a bot only by its `[bot]` suffix. `merged` counts
+  # the two people — it used to count all four — and `merged_without_review` is
+  # one and not two because the bot release nobody reviewed is no longer in the
+  # human figure. Both numbers changed meaning, not just value.
+  for k in "merged=2" "merged_by_people=2" "merged_by_bots=2" \
+    "merged_without_review=1" "repos_touched=2"; do
+    want=${k#*=}
+    got=$(jq -r ".${k%%=*}" <<<"$out")
+    [[ $got == "$want" ]] || { echo "stats.jq: ${k%%=*} expected $want, got $got" >&2; return 1; }
+  done
   echo "stats.jq: fixture week reads back correctly"
 
   local day
   day=$(jq -L lib -f lib/daily.jq test/fixtures/day.json)
-  local want got k
   # merged and commits count people only; the bot rows are reported apart, and
   # a commit with no pull request behind it is the number the weekly recap
   # cannot see. `backport-bot` is in neither figure by name — the shared rule in

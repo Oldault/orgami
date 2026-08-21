@@ -1,5 +1,9 @@
 # Deterministic weekly numbers. The model is never asked to count anything.
 
+# What counts as a bot lives in lib/bots.jq, shared with the daily digest and the
+# coupling pass. Included, so this program runs as `jq -L lib -f lib/stats.jq`.
+include "bots";
+
 def median:
   sort
   | if length == 0 then 0
@@ -11,13 +15,24 @@ def round1: . * 10 | round | . / 10;
 def tally(f): map(f) | group_by(.) | map({key: .[0], count: length})
   | sort_by(-.count) | map({(.key): .count}) | add // {};
 
-.prs as $prs
+# Bots are counted apart, not counted out: `merged` and every figure under it
+# read people only, and the bot half of the week is `merged_by_bots`. An
+# organization running Dependabot merges version bumps nobody opened or read, and
+# left in the pile they drag the median diff down and the unreviewed count up
+# until neither describes anyone's work. Same split as lib/daily.jq.
+.prs as $all
+| [$all[] | select(.author.login | is_human)] as $prs
 | ($prs | map(((.mergedAt | fromdateiso8601) - (.createdAt | fromdateiso8601)) / 3600)) as $lat
 | {
     week: .week,
     since: .since,
     until: .until,
     merged: ($prs | length),
+    # The same number as `merged`, under a name that cannot be misread. Every
+    # figure here is handed to a model that must not count, so the pair it is
+    # given has to say which side of the split it is on.
+    merged_by_people: ($prs | length),
+    merged_by_bots: ([$all[] | select(.author.login | is_bot)] | length),
     repos_touched: ($prs | map(.repository.name) | unique | length),
     by_repo: ($prs | tally(.repository.name)),
     by_author: ($prs | tally(.author.login // "unknown")),
