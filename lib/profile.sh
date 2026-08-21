@@ -21,6 +21,19 @@ PROFILE_TEST_EXCL=(--exclude-dir=test --exclude-dir=tests --exclude-dir=spec
 # Env vars that say nothing about the system.
 ENV_NOISE='^(NODE_ENV|ENV|ENVIRONMENT|PORT|HOST|DEBUG|LOG_LEVEL|TZ|HOME|PATH|USER|PWD|CI|npm_.*|NEXT_RUNTIME|VERCEL.*)$'
 
+# Phoenix leaves two marks and either one is enough: the dependency in mix.exs,
+# or the `lib/<app>_web/` tree its generator writes. Both the framework list and
+# the command list ask the question, so it is answered in one place.
+profile_is_phoenix() {
+  local src=$1 d
+  [[ -f $src/mix.exs ]] || return 1
+  grep -q '{:phoenix,' "$src/mix.exs" && return 0
+  for d in "$src"/lib/*_web; do
+    [[ -d $d ]] && return 0
+  done
+  return 1
+}
+
 profile_framework() {
   local src=$1
   local pkg="$src/package.json" out=()
@@ -80,6 +93,33 @@ profile_framework() {
   [[ -f $src/pubspec.yaml ]] && out+=("Flutter")
   [[ -d $src/ios && -d $src/android ]] && out+=("Mobile app")
 
+  # PHP. composer.json is JSON, so jq reads it — the house rule that keeps grep
+  # off package.json applies here for the same reason. `artisan`, `bin/console`
+  # and `wp-config.php` each name the framework on their own, so a checkout
+  # that never committed its composer.json is still recognized.
+  local php_start=${#out[@]} require=""
+  [[ -f $src/composer.json ]] &&
+    require=$(jq -r '[(.require // {}), (."require-dev" // {})] | add // {} | keys[]' \
+      "$src/composer.json" 2>/dev/null || true)
+  { [[ -f $src/artisan ]] || grep -qx 'laravel/framework' <<<"$require"; } && out+=("Laravel")
+  { [[ -f $src/bin/console ]] || grep -qx 'symfony/framework-bundle' <<<"$require"; } && out+=("Symfony")
+  { [[ -f $src/wp-config.php ]] || [[ -d $src/wp-content ]]; } && out+=("WordPress")
+  # Last, and only when none of the three matched: a bare composer.json says the
+  # repo is a PHP project and nothing more specific, so it is the fallback that
+  # keeps such a repo from reporting nothing — not a fourth name beside them.
+  [[ -f $src/composer.json && ${#out[@]} -eq $php_start ]] && out+=("Composer project")
+
+  # Elixir. mix.exs is not JSON, so grep is the right reader here.
+  if [[ -f $src/mix.exs ]]; then
+    # The same shape as the guarded `react` line above: Phoenix is the concrete
+    # thing to say about the repo, and "Elixir project" beside it would only
+    # repeat the category it is already an instance of.
+    if profile_is_phoenix "$src"; then out+=("Phoenix"); else out+=("Elixir project"); fi
+    # Ecto says how the repo reaches its database rather than what it is, so it
+    # is reported beside the framework the way Prisma and Drizzle are.
+    grep -q '{:ecto' "$src/mix.exs" && out+=("Ecto")
+  fi
+
   printf '%s\n' "${out[@]:-}" | grep -v '^$' | sort -u | jq -Rn '[inputs]'
 }
 
@@ -91,6 +131,26 @@ profile_commands() {
     cmds=$(jq -c '(.scripts // {})
       | with_entries(select(.key | test("^(dev|start|build|test|lint|typecheck|migrate|seed|e2e)")))
       | to_entries | .[0:8] | from_entries' "$pkg" 2>/dev/null || echo '{}')
+  fi
+
+  # The same question of composer.json: same vocabulary, same cap. A composer
+  # script may also be a list, which composer runs in order.
+  if [[ -f $src/composer.json ]]; then
+    local composer_scripts
+    composer_scripts=$(jq -c '(.scripts // {})
+      | with_entries(select(.key | test("^(dev|start|build|test|lint|typecheck|migrate|seed|e2e)")))
+      | map_values(if type == "array" then join(" && ") else . end)
+      | to_entries | .[0:8] | from_entries' "$src/composer.json" 2>/dev/null || echo '{}')
+    # A name both files define keeps the command package.json gave it: reading a
+    # second manifest should add what the first did not say, not rewrite it.
+    cmds=$(jq -c --argjson c "$composer_scripts" '$c + .' <<<"$cmds")
+  fi
+
+  # mix is the runner for every Elixir project; `mix phx.server` exists only
+  # where Phoenix does.
+  if [[ -f $src/mix.exs ]]; then
+    cmds=$(jq -c '.test //= "mix test"' <<<"$cmds")
+    profile_is_phoenix "$src" && cmds=$(jq -c '.dev //= "mix phx.server"' <<<"$cmds")
   fi
 
   if [[ -f $src/Makefile ]]; then
@@ -114,6 +174,7 @@ profile_commands() {
   [[ -z $pm && -f $src/requirements.txt ]] && pm=pip
   [[ -z $pm && -f $src/go.mod ]] && pm=go
   [[ -z $pm && -f $src/Cargo.toml ]] && pm=cargo
+  [[ -z $pm && -f $src/composer.lock ]] && pm=composer
 
   local runtime=""
   [[ -f $src/.nvmrc ]] && runtime="node $(tr -d 'v \n' <"$src/.nvmrc" | head -c 12)"
