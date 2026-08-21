@@ -6,8 +6,8 @@ what is committed:
 
 | Looking for | Where |
 |---|---|
-| Deployment tooling | `.github/workflows` actions, `Dockerfile`, `config/deploy.yml` (Kamal), `fly.toml`, `vercel.json`, `netlify.toml`, `render.yaml`, `serverless.yml`, `Chart.yaml`, `Procfile`, `*.tf`, `ansible.cfg`, Kubernetes manifests, `.gitlab-ci.yml`, `Jenkinsfile`, `.circleci/config.yml` |
-| Servers and endpoints | Kamal `servers:`, Fly app names, Kubernetes ingress hosts, `.env.example` |
+| Deployment tooling | `.github/workflows` actions, `Dockerfile`, `config/deploy.yml` (Kamal), `fly.toml`, `vercel.json`, `netlify.toml`, `render.yaml`, `serverless.yml`, `Chart.yaml`, `Procfile`, `*.tf`, `ansible.cfg`, Kubernetes manifests, `.gitlab-ci.yml`, `Jenkinsfile`, `.circleci/config.yml`, `wrangler.toml` (Cloudflare), `railway.json`, `.coolify/`, `app.json` with Dokku's own keys, `captain-definition` (CapRover), `template.yaml` with the SAM transform, `cdk.json`, `supabase/config.toml` |
+| Servers and endpoints | Kamal `servers:`, Fly app names, Cloudflare worker names, Kubernetes ingress hosts, `.env.example` |
 | Backing services | `docker-compose.yml` images, `*_URL` / `*_HOST` names in `.env.example` |
 | Third-party vendors | dependency manifests, `.env.example` variable names, literal URLs, terraform providers and workflow actions, matched against `lib/vendors.tsv` |
 | Third-party accounts | not from the scan at all — `orgami dns` reads the organization's public DNS for verification tokens, MX, SPF, DMARC, conventional CNAMEs and nameservers, against the same `lib/vendors.tsv`. Its own file, its own clock: [docs/dns.md](dns.md) |

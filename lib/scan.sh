@@ -39,6 +39,22 @@ emit_tool() {
   emit_edge "repo:$1" "tool:$2" uses "$3"
 }
 
+# Reads one value out of a JSON or JSONC file, with jq and only with jq.
+#
+# `wrangler.jsonc` is the reason this exists: JSONC is not JSON, jq cannot read
+# a comment, and the file wrangler itself generates opens with a block comment.
+# So the plain read is tried first, and only if that fails are comment *lines*
+# removed so jq gets something it can parse. Nothing else is touched and no
+# value is ever read by anything but jq. A file still not JSON after that (a
+# trailing comma, say) yields nothing, and the repo keeps its tool edge without
+# the host — one file's failure never aborts the scan.
+read_jsonc() {
+  local file=$1 filter=$2 out
+  out=$(jq -r "$filter" "$file" 2>/dev/null) && { printf '%s\n' "$out"; return 0; }
+  sed -E '\%^[[:space:]]*//%d; \%^[[:space:]]*/\*%,\%\*/%d' "$file" |
+    jq -r "$filter" 2>/dev/null || true
+}
+
 # Hosts and domains found in a config file, minus registry/vendor noise.
 # $4 is the edge kind: deploys-to for deploy targets, reaches for dependencies.
 emit_hosts_from() {
@@ -85,6 +101,8 @@ scan_deploy() {
   [[ -f $src/Chart.yaml ]] && emit_tool "$repo" helm Chart.yaml
   [[ -f $src/Procfile ]] && emit_tool "$repo" procfile Procfile
   [[ -f $src/ansible.cfg ]] && emit_tool "$repo" ansible ansible.cfg
+  [[ -f $src/captain-definition ]] && emit_tool "$repo" caprover captain-definition
+  [[ -f $src/supabase/config.toml ]] && emit_tool "$repo" supabase supabase/config.toml
 
   if [[ -f $src/fly.toml ]]; then
     emit_tool "$repo" fly fly.toml
@@ -95,6 +113,78 @@ scan_deploy() {
       emit_edge "repo:$repo" "host:$app.fly.dev" deploys-to fly.toml
     }
   fi
+
+  # Cloudflare Workers and Pages. Three spellings of one config, and the first
+  # one found wins, so a repo carrying both never gets two edges saying the same
+  # thing. A worker publishes to <name>.workers.dev unless a route overrides it,
+  # and `name` is the one field every wrangler config has to carry.
+  local cf name
+  for cf in wrangler.toml wrangler.jsonc wrangler.json; do
+    [[ -f $src/$cf ]] || continue
+    emit_tool "$repo" cloudflare "$cf"
+    if [[ $cf == *.toml ]]; then
+      name=$(grep -m1 -oE '^name\s*=\s*"?[a-z0-9][a-z0-9-]*' "$src/$cf" |
+        grep -oE '[a-z0-9][a-z0-9-]*$' || true)
+    else
+      name=$(read_jsonc "$src/$cf" '.name // empty')
+    fi
+    # A worker name is a hostname label. Anything else came from a field this
+    # does not understand, and a host node is not the place to guess.
+    [[ $name =~ ^[a-z0-9][a-z0-9-]*$ ]] || name=""
+    [[ -n $name ]] && {
+      emit_node "host:$name.workers.dev" host "$name.workers.dev"
+      emit_edge "repo:$repo" "host:$name.workers.dev" deploys-to "$cf"
+    }
+    break
+  done
+
+  for f in railway.json railway.toml; do
+    [[ -f $src/$f ]] && { emit_tool "$repo" railway "$f"; break; }
+  done
+
+  # Coolify keeps its own directory when it manages the repo. `coolify.json`
+  # alone is too plain a filename to claim a deploy target on its own, so it
+  # counts only next to the compose file it configures.
+  if [[ -d $src/.coolify ]]; then
+    emit_tool "$repo" coolify .coolify
+  elif [[ -f $src/coolify.json ]]; then
+    for f in docker-compose.yml docker-compose.yaml compose.yml compose.yaml; do
+      [[ -f $src/$f ]] && { emit_tool "$repo" coolify coolify.json; break; }
+    done
+  fi
+
+  # Dokku and Heroku both read `app.json`, and profile_serves already reads it
+  # for a Heroku hostname — the filename proves nothing on its own. What Dokku
+  # added to the format is what counts: `scripts.dokku` (its predeploy and
+  # postdeploy hooks), `healthchecks` and `cron` are Dokku's own keys, and a
+  # Heroku app.json — name, env, buildpacks, formation, addons — carries none
+  # of them. Failing that, a `.dokku-*` file names the platform outright.
+  local dokku=""
+  [[ -f $src/app.json ]] && jq -e 'type == "object"
+      and (has("healthchecks") or has("cron")
+           or ((.scripts | type) == "object" and (.scripts | has("dokku"))))' \
+    "$src/app.json" >/dev/null 2>&1 && dokku=app.json
+  if [[ -z $dokku ]]; then
+    for f in "$src"/.dokku-*; do
+      [[ -e $f ]] && { dokku=${f#"$src"/}; break; }
+    done
+  fi
+  [[ -n $dokku ]] && emit_tool "$repo" dokku "$dokku"
+
+  # AWS SAM is a CloudFormation template with the Serverless transform in it. A
+  # template.yaml without that is plain CloudFormation or somebody else's
+  # template, so the evidence is the line the transform is on, not the file.
+  local line
+  for f in template.yaml template.yml; do
+    [[ -f $src/$f ]] || continue
+    line=$(grep -n -m1 'AWS::Serverless::' "$src/$f" | cut -d: -f1) || true
+    [[ -n $line ]] && { emit_tool "$repo" aws-sam "$f:$line"; break; }
+  done
+
+  # cdk.json is a CDK app only when it says how to run one, which is `app`.
+  [[ -f $src/cdk.json ]] &&
+    jq -e 'type == "object" and has("app")' "$src/cdk.json" >/dev/null 2>&1 &&
+    emit_tool "$repo" aws-cdk cdk.json
 
   for f in config/deploy.yml deploy.yml .kamal/deploy.yml; do
     [[ -f $src/$f ]] || continue
