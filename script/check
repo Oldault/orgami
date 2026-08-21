@@ -88,6 +88,14 @@ vendors() {
   echo "vendors: matched on committed evidence, near misses left alone"
 }
 
+# A deploy edge says an organization runs its software somewhere, so it may only
+# exist where a committed file says so — and `app.json` means Dokku to one
+# platform and Heroku to another. Runs against hand-written checkouts.
+deploy() {
+  ./test/scan_deploy_test.sh >/dev/null
+  echo "deploy: each target found by its own file, lookalikes left alone"
+}
+
 advise() {
   ./test/advise_test.sh >/dev/null
   echo "advise: every proposal carries its file:line, and a rejection sticks"
@@ -158,6 +166,7 @@ CHECKS=(
   --profile:profile
   --detect:detect
   --vendors:vendors
+  --deploy:deploy
   --advise:advise
   --dns:dns
   --live:live
