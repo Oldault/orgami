@@ -1,0 +1,23 @@
+{
+  "company": "acme",
+  "org": "acme",
+  "week": "2026-W21",
+  "since": "2026-05-18",
+  "until": "2026-05-24",
+  "prs": [
+    { "number": 20, "repository": { "name": "billing-api" }, "author": { "login": "dev-one" },
+      "mergedAt": "2026-05-18T10:00:00Z" },
+    { "number": 21, "repository": { "name": "web" }, "author": { "login": "dev-one" },
+      "mergedAt": "2026-05-19T10:00:00Z" },
+
+    { "number": 22, "repository": { "name": "billing-api" }, "author": { "login": "dependabot" },
+      "mergedAt": "2026-05-18T09:00:00Z" },
+    { "number": 23, "repository": { "name": "docs" }, "author": { "login": "dependabot" },
+      "mergedAt": "2026-05-18T09:05:00Z" },
+
+    { "number": 24, "repository": { "name": "web" }, "author": { "login": "release[bot]" },
+      "mergedAt": "2026-05-19T09:00:00Z" },
+    { "number": 25, "repository": { "name": "jobs" }, "author": { "login": "release[bot]" },
+      "mergedAt": "2026-05-19T09:05:00Z" }
+  ]
+}
