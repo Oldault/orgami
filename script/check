@@ -72,6 +72,14 @@ profile() {
   echo "profile_routes: test paths excluded from endpoints list"
 }
 
+# `profile_framework` and `profile_commands` are where every new detection
+# branch lands, so what they already read off a checkout is pinned: one fixture
+# tree per case, no clone, no network.
+detect() {
+  ./test/profile_detect_test.sh >/dev/null
+  echo "detect: frameworks, scripts, package manager and runtime read off a tree"
+}
+
 # A vendor edge says an organization is paying somebody, so it may only exist
 # where a committed file says so. Runs against three hand-written checkouts —
 # no clone, no network, no token.
@@ -148,6 +156,7 @@ CHECKS=(
   --lint-only:lint
   --stats:stats
   --profile:profile
+  --detect:detect
   --vendors:vendors
   --advise:advise
   --dns:dns
