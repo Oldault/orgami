@@ -135,6 +135,14 @@ depth() {
   ./test/depth_parse_test.sh
 }
 
+# `changes-with` is the only edge that enters the graph without a file:line
+# behind it, so what makes it readable is the `inferred` tag beside it. Runs
+# `coupling` over a hand-written pull request cache — no organization, no token.
+coupling() {
+  ./test/coupling_test.sh >/dev/null
+  echo "coupling: correlation tagged inferred, seen-once and bots kept out"
+}
+
 # `orgami update` runs unattended, so what matters is what it refuses. Runs
 # against real git repositories in a temp directory — no network, no remote.
 update() {
@@ -195,6 +203,7 @@ CHECKS=(
   --dns:dns
   --live:live
   --depth:depth
+  --coupling:coupling
   --update:update
   --notes:notes
   --playbook:playbook

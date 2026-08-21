@@ -1,0 +1,37 @@
+{
+  "company": "acme",
+  "org": "acme",
+  "week": "2026-W20",
+  "since": "2026-05-11",
+  "until": "2026-05-17",
+  "prs": [
+    { "number": 1, "repository": { "name": "billing-api" }, "author": { "login": "dev-one" },
+      "mergedAt": "2026-05-11T10:00:00Z" },
+    { "number": 2, "repository": { "name": "web" }, "author": { "login": "dev-one" },
+      "mergedAt": "2026-05-11T11:00:00Z" },
+
+    { "number": 3, "repository": { "name": "docs" }, "author": { "login": "dev-two" },
+      "mergedAt": "2026-05-12T10:00:00Z" },
+    { "number": 4, "repository": { "name": "marketing" }, "author": { "login": "dev-two" },
+      "mergedAt": "2026-05-12T11:00:00Z" },
+
+    { "number": 5, "repository": { "name": "jobs" }, "author": { "login": "dev-three" },
+      "mergedAt": "2026-05-13T10:00:00Z" },
+    { "number": 6, "repository": { "name": "scheduler" }, "author": { "login": "dev-three" },
+      "mergedAt": "2026-05-13T11:00:00Z" },
+    { "number": 7, "repository": { "name": "jobs" }, "author": { "login": "dev-three" },
+      "mergedAt": "2026-05-14T10:00:00Z" },
+    { "number": 8, "repository": { "name": "scheduler" }, "author": { "login": "dev-three" },
+      "mergedAt": "2026-05-14T11:00:00Z" },
+
+    { "number": 9, "repository": { "name": "billing-api" }, "author": { "login": "dependabot" },
+      "mergedAt": "2026-05-11T09:00:00Z" },
+    { "number": 10, "repository": { "name": "docs" }, "author": { "login": "dependabot" },
+      "mergedAt": "2026-05-11T09:05:00Z" },
+
+    { "number": 11, "repository": { "name": "web" }, "author": { "login": "release[bot]" },
+      "mergedAt": "2026-05-12T09:00:00Z" },
+    { "number": 12, "repository": { "name": "jobs" }, "author": { "login": "release[bot]" },
+      "mergedAt": "2026-05-12T09:05:00Z" }
+  ]
+}
