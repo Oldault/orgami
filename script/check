@@ -190,6 +190,15 @@ runbook() {
   echo "runbook: quotes traceable, tags placed, absence stated, no empty headings, no model"
 }
 
+# A link in generated prose is the one thing a model could otherwise invent: it
+# writes `org/repo#123` and the tool turns the shape into a URL. So what is
+# pinned is what does not become a link — a repository the scan never saw, and
+# another organization's. Pure functions over stdin, no org, no token.
+linkify() {
+  ./test/linkify_test.sh >/dev/null
+  echo "linkify: only a repo the map holds becomes a link, everything else stays text"
+}
+
 # `orgami query --json` is what anything built on the map reads, so its shape
 # is pinned, and so is the confidence on every edge it hands out. Runs against a
 # hand-written graph.json under a temp ORGAMI_HOME.
@@ -244,6 +253,7 @@ CHECKS=(
   --agents:agents
   --playbook:playbook
   --runbook:runbook
+  --linkify:linkify
   --query:query
   --html:html
   --doc:doc

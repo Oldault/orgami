@@ -26,7 +26,7 @@ report_decisions() {
   {
     echo "## $week"
     echo
-    linkify_prs <<<"$body"
+    linkify_prs "$ORG" "$DIR/map/graph.json" <<<"$body"
   } >"$dest/$week.md"
   log "decisions recorded for $week"
 }
@@ -92,7 +92,8 @@ cmd_report() {
     printf '\n```\n\nPULL_REQUESTS\n```json\n'
     cat "$digest"
     printf '\n```\n'
-  } | claude -p --model "$model" --output-format text | linkify_prs >"$out.body" ||
+  } | claude -p --model "$model" --output-format text |
+    linkify_prs "$ORG" "$DIR/map/graph.json" >"$out.body" ||
     die "claude failed — is 'claude' authenticated?"
 
   report_decisions "$week" "$digest" "$model"
