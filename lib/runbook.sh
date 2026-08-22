@@ -519,24 +519,41 @@ runbook_incidents_page() {
       echo
     fi
 
-    echo "## Where the fires start"
-    echo
-    while IFS= read -r -d '' f; do
-      sed -n '/^## What got fixed/,/^## [A-Z]/p;/^## Security/,/^## [A-Z]/p' "$f" | grep '^- '
-    done < <(find "$DIR/reports" -maxdepth 1 -name '*.md' -print0 2>/dev/null) | grep -oE '/[A-Za-z0-9_.-]+#[0-9]+' | sed -E 's|/([^#]+)#.*|\1|' |
-      sort | uniq -c | sort -rn | head -10 |
-      awk '{printf "- **%s** — named in %d recorded failures\n", $2, $1}'
-    echo
+    # prompts/recap.md tells the model to omit "What got fixed" and "Security"
+    # when there were none, so a quiet week has neither section and every `grep`
+    # below matches nothing. `grep` exits 1 on no match, and under `set -e` that
+    # used to abort the whole page — and with it `orgami doc`, half written. A
+    # week nobody got paged is the ordinary case, not an error: each `grep` is
+    # allowed to come back empty, and the section it feeds disappears.
+    local fires
+    fires=$(
+      while IFS= read -r -d '' f; do
+        sed -n '/^## What got fixed/,/^## [A-Z]/p;/^## Security/,/^## [A-Z]/p' "$f" | grep '^- ' || true
+      done < <(find "$DIR/reports" -maxdepth 1 -name '*.md' -print0 2>/dev/null) |
+        grep -oE '/[A-Za-z0-9_.-]+#[0-9]+' | sed -E 's|/([^#]+)#.*|\1|' |
+        sort | uniq -c | sort -rn | head -10 |
+        awk '{printf "- **%s** — named in %d recorded failures\n", $2, $1}' || true
+    )
+    if [[ -n $fires ]]; then
+      echo "## Where the fires start"
+      echo
+      echo "$fires"
+      echo
+    fi
 
-    echo "## Everything recorded so far"
-    echo
+    local recorded_weeks=""
     for f in $(find "$DIR/reports" -maxdepth 1 -name '*.md' 2>/dev/null | sort -r); do
       week=$(basename "$f" .md)
       local fixes
-      fixes=$(sed -n '/^## What got fixed/,/^## [A-Z]/p' "$f" | grep '^- ')
+      fixes=$(sed -n '/^## What got fixed/,/^## [A-Z]/p' "$f" | grep '^- ' || true)
       local sec
-      sec=$(sed -n '/^## Security/,/^## [A-Z]/p' "$f" | grep '^- ')
+      sec=$(sed -n '/^## Security/,/^## [A-Z]/p' "$f" | grep '^- ' || true)
       [[ -n $fixes || -n $sec ]] || continue
+      if [[ -z $recorded_weeks ]]; then
+        echo "## Everything recorded so far"
+        echo
+        recorded_weeks=yes
+      fi
       echo "### $week"
       echo
       [[ -n $fixes ]] && { echo "$fixes"; echo; }

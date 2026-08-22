@@ -32,21 +32,20 @@ check() {
 
 # Renders one fixture graph into a company of its own and echoes the directory.
 #
-# The weekly recap is copied in because `orgami doc` also writes INCIDENTS.md
-# out of `reports/`, and today that page cannot be written unless a recap
-# carries both a "What got fixed" and a "Security" bullet — which prompts/recap.md
-# tells the model to omit when there were none. That is a bug in lib/runbook.sh
-# and not this test's subject, so the fixture recap has both and stays out of
-# its way.
+# A fourth argument copies a weekly recap into `reports/`, which `orgami doc`
+# reads to write INCIDENTS.md. The bare company below is rendered without one on
+# purpose: a company whose first week produced no recap — and, equally, a quiet
+# week whose recap omits the sections prompts/recap.md tells the model to omit —
+# is the case that used to abort the whole command half way through.
 render() {
-  local name=$1 graph=$2 profiles=$3
+  local name=$1 graph=$2 profiles=$3 recap=${4-}
   local dir="$home/$name"
   mkdir -p "$dir/map" "$dir/reports"
   echo "{\"default\": \"$name\"}" >"$home/config.json"
   echo '{"org": "acme"}' >"$dir/config.json"
   cp "$fix/$graph" "$dir/map/graph.json"
   cp "$fix/$profiles" "$dir/map/repos.json"
-  cp "$fix/report.md" "$dir/reports/2026-W33.md"
+  [[ -n $recap ]] && cp "$fix/$recap" "$dir/reports/2026-W33.md"
   ORGAMI_HOME="$home" ORGAMI_COMPANY="$name" ./bin/orgami doc >/dev/null 2>"$dir/err" ||
     { echo "FAIL orgami doc failed on the $name fixture:" >&2; cat "$dir/err" >&2; exit 1; }
   echo "$dir"
@@ -54,7 +53,7 @@ render() {
 
 # --- a graph with something in every section ---------------------------------
 
-full=$(render full graph.json repos.json)
+full=$(render full graph.json repos.json report.md)
 page="$full/map/ARCHITECTURE.md"
 [[ -f $page ]] || { echo "FAIL nothing rendered" >&2; exit 1; }
 
@@ -154,5 +153,19 @@ check "backing services stays and says what it cannot know" \
   "$(grep -c 'They may still exist — provisioned by hand, or wired in at runtime.' "$page")" "1"
 check "and the reference section stays with the pair it has" \
   "$(grep -c '^- `alpha` → `beta` — `go.mod:7`$' "$page")" "1"
+
+# --- and the pages after the incidents one still get written -----------------
+#
+# The bare company has no recap at all, which is what every company looks like
+# before its first Monday. `orgami doc` writes INCIDENTS.md out of `reports/`
+# midway through its run, and a failure there took the rest of the command down
+# with it — the render above would already have failed, and these say what the
+# rest of the command was that never ran.
+check "the incidents page is written with no recaps to read" \
+  "$(test -f "$bare/map/INCIDENTS.md" && echo yes)" "yes"
+check "with no fires section, since nothing has been recorded" \
+  "$(grep -c '^## Where the fires start$' "$bare/map/INCIDENTS.md")" "0"
+check "and the pages written after it are there too" \
+  "$(test -f "$bare/map/ASK-CLAUDE.md" && echo yes)" "yes"
 
 exit "$fail"
