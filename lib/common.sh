@@ -107,25 +107,40 @@ week_start() {
   date_shift "$(date -u +%Y-%m-%d)" "-$back"
 }
 
-# Turns org/repo#123 into a GitHub link, backticked or bare. Runs over the
-# model's output after the fact, so a URL is never invented — the reference has
-# to already be there, and the link is derived from it mechanically.
+# Turns a pull request reference in the model's text into a GitHub link — the
+# long `org/repo#123` form or the short `repo#123` one, backticked or bare. It
+# runs after the fact over text that already exists, so the URL is derived from
+# a reference mechanically rather than written by the model.
+#
+# Deriving is not enough on its own. `acme/totally-invented#99999` has the shape
+# of a reference without being one, and a pattern that reads only the shape
+# turns it into a live link to an arbitrary organization — a link the model did
+# invent, one rewrite removed. So the repository has to be one the scan actually
+# saw, by name out of map/graph.json, and the organization has to be $ORG.
+#
+# Everything else is left exactly as it was written. That includes a genuine
+# upstream pull request in somebody else's organization: it is a real thing a
+# recap may mention, but nothing here has seen it, and a cross-org link needs
+# its own evidence path rather than a wider regex. Plain text promises nothing;
+# dropping the reference instead would hide that the model said it.
+#
+# linkify_prs <org> <path to graph.json>, text on stdin.
 linkify_prs() {
-  sed -E \
-    -e 's%`([A-Za-z0-9][A-Za-z0-9_.-]*)/([A-Za-z0-9][A-Za-z0-9_.-]*)#([0-9]+)`%[\1/\2#\3](https://github.com/\1/\2/pull/\3)%g' \
-    -e 's%(^|[[:space:](])([A-Za-z0-9][A-Za-z0-9_.-]*)/([A-Za-z0-9][A-Za-z0-9_.-]*)#([0-9]+)%\1[\2/\3#\4](https://github.com/\2/\3/pull/\4)%g'
-}
-
-# Same, for the short `repo#123` form a one-day digest uses. The organization
-# comes from the config, and the repository has to be one the map already knows
-# — so a link still cannot be invented, only derived.
-linkify_repo_prs() {
-  local org=$1 graph=$2 names
+  local org=$1 graph=$2 names esc
   [[ -f $graph ]] || { cat; return 0; }
+  # gsub("[.]") keeps a dot in a repository name a dot: `docs.example` may not
+  # match `docsXexample`. Every name arrives through it, so an edit here cannot
+  # quietly turn a repository name into a wildcard.
   names=$(jq -r '[.nodes[] | select(.kind == "repo") | .name]
                  | map(gsub("[.]"; "[.]")) | join("|")' "$graph" 2>/dev/null)
   [[ -n $names ]] || { cat; return 0; }
+  esc=${org//./[.]}
+  # The long form first: once it has become `[org/repo#1](...)` the repository
+  # name is preceded by a `/`, which the short-form patterns below do not match,
+  # so a link is never rewritten twice.
   sed -E \
+    -e "s%\`$esc/($names)#([0-9]+)\`%[$org/\1#\2](https://github.com/$org/\1/pull/\2)%g" \
+    -e "s%(^|[[:space:](])$esc/($names)#([0-9]+)%\1[$org/\2#\3](https://github.com/$org/\2/pull/\3)%g" \
     -e "s%\`($names)#([0-9]+)\`%[\1#\2](https://github.com/$org/\1/pull/\2)%g" \
     -e "s%(^|[[:space:](])($names)#([0-9]+)%\1[\2#\3](https://github.com/$org/\2/pull/\3)%g"
 }

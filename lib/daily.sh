@@ -125,7 +125,7 @@ cmd_daily() {
   local out="$DIR/reports/daily/$date.md"
   {
     printf '# %s · %s\n\n' "$ORG" "$(date_fmt "$date" '%A %-d %B %Y')"
-    linkify_prs <<<"$body" | linkify_repo_prs "$ORG" "$DIR/map/graph.json"
+    linkify_prs "$ORG" "$DIR/map/graph.json" <<<"$body"
     printf '\n---\n\n'
     printf '%s merged · %s opened · %s repos · %s people' \
       "$(jq -r .merged <<<"$stats")" "$(jq -r .opened <<<"$stats")" \

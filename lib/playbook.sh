@@ -184,7 +184,7 @@ playbook_write() {
     echo "from is printed at the end, and disagreement between the two means the"
     echo "evidence is right.</sub>"
     echo
-    printf '%s\n' "$written" | linkify_prs
+    printf '%s\n' "$written" | linkify_prs "$ORG" "$DIR/map/graph.json"
     echo
     echo "---"
     echo

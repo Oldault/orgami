@@ -132,8 +132,19 @@ the same three guards.
 
 ### Links are generated, never written by the model
 
-The model writes `org/repo#123`; `linkify_prs` turns it into a URL afterwards.
-That way a link cannot be invented — the reference has to exist first.
+The model writes `org/repo#123`, or the short `repo#123`; `linkify_prs` turns it
+into a URL afterwards. Assembling the URL in code is only half of it — a pattern
+that reads the shape alone turns `acme/totally-invented#99999` into a live link
+to an organization nobody has scanned, which is an invented link one rewrite
+removed. So the repository also has to be one the map already holds, by name out
+of `map/graph.json`, and the organization has to be the configured one. That is
+what makes the reference have to exist first.
+
+Everything else keeps the words the model wrote and gains no link — including a
+genuine pull request in somebody else's organization, which is a real thing a
+recap may mention but nothing offline has seen. A cross-org link would need its
+own evidence path, not a wider pattern. Unlinked text promises nothing; dropping
+the reference would instead hide that the model said it.
 
 ### Generated sections disappear when empty
 
