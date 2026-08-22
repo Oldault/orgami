@@ -73,9 +73,9 @@ cmd_daily() {
   local date="" model="" stats_only=0 refetch=0
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --date) date=$2; shift 2 ;;
+      --date) need_arg "$1" $#; date=$2; shift 2 ;;
       --yesterday) date=$(date_shift "$(date -u +%Y-%m-%d)" -1); shift ;;
-      --model) model=$2; shift 2 ;;
+      --model) need_arg "$1" $#; model=$2; shift 2 ;;
       --stats-only) stats_only=1; shift ;;
       --refetch) refetch=1; shift ;;
       *) die "unknown flag: $1" ;;

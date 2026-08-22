@@ -39,8 +39,8 @@ cmd_report() {
   local week="" model=""
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --week) week=$2; shift 2 ;;
-      --model) model=$2; shift 2 ;;
+      --week) need_arg "$1" $#; week=$2; shift 2 ;;
+      --model) need_arg "$1" $#; model=$2; shift 2 ;;
       --stats-only) STATS_ONLY=1; shift ;;
       *) die "unknown flag: $1" ;;
     esac
@@ -132,7 +132,7 @@ cmd_latest() {
   local week="" raw=0 dir="$DIR/reports"
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --week) week=$2; shift 2 ;;
+      --week) need_arg "$1" $#; week=$2; shift 2 ;;
       --raw | --cat) raw=1; shift ;;
       *) die "unknown flag: $1" ;;
     esac

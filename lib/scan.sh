@@ -355,9 +355,9 @@ cmd_scan() {
   local only="" depth=1 jobs=8
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --only) only=$2; shift 2 ;;
-      --depth) depth=$2; shift 2 ;;
-      --jobs | -j) jobs=$2; shift 2 ;;
+      --only) need_arg "$1" $#; only=$2; shift 2 ;;
+      --depth) need_arg "$1" $#; depth=$2; shift 2 ;;
+      --jobs | -j) need_arg "$1" $#; jobs=$2; shift 2 ;;
       *) die "unknown flag: $1" ;;
     esac
   done

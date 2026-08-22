@@ -344,8 +344,8 @@ cmd_dns() {
   local -a want=()
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --domain | -d) want+=("$2"); shift 2 ;;
-      --max-domains) maxd=$2; shift 2 ;;
+      --domain | -d) need_arg "$1" $#; want+=("$2"); shift 2 ;;
+      --max-domains) need_arg "$1" $#; maxd=$2; shift 2 ;;
       --yes | -y) yes=1; shift ;;
       --json) as_json=1; shift ;;
       *) die "unknown flag: $1" ;;

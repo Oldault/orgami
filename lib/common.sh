@@ -59,6 +59,15 @@ need() {
   command -v "$1" >/dev/null || die "$1 is not on PATH${2:+ ($2)}"
 }
 
+# need_arg <flag> <argc> [message] — guard for `--flag) x=$2; shift 2` parse
+# arms. bin/orgami runs under `set -u`, so a value-taking flag typed as the
+# last argument reads an unset $2 and aborts with bash's own "unbound
+# variable" — a message that names neither orgami nor the flag. Call it
+# before touching $2:  --week) need_arg "$1" $#; week=$2; shift 2 ;;
+need_arg() {
+  [[ $2 -ge 2 ]] || die "${3:-$1 wants a value after it}"
+}
+
 company_dir() { echo "$ORGAMI_HOME/$1"; }
 
 current_company() {

@@ -110,11 +110,11 @@ cmd_note() {
   local repo="" tags=() text="" push=0 supersedes="" topic=""
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --repo | -r) repo=$2; shift 2 ;;
-      --tag | -t) tags+=("$2"); shift 2 ;;
-      --topic) topic=$2; shift 2 ;;
+      --repo | -r) need_arg "$1" $#; repo=$2; shift 2 ;;
+      --tag | -t) need_arg "$1" $#; tags+=("$2"); shift 2 ;;
+      --topic) need_arg "$1" $#; topic=$2; shift 2 ;;
       --push) push=1; shift ;;
-      --supersede) supersedes=$2; shift 2 ;;
+      --supersede) need_arg "$1" $#; supersedes=$2; shift 2 ;;
       --) shift; text="$*"; break ;;
       -*) die "unknown flag: $1" ;;
       *) text="$*"; break ;;
@@ -271,8 +271,8 @@ cmd_notes() {
   local repo="" tag="" query="" check=0 rejected=0 pending=0
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --repo | -r) repo=$2; shift 2 ;;
-      --tag | -t) tag=$2; shift 2 ;;
+      --repo | -r) need_arg "$1" $#; repo=$2; shift 2 ;;
+      --tag | -t) need_arg "$1" $#; tag=$2; shift 2 ;;
       --check) check=1; shift ;;
       --rejected | --held) rejected=1; shift ;;
       --pending | --unpublished) pending=1; shift ;;
@@ -369,7 +369,7 @@ cmd_prune() {
   local id="" superseded=0
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --id) id=$2; shift 2 ;;
+      --id) need_arg "$1" $#; id=$2; shift 2 ;;
       --superseded) superseded=1; shift ;;
       *) die "unknown flag: $1" ;;
     esac
@@ -820,7 +820,7 @@ cmd_sync() {
       --pr | --review) review=1; shift ;;
       --no-pr | --direct) review=0; shift ;;
       --pull) pull_only=1; shift ;;
-      --max-age) max_age=$2; shift 2 ;;
+      --max-age) need_arg "$1" $#; max_age=$2; shift 2 ;;
       --quiet | -q) quiet=1; shift ;;
       *) die "unknown flag: $1" ;;
     esac
@@ -1053,8 +1053,8 @@ cmd_join() {
     shift
     while [[ $# -gt 0 ]]; do
       case $1 in
-        --repo) repo=$2; shift 2 ;;
-        --path) path=$2; shift 2 ;;
+        --repo) need_arg "$1" $#; repo=$2; shift 2 ;;
+        --path) need_arg "$1" $#; path=$2; shift 2 ;;
         *) die "unknown flag: $1" ;;
       esac
     done
