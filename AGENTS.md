@@ -112,6 +112,13 @@ from. A claim a user cannot open and check does not belong in the output. This
 is the rule the whole tool rests on — if a new inference cannot cite itself,
 it is not ready to ship.
 
+A note quoted verbatim satisfies the rule with its author and date. The note is
+reproduced whole, so the quote is already the record and there is nothing
+further to open; the note id is the handle only where prose stands in for a
+note, as in a playbook. That is why a quoted note carries
+`<sub>author, date</sub>` on every rendered page and `orgami notes` lists the
+same two fields, and why none of them print an id.
+
 ### Numbers come from jq, prose comes from the model
 
 `lib/stats.jq` computes every figure in the weekly report. The model is handed

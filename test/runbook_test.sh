@@ -201,8 +201,12 @@ done
 # --- 2. every quoted note leads back to the note ------------------------------
 #
 # A quote a reader cannot trace is the thing this repository's evidence rule
-# exists to prevent. The generator prints the author and the note's own date
-# under every quote; both have to match the note the quote came from.
+# exists to prevent. The handle is the author and the note's own date, not the
+# note id: the note is reproduced whole, so the quote is the record, and an id
+# is what `playbook_notes` prints because a playbook's prose stands in for the
+# note instead of repeating it. So this asserts the decision, not merely what
+# the code happens to do — both halves of the attribution have to match the
+# note the quote came from, read back through `notes_index`.
 tags_json=$(printf '%s\n' "${RUNBOOK_TAGS[@]}" | jq -Rsc 'split("\n") | map(select(. != ""))')
 quoted=0
 while IFS=$'\t' read -r author date body; do
