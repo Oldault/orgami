@@ -393,6 +393,19 @@ PROC
 assert "every Procfile process is named, in file order" \
   '.procfile == ["web","worker","release"]' "$(profile_commands "$d")"
 
+# A Procfile with no lowercase `name:` line — comments only, or capitalized
+# names — used to abort profile_commands entirely: `grep` exits 1 on no match,
+# and under pipefail that failed the assignment even though jq had already
+# printed `[]`. An empty list is the answer, not an error.
+d=$(tree)
+cat >"$d/Procfile" <<'PROC'
+# processes are declared below
+Web: node server.js
+PROC
+out=$(profile_commands "$d")
+assert "a Procfile with no lowercase process line is an empty list, not an abort" \
+  '.procfile == []' "$out"
+
 # composer.json scripts are read the way package.json scripts are: same
 # vocabulary, same cap. A composer script may also be a list, which composer
 # runs in order.

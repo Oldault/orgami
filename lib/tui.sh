@@ -234,7 +234,11 @@ tui_rows_recaps() {
       *) kind="weekly" ;;
     esac
     first=$(sed -n 's/^# //p' "$f" 2>/dev/null | head -1)
-    [[ -n $first ]] || first=$(grep -m1 -E '^[A-Za-z]' "$f" 2>/dev/null)
+    # A recap with no `# ` heading and no alpha-first line leaves both
+    # extractors empty-handed; `grep` exits 1 on no match, and under `set -e`
+    # that used to abort the whole list on the first such file. An unlabelled
+    # row is the right outcome, not an error.
+    [[ -n $first ]] || first=$(grep -m1 -E '^[A-Za-z]' "$f" 2>/dev/null) || true
     first=${first:0:56}
     printf 'recap:%s\t%s▤ %s%s  %s%s%s  %s%s%s\n' \
       "$f" "$(style_kind_color repo)" "$S_R" "$(printf '%-11s' "$week")" \
