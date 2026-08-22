@@ -20,6 +20,19 @@ runbook_tag_heading() {
 }
 
 # Notes for a repo carrying one tag, quoted with their author and date.
+#
+# Author and date, not the note id, and that is the decision rather than an
+# omission. The evidence rule asks that a claim be one a reader can open and
+# check; a note is reproduced here whole, so the quote is already the record and
+# there is nothing further to open. The id is the handle where prose stands in
+# for a note and the reader has to get back to it — which is why
+# `playbook_notes` prints one and this does not.
+#
+# What the attribution buys is narrower than an id: it names one person's notes
+# on one day, no further. That is enough, because a reader who needs the file
+# itself is holding the text of it — `orgami notes --repo <repo> "<phrase>"`
+# finds it. And it is what `orgami notes`, the repo card, the org page and the
+# incidents page all print, so a quoted note reads the same wherever it appears.
 runbook_notes_tagged() {
   local repo=$1 tag=$2
   notes_index 2>/dev/null | jq -r --arg r "$repo" --arg t "$tag" '
