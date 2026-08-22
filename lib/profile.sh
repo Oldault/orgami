@@ -301,8 +301,11 @@ profile_commands() {
   fi
 
   local procfile="[]"
+  # A Procfile with no lowercase `name:` line (comments only, `Web:`) is not an
+  # error: `grep` exits 1 on no match and pipefail would fail the assignment
+  # even though jq still printed `[]`.
   [[ -f $src/Procfile ]] &&
-    procfile=$(grep -oE '^[a-z]+:' "$src/Procfile" | tr -d ':' | jq -Rn '[inputs]')
+    procfile=$(grep -oE '^[a-z]+:' "$src/Procfile" | tr -d ':' | jq -Rn '[inputs]' || true)
 
   jq -n --argjson scripts "$cmds" --arg pm "$pm" --arg runtime "$runtime" \
     --argjson procs "$procfile" \

@@ -382,7 +382,12 @@ cmd_prune() {
 
   if [[ $superseded == 1 ]]; then
     local dead
-    dead=$(grep -h '^supersedes:' "$DIR"/notes/*.md 2>/dev/null | sed 's/^supersedes:[[:space:]]*//' | sort -u)
+    # No note superseding another is the ordinary state, not an error: `grep`
+    # exits 1 on no match, and under `set -e` that used to kill the command
+    # with no output at all.
+    dead=$(grep -h '^supersedes:' "$DIR"/notes/*.md 2>/dev/null |
+      sed 's/^supersedes:[[:space:]]*//' | sort -u || true)
+    [[ -n $dead ]] || log "no note supersedes another — nothing to prune"
     while read -r d; do
       [[ -n $d ]] || continue
       f="$DIR/notes/$d.md"
