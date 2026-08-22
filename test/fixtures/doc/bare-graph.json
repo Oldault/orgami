@@ -1,0 +1,9 @@
+{"company": "acme", "org": "acme", "generated": "2026-08-18T00:00:00Z",
+ "nodes": [
+   {"id": "repo:alpha", "kind": "repo", "name": "alpha",
+    "meta": {"language": "Go", "url": "https://github.com/acme/alpha"}},
+   {"id": "repo:beta", "kind": "repo", "name": "beta",
+    "meta": {"language": "Go", "url": "https://github.com/acme/beta"}}],
+ "edges": [
+   {"from": "repo:alpha", "to": "repo:beta", "kind": "references",
+    "evidence": "go.mod:7", "confidence": "extracted"}]}

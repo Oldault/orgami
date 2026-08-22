@@ -326,23 +326,33 @@ PROMPT
     fi
     echo
 
-    echo "## Deployment"
-    echo
-    jq -r '
+    # Both of the next two sections are omitted outright when the graph has
+    # nothing for them. A "## Deployment" with no tools under it, or a heading
+    # followed by "No hosts found", is noise in every future diff — and unlike
+    # the empty text under "Backing services" and "How the repositories
+    # reference each other", it tells the reader nothing the absence of the
+    # section does not already say.
+    local deploys
+    deploys=$(jq -r '
       . as $g
       | [$g.nodes[] | select(.kind == "tool")] | sort_by(.name)[]
       | .name as $t
       | "### " + $t + "\n\n"
         + ([$g.edges[] | select(.to == ("tool:" + $t) and .kind == "uses")
             | "- `" + (.from | sub("^repo:"; "")) + "` — `" + .evidence + "`"]
-           | unique | join("\n"))
-        + "\n"' "$g"
+           | unique | join("\n"))' "$g")
+    if [[ -n $deploys ]]; then
+      echo "## Deployment"
+      echo
+      echo "$deploys"
+      echo
+    fi
 
-    echo "## Hosts and endpoints"
-    echo
     local hosts
     hosts=$(jq -r '[.nodes[] | select(.kind == "host")] | length' "$g")
     if [[ $hosts -gt 0 ]]; then
+      echo "## Hosts and endpoints"
+      echo
       echo "| Host | Reached from | Evidence |"
       echo "|---|---|---|"
       jq -r '
@@ -356,10 +366,8 @@ PROMPT
       echo
       echo "> Hosts are extracted from deployment configuration by pattern match."
       echo "> Check the evidence column before trusting one."
-    else
-      echo "No hosts found in deployment configuration."
+      echo
     fi
-    echo
 
     echo "## Backing services"
     echo

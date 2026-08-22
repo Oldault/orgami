@@ -1,0 +1,6 @@
+[{"name": "alpha", "meta": {"language": "Go"}, "frameworks": [],
+  "commands": {"scripts": {}, "procfile": []},
+  "serves": [], "routes": [], "env": [], "agent_docs": []},
+ {"name": "beta", "meta": {"language": "Go"}, "frameworks": [],
+  "commands": {"scripts": {}, "procfile": []},
+  "serves": [], "routes": [], "env": [], "agent_docs": []}]
