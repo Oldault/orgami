@@ -199,6 +199,15 @@ linkify() {
   echo "linkify: only a repo the map holds becomes a link, everything else stays text"
 }
 
+# The daily digest's hour is written into the company config, which every
+# machine reads, and rendered straight into `OnCalendar=` — so a time that
+# cannot exist is a timer that silently never fires everywhere at once. Runs
+# against a stub systemctl and a stub gh under a temp HOME — no timer enabled.
+schedule() {
+  ./test/schedule_at_test.sh >/dev/null
+  echo "schedule: impossible hours refused before the config and the unit"
+}
+
 # `orgami query --json` is what anything built on the map reads, so its shape
 # is pinned, and so is the confidence on every edge it hands out. Runs against a
 # hand-written graph.json under a temp ORGAMI_HOME.
@@ -254,6 +263,7 @@ CHECKS=(
   --playbook:playbook
   --runbook:runbook
   --linkify:linkify
+  --schedule:schedule
   --query:query
   --html:html
   --doc:doc

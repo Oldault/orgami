@@ -97,6 +97,21 @@ companies() {
 
 iso_week() { date -u +%G-W%V; }
 
+# A time of day on a 24-hour clock, for the daily digest. The hour is 00-23:
+# `[0-2][0-9]` reads as 24 hours but matches 29, and `24:00` reaches
+# `OnCalendar=` as a time systemd cannot parse — a timer that never fires, from
+# a config every machine in the company agrees on.
+#
+# A single-digit hour is accepted, because `8:00` is what a person types, and
+# normalised to two digits here so that one shape reaches all three schedulers
+# rather than each one's own tolerance for `8:00`.
+#
+# Echoes the normalised HH:MM, or returns 1 and echoes nothing.
+hhmm() {
+  [[ $1 =~ ^([01]?[0-9]|2[0-3]):([0-5][0-9])$ ]] || return 1
+  printf '%02d:%s\n' "$((10#${BASH_REMATCH[1]}))" "${BASH_REMATCH[2]}"
+}
+
 # Monday of the week containing $1 weeks ago (0 = this week). Computed from the
 # day of week rather than "last monday", which means different things per date
 # implementation and is wrong midweek.

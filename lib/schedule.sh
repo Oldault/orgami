@@ -93,22 +93,31 @@ PLIST
 
 cmd_schedule() {
   load_company
-  local off=0 kind=weekly want_at=""
+  local off=0 kind=weekly want_at="" have_at=0
   while [[ $# -gt 0 ]]; do
     case $1 in
       --off | --disable) off=1; shift ;;
       --daily) kind=daily; shift ;;
       --weekly) kind=weekly; shift ;;
-      --at) want_at=$2; kind=daily; shift 2 ;;
+      # `--at` as the last argument would read an unset $2 and abort with bash's
+      # own "unbound variable" under `set -u`, which says nothing about orgami.
+      --at)
+        [[ $# -ge 2 ]] || die "--at wants a time, e.g. --at 08:00"
+        want_at=$2; have_at=1; kind=daily; shift 2 ;;
       *) die "unknown flag: $1" ;;
     esac
   done
-  [[ -z $want_at || $want_at =~ ^[0-2][0-9]:[0-5][0-9]$ ]] ||
-    die "--at wants HH:MM, got '$want_at'"
 
   local at
-  at=${want_at:-$(cfg daily_at "08:00")}
-  [[ $at =~ ^[0-2][0-9]:[0-5][0-9]$ ]] || at="08:00"
+  if [[ $have_at == 1 ]]; then
+    at=$(hhmm "$want_at") ||
+      die "--at wants HH:MM on a 24-hour clock, got '$want_at'"
+  else
+    # Whatever is in the config: written by hand, or by an orgami old enough to
+    # have let 24:00 through. Fall back rather than refuse — the user asked for
+    # a timer, not for a lecture about a value they may never have typed.
+    at=$(hhmm "$(cfg daily_at "08:00")") || at="08:00"
+  fi
 
   # Turning the digest on or off is a property of the company, not of this
   # machine — a second laptop reading the same config should agree.
