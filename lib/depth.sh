@@ -239,11 +239,11 @@ cmd_depth() {
   local only="" jobs=4 py="" setup=0 symbol="" stats=0
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --only) only=$2; shift 2 ;;
-      --jobs | -j) jobs=$2; shift 2 ;;
-      --python) py=$2; shift 2 ;;
+      --only) need_arg "$1" $#; only=$2; shift 2 ;;
+      --jobs | -j) need_arg "$1" $#; jobs=$2; shift 2 ;;
+      --python) need_arg "$1" $#; py=$2; shift 2 ;;
       --setup) setup=1; shift ;;
-      --symbol) symbol=$2; shift 2 ;;
+      --symbol) need_arg "$1" $#; symbol=$2; shift 2 ;;
       --stats) stats=1; shift ;;
       *) die "unknown flag: $1" ;;
     esac

@@ -8,14 +8,13 @@ cmd_init() {
   shift || true
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --org) org=$2; shift 2 ;;
-      --docs-repo) docs_repo=$2; shift 2 ;;
-      --docs-path) docs_path=$2; shift 2 ;;
+      --org) need_arg "$1" $#; org=$2; shift 2 ;;
+      --docs-repo) need_arg "$1" $#; docs_repo=$2; shift 2 ;;
+      --docs-path) need_arg "$1" $#; docs_path=$2; shift 2 ;;
       --daily) daily=true; shift ;;
       --no-daily) daily=false; shift ;;
-      # As the last argument this would read an unset $2 under `set -u`.
       --daily-at)
-        [[ $# -ge 2 ]] || die "--daily-at wants a time, e.g. --daily-at 08:00"
+        need_arg "$1" $# "--daily-at wants a time, e.g. --daily-at 08:00"
         daily_at=$2; daily=true; shift 2 ;;
       *) die "unknown flag: $1" ;;
     esac

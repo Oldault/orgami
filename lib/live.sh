@@ -336,7 +336,7 @@ cmd_live() {
   local want="" quiet=0 as_json=0
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --provider | -p) want=$2; shift 2 ;;
+      --provider | -p) need_arg "$1" $#; want=$2; shift 2 ;;
       --json) as_json=1; shift ;;
       --quiet | -q) quiet=1; shift ;;
       *) die "unknown flag: $1" ;;

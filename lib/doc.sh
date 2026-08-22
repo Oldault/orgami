@@ -219,7 +219,7 @@ cmd_doc() {
   while [[ $# -gt 0 ]]; do
     case $1 in
       --narrate) narrate=1; shift ;;
-      --model) model=$2; shift 2 ;;
+      --model) need_arg "$1" $#; model=$2; shift 2 ;;
       *) die "unknown flag: $1" ;;
     esac
   done

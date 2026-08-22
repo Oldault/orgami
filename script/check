@@ -224,6 +224,16 @@ schedule() {
   echo "schedule: impossible hours refused before the config and the unit"
 }
 
+# Every value-taking flag is `--flag) x=$2; shift 2` under the dispatcher's
+# `set -u`, so typed as the last argument it used to abort with bash's own
+# "unbound variable". Runs each flag bare through its real parser, and holds
+# every arm to the `need_arg` guard. Stub gh/claude/systemctl, temp HOME —
+# no org, no token, no network.
+flags() {
+  ./test/flag_arg_test.sh >/dev/null
+  echo "flags: a bare value-flag dies as orgami's error, and every arm is guarded"
+}
+
 # `orgami query --json` is what anything built on the map reads, so its shape
 # is pinned, and so is the confidence on every edge it hands out. Runs against a
 # hand-written graph.json under a temp ORGAMI_HOME.
@@ -282,6 +292,7 @@ CHECKS=(
   --runbook:runbook
   --linkify:linkify
   --schedule:schedule
+  --flags:flags
   --query:query
   --html:html
   --doc:doc

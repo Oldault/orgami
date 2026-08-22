@@ -316,8 +316,8 @@ cmd_advise() {
     case $1 in
       --all | -a) show_all=1; shift ;;
       --json) as_json=1; shift ;;
-      --stale-days) stale=$2; shift 2 ;;
-      --reject) reject=$2; shift 2 ;;
+      --stale-days) need_arg "$1" $#; stale=$2; shift 2 ;;
+      --reject) need_arg "$1" $#; reject=$2; shift 2 ;;
       --) shift; reason="$*"; break ;;
       -*) die "unknown flag: $1" ;;
       *) reason="$*"; break ;;

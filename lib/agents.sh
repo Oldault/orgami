@@ -78,9 +78,9 @@ cmd_agents() {
       --agents-md) targets+=(agents) ; shift ;;
       --cursor) targets+=(cursor); shift ;;
       --all) targets=(agents cursor); shift ;;
-      --repo) repo=$2; shift 2 ;;
+      --repo) need_arg "$1" $#; repo=$2; shift 2 ;;
       --refresh) action=refresh; shift ;;
-      --workspace) workspace=$2; shift 2 ;;
+      --workspace) need_arg "$1" $#; workspace=$2; shift 2 ;;
       --cursor-hook) action=cursor-hook; shift ;;
       --user) scope=user; shift ;;
       --git-hook) action=git-hook; shift ;;

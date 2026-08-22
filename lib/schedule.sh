@@ -99,10 +99,8 @@ cmd_schedule() {
       --off | --disable) off=1; shift ;;
       --daily) kind=daily; shift ;;
       --weekly) kind=weekly; shift ;;
-      # `--at` as the last argument would read an unset $2 and abort with bash's
-      # own "unbound variable" under `set -u`, which says nothing about orgami.
       --at)
-        [[ $# -ge 2 ]] || die "--at wants a time, e.g. --at 08:00"
+        need_arg "$1" $# "--at wants a time, e.g. --at 08:00"
         want_at=$2; have_at=1; kind=daily; shift 2 ;;
       *) die "unknown flag: $1" ;;
     esac

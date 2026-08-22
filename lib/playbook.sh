@@ -296,7 +296,7 @@ cmd_playbook() {
   local repo="" topic="" all=0 list=0 force=0
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --topic | -t) topic=$2; shift 2 ;;
+      --topic | -t) need_arg "$1" $#; topic=$2; shift 2 ;;
       --all) all=1; shift ;;
       --list | -l) list=1; shift ;;
       --force) force=1; shift ;;

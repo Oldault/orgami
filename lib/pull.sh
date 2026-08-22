@@ -38,9 +38,9 @@ cmd_pull() {
   local weeks_ago=0 since="" until=""
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --last) weeks_ago=$2; shift 2 ;;
-      --since) since=$2; shift 2 ;;
-      --until) until=$2; shift 2 ;;
+      --last) need_arg "$1" $#; weeks_ago=$2; shift 2 ;;
+      --since) need_arg "$1" $#; since=$2; shift 2 ;;
+      --until) need_arg "$1" $#; until=$2; shift 2 ;;
       *) die "unknown flag: $1" ;;
     esac
   done
