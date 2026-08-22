@@ -339,4 +339,56 @@ grep -q 'Sessions dropped under memory pressure — acme/web#123' <<<"$(section 
 grep -q 'A rounding error in invoices' <<<"$web" &&
   fail "another repository's recorded failure reached this runbook"
 
+# --- 6. the incidents page survives a week nobody got paged -------------------
+#
+# `runbook_incidents_page` reads the recaps under `reports/`, and prompts/recap.md
+# tells the model to omit "What got fixed" and "Security" entirely when there
+# were none. So on a quiet week every `grep` the page runs over the recaps
+# matches nothing — and `grep` exits 1 on no match, which under `set -e` used to
+# abort the page, `orgami doc` with it, and leave half the map on disk. A week
+# nobody got paged is the ordinary case, so what is pinned is that it renders,
+# and that the sections it can no longer fill are gone rather than empty.
+
+incidents() { # renders INCIDENTS.md and echoes it
+  runbook_incidents_page 2>/dev/null || return 1
+  cat "$DIR/map/INCIDENTS.md"
+}
+
+# The fixture recap is already the mixed case: a "What got fixed" section and no
+# "Security" one. Both repositories it names belong in the fires list.
+page=$(incidents) || fail "the page failed on a recap carrying no 'Security' section"
+grep -qxF -- "## Where the fires start" <<<"$page" ||
+  fail "two recorded failures are named in the recaps and must be counted"
+for repo in web billing; do
+  grep -qxF -- "- **$repo** — named in 1 recorded failures" <<<"$page" ||
+    fail "'$repo' is named in a recorded failure and must be counted"
+done
+grep -qxF -- "## Everything recorded so far" <<<"$page" ||
+  fail "a recap with a 'What got fixed' bullet must be listed under 'Everything recorded so far'"
+grep -q 'Sessions dropped under memory pressure — acme/web#123' <<<"$page" ||
+  fail "the bullet the recap carries must reach the page it is listed on"
+
+# The recap the prompt actually produces when nothing broke and nothing was
+# reported: neither section exists, so neither may reach the page.
+cat >"$DIR/reports/2026-W33.md" <<'MD'
+# 2026-W33
+
+## What shipped
+
+- Checkout retries on a 502 — acme/web#41
+MD
+page=$(incidents) || fail "the page failed on a recap that omits both sections"
+for heading in "## Where the fires start" "## Everything recorded so far"; do
+  grep -qxF -- "$heading" <<<"$page" &&
+    fail "'$heading' has nothing behind it after a quiet week and must not be printed"
+done
+grep -q 'Checkout retries on a 502' <<<"$page" &&
+  fail "'What shipped' is not a failure and must not be read as one"
+
+# And a company in its first week, with no recap written yet at all.
+rm -f "$DIR/reports"/*.md
+page=$(incidents) || fail "the page failed with no recaps at all"
+empty=$(empty_sections <<<"$page")
+[[ -z $empty ]] || fail "the incidents page has an empty section: $(tr '\n' ' ' <<<"$empty")"
+
 echo "runbook: quotes traceable, tags placed, absence stated, no empty headings, no model"
