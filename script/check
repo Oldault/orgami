@@ -195,6 +195,14 @@ html() {
   echo "html: self-contained, and every edge keeps its confidence"
 }
 
+# map/ARCHITECTURE.md and the repo cards are the pages a person opens, and the
+# markdown view of the graph must not drift from the HTML one above it. Runs
+# against hand-written fixtures under a temp ORGAMI_HOME — no scan, no token.
+doc() {
+  ./test/doc_render_test.sh >/dev/null
+  echo "doc: evidence and confidence intact, and an empty section has no heading"
+}
+
 # The shell completions may only offer what `orgami help --all` and the files
 # under $ORGAMI_HOME already say. Runs against a fixture home and this checkout
 # — no map, no token, no network.
@@ -228,6 +236,7 @@ CHECKS=(
   --playbook:playbook
   --query:query
   --html:html
+  --doc:doc
   --completions:completions
 )
 
