@@ -13,12 +13,18 @@ cmd_init() {
       --docs-path) docs_path=$2; shift 2 ;;
       --daily) daily=true; shift ;;
       --no-daily) daily=false; shift ;;
-      --daily-at) daily_at=$2; daily=true; shift 2 ;;
+      # As the last argument this would read an unset $2 under `set -u`.
+      --daily-at)
+        [[ $# -ge 2 ]] || die "--daily-at wants a time, e.g. --daily-at 08:00"
+        daily_at=$2; daily=true; shift 2 ;;
       *) die "unknown flag: $1" ;;
     esac
   done
 
-  [[ $daily_at =~ ^[0-2][0-9]:[0-5][0-9]$ ]] || die "--daily-at wants HH:MM, got '$daily_at'"
+  # Same clock as `orgami schedule --at`: this writes the same daily_at, and the
+  # config is read by every machine in the company.
+  daily_at=$(hhmm "$daily_at") ||
+    die "--daily-at wants HH:MM on a 24-hour clock, got '$daily_at'"
 
   [[ -n $company ]] || die "usage: orgami init <company> --org <github-org> [--docs-repo <url>]"
   [[ -n $org ]] || die "--org is required (the GitHub organization login)"

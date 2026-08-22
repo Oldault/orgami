@@ -277,7 +277,8 @@ either way it is two keys in the config, so a second machine agrees.
 
 ```bash
 orgami schedule --daily              # weekday mornings
-orgami schedule --daily --at 09:00   # move it
+orgami schedule --daily --at 09:00   # move it — HH:MM, 00:00 to 23:59
+orgami schedule --daily --at 9:00    # the same; a bare hour is stored as 09:00
 orgami schedule --daily --off        # stop it; the digests already written stay
 ```
 
