@@ -20,8 +20,10 @@ without a step of its own, and `orgami publish` copies it beside
 `ARCHITECTURE.md`. The page inlines the live reading, so the published copy
 follows the rule `live.json` already follows: unless `live_publish` is true it
 is rendered without `map/live.json`, and its Live view then says `orgami live`
-has not been run. The menu (`orgami`) has an entry that opens the page in a
-browser.
+has not been run. The figures people typed with `orgami cost` follow the same
+rule under `publish_costs`: unless it is true, `map/costs.json` stays on the
+machine and the published page says no figure has been typed. The menu
+(`orgami`) has an entry that opens the page in a browser.
 
 ## The rules
 
@@ -55,9 +57,14 @@ bead rather than quietly bending it.
    nothing in them disappear.
 5. **Absence is "not found", never "not connected" / "not used".** Wording
    from [map.md](map.md) and [advise.md](advise.md).
-6. **Money appears only when a human typed it**, with who and when. Until
-   then the vendors view ranks by confidence and blast radius exactly as
-   `orgami advise` does, and says in its header that no invoice has been seen.
+6. **Money appears only when a human typed it**, with who and when: the rows
+   of `map/costs.json`, written by `orgami cost`, drawn as human evidence.
+   The vendors view ranks by confidence and blast radius exactly as
+   `orgami advise` does whether or not a vendor has a figure — the figure sits
+   beside the blast radius and does not move the rank — and says in its
+   header that no invoice has been seen. A category is totalled only where
+   every vendor in it has a figure in one currency; otherwise "n of m vendors
+   costed" and no sum (rule 5: a partial sum is a lie).
 7. **Deterministic.** Same input files, byte-identical output. Layouts are
    seeded from names, as `graph.html` does. No `Date.now()` in rendering, no
    random. The one clock the page uses is the reader's, for "read 3 days ago",
@@ -80,7 +87,7 @@ bead rather than quietly bending it.
 | overview | the org at a glance: counts, freshness of every reading with the command that refreshes it, what changed this week, what advise ranks first | graph, repos, live, dns, advise, coupling, reports, notes |
 | map | the graph as a picture: force layout, kind filters, inferred toggle, search, node panel with both directions of every edge and the evidence | graph (+ depth and live totals) |
 | repos | a table (language, framework, runtime, edges, last push, deploy target, live state) and a page per repo | repos, graph, coupling, live, notes, runbooks, playbooks |
-| vendors | what the org pays for: vendor × repo by category, source badge (code / dns / both), advise proposals ranked with evidence, suppressed ones with reason and author, "not proposed, on purpose" | graph vendor nodes and edges, dns, advise, notes |
+| vendors | what the org pays for: vendor × repo by category, source badge (code / dns / both), the amount a person typed where one exists with who and when, a category total only where every vendor is costed, advise proposals ranked with evidence and the figure beside the blast radius, suppressed ones with reason and author, "not proposed, on purpose" | graph vendor nodes and edges, dns, advise, costs, notes |
 | live | deployed vs configured: per provider, per repo, state, urls, age; "configured but not seen" and "seen but not configured"; DNS records by kind | live, dns, graph deploys-to edges |
 | activity | the weeks as small multiples from `stats.jq`, the daily digests from `daily.jq`, coupling as a repo × repo matrix labelled correlation-not-dependency | weeks, days, reports, daily, coupling |
 | memory | notes by tag and repo (newest first, author, age, superseded chain), decisions per week, playbooks with instance counts and the evidence beneath, runbooks | notes, decisions, playbooks, runbooks, pages |
@@ -177,6 +184,7 @@ as missing, with a line on stderr.
 | `map.live` | `map/live.json` | as written |
 | `map.dns` | `map/dns.json` | as written |
 | `map.advise` | `map/advise.json` | as written |
+| `map.costs` | `map/costs.json` | as written — `{generated, costs: [{vendor, amount, period, currency, who, when, note?}]}`; read as missing under `WEB_OMIT_COSTS=1`, which is how `orgami publish` renders the copy that leaves the machine unless `publish_costs` is true |
 | `map.depth` | `map/depth.json` | `{generated, totals, repos: [{name, parsed, symbol_count, exported_count, external_modules, languages}]}` — never the whole file |
 | `notes` | `notes/*.md`, `notes/archive/*.md` | `[{id, author, date, repo, tags: [], topic, supersedes, superseded_by, archived, file, body}]`, newest first |
 | `weeks` | `cache/prs/<week>.json` | `[{file, week, since, until, stats: <lib/stats.jq>, prs: [{number, title, url, repo, author, createdAt, mergedAt, additions, deletions, changedFiles, labels, reviewers}]}]` |
@@ -223,8 +231,9 @@ node kind, every edge kind, extracted and inferred, a description that tries
 to close a script tag, a DNS reading, a live reading, six notes (one an
 advise rejection, one superseded, one archived), a week and a day of cache
 with their recaps, a decisions fragment, a playbook with its `PLAYBOOKS.md`
-index, a runbook, and a note under `notes/draft/` that no view may show. Every
-file takes its shape from the lib file that writes it. `map/advise.json` was
+index, a runbook, two cost figures in `map/costs.json` (one category fully
+costed, one partial), and a note under `notes/draft/` that no view may show.
+Every file takes its shape from the lib file that writes it. `map/advise.json` was
 produced by `lib/advise.jq` over the fixture graph and DNS reading with the
 clock fixed at `2026-08-18T07:00:00Z`; rerun it that way if the graph or the
 notes change.

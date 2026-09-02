@@ -189,3 +189,35 @@ orgami note --supersede <note-id> --repo legacy "the lawsuit settled; Sentry can
 ```
 
 An advisory list that gets shorter every month is the one that is working.
+
+## Telling it what things cost
+
+The report has never seen an invoice and never will. What a person knows, they
+can type:
+
+```bash
+orgami cost stripe 1240.50                       # per month, in EUR, by default
+orgami cost docusign 480 --per year --note "one seat, renewed each June"
+orgami cost sendgrid 89 --currency USD
+orgami cost --list                               # the figures recorded, who and when
+orgami cost --remove sendgrid                    # drop one
+```
+
+Each figure is one row in `map/costs.json` — amount, period, currency, who
+typed it, when, and the note if there was one — and the vendor has to be one
+the map or the DNS reading already knows. A name nothing else can find is
+refused with the nearest ones, because a cost against a vendor no file names
+would be the first fact in the map with no evidence beneath it. The default
+currency is `EUR`, or `currency` in the company config.
+
+A figure is a human's claim, not the tool's, and it is treated that way
+everywhere it appears: with the name and the date beside it, never mixed into
+the counts. Proposals stay ranked by confidence and blast radius; a figure is
+shown beside the reach and does not move the rank. The vendors view of
+`orgami web` sums a category only when every vendor in it has a figure in one
+currency — a partial total is a lie, so it says "1 of 2 vendors costed"
+instead.
+
+The figures are what the organization pays, and a docs repo may be public, so
+`orgami publish` leaves `costs.json` on the machine and renders the published
+page without it unless the company config says `"publish_costs": true`.

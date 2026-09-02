@@ -169,8 +169,56 @@ check "vendors: the figures are computed in jq" \
 check "vendors: every source says how old it is, with the command that refreshes it" \
   "$(jq -r '[.sources.graph.command, .sources.dns.command, .sources.advise.command, .generated] | join(" ")' <<<"$vendors")" \
   "orgami scan orgami dns orgami advise 2026-08-18T07:00:00Z"
-check "vendors: no amount anywhere in the payload" \
-  "$(grep -ciE '"(cost|amount|price|spend|usd|eur)"' <<<"$vendors" || true)" "0"
+
+# Money only where a person typed it (rule 6). The fixture's map/costs.json
+# has two figures: DocuSign, alone in e-signature, so that category is fully
+# costed and has a total; Stripe, one of two payments vendors, so that
+# category is partial and has none — a partial sum is a lie (rule 5). Every
+# amount in the payload is one of those two, with who and when beside it, and
+# the proposal order is advise's whether or not a vendor is costed.
+check "vendors: the figures are the ones in map/costs.json, each with who and when" \
+  "$(jq -r '[.vendors[] | select(.cost != null) | "\(.id)=\(.cost.amount)/\(.cost.period)/\(.cost.currency)/\(.cost.who)/\(.cost.when[0:10])"] | join(" ")' <<<"$vendors")" \
+  "docusign=480/year/EUR/dana/2026-08-11 stripe=1240.5/month/EUR/sam/2026-08-04"
+check "vendors: a vendor nobody costed carries no figure, not a zero" \
+  "$(jq -r '[.vendors[] | select(.id == "paddle" or .id == "sentry") | .cost] | unique | tostring' <<<"$vendors")" "[null]"
+check "vendors: the fully costed category has a total, resting on the claim it came from" \
+  "$(jq -r '.categories[] | select(.category == "e-signature") | [.costed, (.vendors | length), .total.amount, .total.currency, .total.period, .total.from[0].who] | join(" ")' <<<"$vendors")" \
+  "1 1 480 EUR year dana"
+check "vendors: the partially costed category has no total, only n of m" \
+  "$(jq -r '.categories[] | select(.category == "payments") | [.costed, (.vendors | length), (.total | tostring)] | join(" ")' <<<"$vendors")" \
+  "1 2 null"
+check "vendors: a category nobody costed has no total and says so with a count of zero" \
+  "$(jq -r '[.categories[] | select(.category == "error-tracking") | .costed, (.total | tostring)] | join(" ")' <<<"$vendors")" "0 null"
+check "vendors: a proposal touching a costed vendor carries the figure, with who and when" \
+  "$(jq -r '.proposals[0] | [.id, (.costs | length), .costs[0].vendor, .costs[0].amount, .costs[0].who, .costs[0].when[0:10]] | join(" ")' <<<"$vendors")" \
+  "duplicate-category:payments:paddle+stripe 1 stripe 1240.5 sam 2026-08-04"
+check "vendors: a proposal touching no costed vendor carries no figure" \
+  "$(jq -r '[.proposals[] | select(.id == "orphan-vendor:sentry@legacy") | .costs | length] | join(" ")' <<<"$vendors")" "0"
+check "vendors: the figures are counted in jq" \
+  "$(jq -r '.counts | [.costed, .categories_totalled] | join(" ")' <<<"$vendors")" "2 1"
+check "vendors: the costs file says when it was last written and which command adds to it" \
+  "$(jq -r '.sources.costs | [.generated, .command, .file, .rows] | join(" ")' <<<"$vendors")" \
+  "2026-08-11T09:30:00Z orgami cost <vendor> <amount> map/costs.json 2"
+check "vendors: every amount in the payload sits beside a who and a when" \
+  "$(jq -r '[.. | objects | select(has("amount")) | (has("who") and has("when")) or has("from")] | all' <<<"$vendors")" "true"
+# Mixed periods and mixed currencies, through the same program on a payload of
+# the fixture's sources with the figures changed: two figures per month and
+# per year in one currency sum per year, month × 12; two currencies do not sum.
+sources=$(mktemp)
+web_sources >"$sources" 2>/dev/null
+check "vendors: a category costed in two periods totals per year, and says the periods differ" \
+  "$(jq -c '.map.costs.costs = [{vendor: "paddle", amount: 100, period: "year", currency: "EUR", who: "sam", when: "2026-08-01T00:00:00Z"},
+                                {vendor: "stripe", amount: 10, period: "month", currency: "EUR", who: "sam", when: "2026-08-01T00:00:00Z"}]' "$sources" \
+      | jq -L lib -r --arg dir "$DIR" --arg company acme --arg org acme-inc -f lib/web/40-vendors.jq \
+      | jq -r '.categories[] | select(.category == "payments") | [.costed, .total.amount, .total.period, .total.mixed_periods] | join(" ")')" \
+  "2 220 year true"
+check "vendors: a category costed in two currencies has no total" \
+  "$(jq -c '.map.costs.costs = [{vendor: "paddle", amount: 100, period: "month", currency: "USD", who: "sam", when: "2026-08-01T00:00:00Z"},
+                                {vendor: "stripe", amount: 10, period: "month", currency: "EUR", who: "sam", when: "2026-08-01T00:00:00Z"}]' "$sources" \
+      | jq -L lib -r --arg dir "$DIR" --arg company acme --arg org acme-inc -f lib/web/40-vendors.jq \
+      | jq -r '.categories[] | select(.category == "payments") | [.costed, (.currencies | join("+")), (.total | tostring)] | join(" ")')" \
+  "2 EUR+USD null"
+rm -f "$sources"
 
 # Without a DNS reading or an advise run the view still renders, and names the
 # command that produces each: the matrix from the graph alone, no proposals.
@@ -184,6 +232,28 @@ check "vendors: an answer in the notes survives without advise.json, marked as n
   "$(jq -r '.answered[0] | [.id, .proposed] | join(" ")' <<<"$partial")" \
   "duplicate-category:error-tracking:rollbar+sentry false"
 cp test/fixtures/company/map/dns.json test/fixtures/company/map/advise.json "$DIR/map/"
+
+# Without map/costs.json there is no amount anywhere on the page (rule 6): the
+# view names the command that adds one, and every other figure stays.
+rm -f "$DIR/map/costs.json"
+web_render 2>/dev/null
+nocosts=$(sed -n '/<script id="data"/,/<\/script>/p' "$page" | sed '1d;$d' | jq -c '.views.vendors')
+check "vendors: without costs.json no amount is in the payload, and the command that adds one is named" \
+  "$(jq -r '[([.. | objects | select(has("amount"))] | length), .sources.costs.missing, .counts.costed, ([.categories[] | .total] | unique | tostring)] | join(" ")' <<<"$nocosts")" \
+  "0 orgami cost <vendor> <amount> 0 [null]"
+check "vendors: and the proposals are the same, in the same order" \
+  "$(jq -r '[.proposals[].id] | join(" ")' <<<"$nocosts")" \
+  "$(jq -r '[.proposals[].id] | join(" ")' <<<"$vendors")"
+check "vendors: the page draws no amount with no clock and no random (rule 7)" \
+  "$(grep -cE 'Date\.now|Math\.random|new Date\(' lib/web/40-vendors.js || true)" "0"
+# The published copy: rendered with WEB_OMIT_COSTS=1 the figures are read as
+# missing even though the file is there (lib/publish.sh, publish_costs).
+cp test/fixtures/company/map/costs.json "$DIR/map/"
+WEB_OMIT_COSTS=1 web_render 2>/dev/null
+check "vendors: WEB_OMIT_COSTS renders the page as if no figure had been typed" \
+  "$(sed -n '/<script id="data"/,/<\/script>/p' "$page" | sed '1d;$d' | jq -r '.views.vendors | [.sources.costs.missing, .counts.costed] | join(" ")')" \
+  "orgami cost <vendor> <amount> 0"
+web_render 2>/dev/null
 
 # Every source read into the views is there, in the shape docs/web.md promises.
 sources=$(mktemp)

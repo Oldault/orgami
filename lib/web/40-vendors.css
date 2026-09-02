@@ -12,9 +12,22 @@
 [data-view="vendors"] .cat table.t td { font-size: 12px; }
 [data-view="vendors"] .cell { display: flex; flex-direction: column; gap: 3px; }
 [data-view="vendors"] .cell .ev { max-width: 340px; }
+/* A file:line is one token. The shell lets evidence break anywhere so a long
+   path wraps in prose; in a table that lets the browser shrink a column to
+   one letter a line instead of scrolling the table, which is what .scroll is
+   for. DNS records are the exception: they are long and wrap well. */
+[data-view="vendors"] .cell:not(.dnscell) .ev { word-break: normal; white-space: nowrap; }
 [data-view="vendors"] .dnscell { min-width: 280px; }
 [data-view="vendors"] .ev .faint, [data-view="vendors"] .ev .tag { white-space: nowrap; }
 [data-view="vendors"] p.note { margin: 6px 0 0; }
+
+/* Money: a human's figure, drawn as human evidence wherever it appears; the
+   category line under the table is the total or the "n of m" it stands in for. */
+[data-view="vendors"] .money .ev { white-space: nowrap; }
+[data-view="vendors"] .prophead .money { font-size: 12px; }
+[data-view="vendors"] p.total { margin: 4px 0 0; font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+[data-view="vendors"] p.total .from { display: inline-flex; flex-wrap: wrap; gap: 4px 10px; }
+[data-view="vendors"] p.money { margin: 4px 0; font-size: 14px; }
 
 [data-view="vendors"] .tag.src-both, [data-view="vendors"] .tag.subst { color: var(--ok); border-color: currentColor; }
 [data-view="vendors"] .tag.src-dns { color: var(--vendor); }

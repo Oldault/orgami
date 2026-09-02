@@ -142,6 +142,12 @@ web_sources() {
   local live_json
   if [[ ${WEB_OMIT_LIVE:-0} == 1 ]]; then live_json=/dev/null
   else live_json=$(web_json_or_null "$DIR/map/live.json"); fi
+  # The same rule for the figures people typed (lib/cost.sh, publish_costs):
+  # a docs repo may be public, so the copy that leaves the machine is rendered
+  # without map/costs.json unless the org said the amounts may go.
+  local costs_json
+  if [[ ${WEB_OMIT_COSTS:-0} == 1 ]]; then costs_json=/dev/null
+  else costs_json=$(web_json_or_null "$DIR/map/costs.json"); fi
 
   web_notes >"$notes"
   web_weeks >"$weeks"
@@ -170,6 +176,7 @@ web_sources() {
     --slurpfile live "$live_json" \
     --slurpfile dns "$(web_json_or_null "$DIR/map/dns.json")" \
     --slurpfile advise "$(web_json_or_null "$DIR/map/advise.json")" \
+    --slurpfile costs "$costs_json" \
     --slurpfile depth "$(web_json_or_null "$DIR/map/depth.json")" \
     --slurpfile notes "$notes" \
     --slurpfile weeks "$weeks" \
@@ -187,6 +194,7 @@ web_sources() {
             live: ($live[0] // null),
             dns: ($dns[0] // null),
             advise: ($advise[0] // null),
+            costs: ($costs[0] // null),
             depth: ($depth[0] // null
                     | if . == null then null
                       else {generated, totals,

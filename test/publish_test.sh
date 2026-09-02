@@ -240,6 +240,32 @@ grep -q 'acme-api-secret-name' "$published" || fail "with live_publish the page 
 rm -f "$home/map/live.json" "$home/map/orgami.html"
 config "git@github.com:acme/engineering.git"
 
+# --- the figures people typed leave only when the org says so -------------------
+# map/costs.json is what the organization pays, typed by a person, and a docs
+# repo may be public. It is copied, and the page rendered with it, only under
+# publish_costs; by default the published page says no figure has been typed.
+
+cp test/fixtures/company/map/graph.json "$home/map/graph.json"
+printf '%s\n' '{"generated":"2026-08-11T09:30:00Z","costs":[{"vendor":"stripe","amount":98765,"period":"month","currency":"EUR","who":"dana","when":"2026-08-11T09:30:00Z"}]}' >"$home/map/costs.json"
+echo '<!doctype html><title>local page</title>98765' >"$home/map/orgami.html"
+STUB_ALLOW_PUSH=1
+run --yes
+[[ $RC == 0 ]] || fail "publishing with a cost file should work, got $RC: $ERR"
+[[ -f $home/cache/docs/orgami/costs.json ]] && fail "without publish_costs costs.json must not be copied"
+grep -q '<script id="data"' "$published" || fail "without publish_costs the page must be rendered afresh, not copied"
+grep -q '98765' "$published" && fail "without publish_costs the published page must not carry the figure"
+grep -q '"missing":"orgami cost' "$published" || fail "the published page should say no figure was read"
+grep -q '98765' "$home/map/orgami.html" || fail "the local page must be left as it was"
+
+jq '. + {publish_costs: true}' "$home/config.json" >"$home/config.tmp" && mv "$home/config.tmp" "$home/config.json"
+STUB_ALLOW_PUSH=1
+run --yes
+[[ $RC == 0 ]] || fail "publishing with publish_costs should work, got $RC: $ERR"
+[[ -f $home/cache/docs/orgami/costs.json ]] || fail "with publish_costs costs.json is copied"
+grep -q '98765' "$published" || fail "with publish_costs the page is copied as it is"
+rm -f "$home/map/costs.json" "$home/map/orgami.html" "$home/map/graph.json" "$home/cache/docs/orgami/costs.json"
+config "git@github.com:acme/engineering.git"
+
 # --- --yes reaches the push, and nothing else does -----------------------------
 # The behaviour above pins that the flag works and that answering the prompt
 # does not. What it cannot show is that no future edit sets `yes` from somewhere

@@ -80,6 +80,10 @@ The map
   orgami advise [--all] [--json] [--stale-days N]
                                         where the map says a vendor is paid for twice
   orgami advise --reject <id> "why"     answer one, and never be asked again
+  orgami cost <vendor> <amount> [--per month|year] [--currency EUR] [--note "…"]
+                                        what a vendor costs, typed by a person
+  orgami cost --list | --remove <vendor>
+                                        the figures recorded, or drop one
 
 Digests
   orgami daily [--date D | --yesterday] [--stats-only]
@@ -227,6 +231,10 @@ case $cmd in
     source "$ROOT/lib/dns.sh"
     source "$ROOT/lib/advise.sh"
     cmd_advise "$@"
+    ;;
+  cost)
+    source "$ROOT/lib/cost.sh"
+    cmd_cost "$@"
     ;;
   note-auto)
     source "$ROOT/lib/notes.sh"

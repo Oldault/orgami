@@ -201,16 +201,26 @@ cmd_publish() {
   if [[ $(cfg live_publish false) == true ]]; then
     cp -f "$DIR/map/live.json" "$dest/" 2>/dev/null || true
   fi
-  # The page inlines the live reading, so it follows the same rule: the copy
-  # that leaves the machine is rendered without map/live.json unless the org
-  # has said the reading may go. Rendered, not copied, so the local page keeps
+  # The figures people typed (`orgami cost`, map/costs.json) are what the
+  # organization pays, and a docs repo may be public. They leave only when the
+  # org has said so.
+  if [[ $(cfg publish_costs false) == true ]]; then
+    cp -f "$DIR/map/costs.json" "$dest/" 2>/dev/null || true
+  fi
+  # The page inlines the live reading and the cost figures, so it follows the
+  # same two rules: the copy that leaves the machine is rendered without
+  # map/live.json unless live_publish says so, and without map/costs.json
+  # unless publish_costs does. Rendered, not copied, so the local page keeps
   # what the local reader is allowed to see.
   if [[ -f $DIR/map/orgami.html ]]; then
-    if [[ $(cfg live_publish false) == true || ! -f $DIR/map/live.json ]]; then
+    local omit_live=0 omit_costs=0
+    [[ $(cfg live_publish false) == true || ! -f $DIR/map/live.json ]] || omit_live=1
+    [[ $(cfg publish_costs false) == true || ! -f $DIR/map/costs.json ]] || omit_costs=1
+    if [[ $omit_live == 0 && $omit_costs == 0 ]]; then
       cp -f "$DIR/map/orgami.html" "$dest/"
     else
       source "$ROOT/lib/web.sh"
-      WEB_OMIT_LIVE=1 web_render "$dest/orgami.html"
+      WEB_OMIT_LIVE=$omit_live WEB_OMIT_COSTS=$omit_costs web_render "$dest/orgami.html"
     fi
   fi
   if compgen -G "$DIR/map/repos/*.md" >/dev/null; then

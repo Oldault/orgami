@@ -9,9 +9,14 @@
 # answers are the notes tagged advise-suppressed, read with the same marker
 # lib/advise.sh writes. Every count the page shows is computed here (rule 3).
 #
-# No money. `orgami advise` has never seen an invoice, so there is no cost
-# column to compute, and the view says so in its header (rule 6). Ranking is
-# confidence first, blast radius second, which is advise.json's own order.
+# Money only where a person typed it (rule 6). `orgami advise` has never seen
+# an invoice; the one source of an amount is map/costs.json, written by
+# `orgami cost`, and every figure carries who typed it and when. The view says
+# so in its header. Ranking stays confidence first, blast radius second, which
+# is advise.json's own order — a figure is a human's claim, not the tool's.
+# A category total exists only where every vendor in it has a figure in one
+# currency; a partial sum is a lie (rule 5), so the view says "n of m costed"
+# instead.
 
 def strip_prefix($p): if startswith($p) then .[($p | length):] else . end;
 
@@ -32,6 +37,7 @@ def dns_row: {domain, signal: (.signal // null), at, source: "dns"};
 .map.graph as $g
 | .map.dns as $dns
 | .map.advise as $adv
+| .map.costs as $costs
 | (.notes // []) as $notes
 | if $g == null then {generated: null, missing: "orgami scan"} else
 
@@ -47,6 +53,12 @@ def dns_row: {domain, signal: (.signal // null), at, source: "dns"};
     | {vendor: $v.id, domain: .domain, signal: .signal, at: .at,
        name: ($v.name // ""), category: ($v.category // ""),
        portal: ($v.portal // ""), flags: ($v.flags // [])}]) as $dnsrows
+
+# --- what people typed: one figure per vendor, with who and when -------------------
+| ((($costs.costs // []) | map({key: .vendor,
+                                value: {amount, period: (.period // "month"), currency: (.currency // ""),
+                                        who: (.who // ""), when: (.when // null), note: (.note // null)}}))
+   | from_entries) as $costed
 
 | (($adv.vendors // []) | map({key: .id, value: .}) | from_entries) as $advv
 | ($adv.excluded.substitutable_categories // null) as $subst
@@ -69,7 +81,8 @@ def dns_row: {domain, signal: (.signal // null), at, source: "dns"};
        portal: (($n.meta.portal? // "") | if . == "" then ($d.portal // $a.portal // "") else . end),
        flags: (($n.meta.flags? // []) | if length == 0 then ($d.flags // []) else . end),
        code: ([$uses[] | select(.vendor == $id) | code_row] | sort_by(.repo, .at)),
-       dns: ([$dnsrows[] | select(.vendor == $id) | dns_row] | sort_by(.domain, .at))}
+       dns: ([$dnsrows[] | select(.vendor == $id) | dns_row] | sort_by(.domain, .at)),
+       cost: ($costed[$id] // null)}
     | .repos = (.code | map(.repo) | unique)
     | .domains = (.dns | map(.domain) | unique)
     | .source = (if (.code | length) > 0 and (.dns | length) > 0 then "both"
@@ -86,10 +99,32 @@ def dns_row: {domain, signal: (.signal // null), at, source: "dns"};
                             + [$exghost[] | select(.vendor == $id) | {id, kind, reason}])}]
    | sort_by((.name | ascii_downcase), .id)) as $vendors
 
-| ($vendors | group_by(.category)
-   | map({category: .[0].category,
-          substitutable: .[0].substitutable,
-          vendors: (map(.id))})
+# A category's total is drawn only where every vendor in it has a figure, and
+# all of them in one currency — anything less is not a sum of what the
+# category costs. Periods are the humans' own where they agree; where one
+# figure is per month and another per year the total is per year, month × 12,
+# and says so. Rounded to the cent, so a sum of typed figures never grows a
+# floating-point tail.
+| def cents: (. * 100 | round) / 100;
+  ($vendors | group_by(.category)
+   | map((map(select(.cost != null))) as $c
+         | ($c | map(.cost.currency) | unique) as $currencies
+         | ($c | map(.cost.period) | unique) as $periods
+         | {category: .[0].category,
+            substitutable: .[0].substitutable,
+            vendors: (map(.id)),
+            costed: ($c | length),
+            currencies: $currencies,
+            total: (if ($c | length) > 0 and ($c | length) == length and ($currencies | length) == 1
+                    then {currency: $currencies[0],
+                          period: (if ($periods | length) == 1 then $periods[0] else "year" end),
+                          mixed_periods: (($periods | length) > 1),
+                          amount: (if ($periods | length) == 1 then ($c | map(.cost.amount) | add)
+                                   else ($c | map(if .cost.period == "month" then .cost.amount * 12 else .cost.amount end) | add)
+                                   end | cents),
+                          # The claims the sum rests on, so the total carries its evidence too.
+                          from: [$c[] | {vendor: .id, who: .cost.who, when: .cost.when}]}
+                    else null end)})
    | sort_by(.category)) as $categories
 
 # --- what a human already answered ------------------------------------------------
@@ -137,6 +172,11 @@ def dns_row: {domain, signal: (.signal // null), at, source: "dns"};
        sources: (.sources // []), signals: (.signals // null),
        last_push: (.last_push // null), days_since_push: (.days_since_push // null),
        claim, suppressed: false,
+       # The figures people typed for the vendors this proposal touches, shown
+       # beside the blast radius. They do not move the rank: money is a
+       # human's claim, and the order stays advise's (rule 6).
+       costs: [(.vendors // [])[] as $v | $costed[$v] | select(. != null)
+               | {vendor: $v, amount, period, currency, who, when}],
        evidence: [(.evidence // [])[] | . as $e
                   | if .source == "dns" then {kind: "reading", at: .at, domain: .domain, vendor: .vendor}
                     else {kind: ([$uses[] | select(.vendor == $e.vendor and .repo == $e.repo and .at == $e.at)]
@@ -154,10 +194,15 @@ def dns_row: {domain, signal: (.signal // null), at, source: "dns"};
                age_days: ($adv.dns.age_days // null)} end),
    advise: (if $adv == null then {generated: null, missing: "orgami advise"}
             else {generated: ($adv.generated // null), command: "orgami advise",
-                  scanned: ($adv.scanned // null), stale_days: ($adv.stale_days // null)} end)} as $sources
+                  scanned: ($adv.scanned // null), stale_days: ($adv.stale_days // null)} end),
+   # Not a reading: the file is written by hand, and `generated` is the last
+   # time somebody did. The command is the one that adds a figure.
+   costs: (if $costs == null then {generated: null, missing: "orgami cost <vendor> <amount>"}
+           else {generated: ($costs.generated // null), command: "orgami cost <vendor> <amount>",
+                 file: "map/costs.json", rows: (($costs.costs // []) | length)} end)} as $sources
 
 # ISO timestamps sort as text, so max is the newest of what was read.
-| {generated: ([$sources.graph.generated, $sources.dns.generated, $sources.advise.generated]
+| {generated: ([$sources.graph.generated, $sources.dns.generated, $sources.advise.generated, $sources.costs.generated]
                | map(select(. != null)) | max),
    sources: $sources,
    counts: {vendors: ($vendors | length),
@@ -173,7 +218,9 @@ def dns_row: {domain, signal: (.signal // null), at, source: "dns"};
             high: ([$proposals[] | select(.confidence == "high")] | length),
             medium: ([$proposals[] | select(.confidence == "medium")] | length),
             answered: ($answered | length),
-            excluded: (($exdup | length) + ($exghost | length))},
+            excluded: (($exdup | length) + ($exghost | length)),
+            costed: ([$vendors[] | select(.cost != null)] | length),
+            categories_totalled: ([$categories[] | select(.total != null)] | length)},
    repos: ([$uses[].repo] | unique | sort),
    categories: $categories,
    substitutable: $subst,
