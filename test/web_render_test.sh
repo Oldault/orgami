@@ -93,6 +93,37 @@ check "a description trying to close the script tag cannot" \
 check "and it survives in the sources the views read" \
   "$(jq -r '.company' <<<"$data")" "Ac<me> & Co"
 
+# The map view: html_payload's reduction, every node, the hostile description
+# intact, the figures and the corners computed by jq and not by the browser.
+check "map: every fixture node id is in the view's payload" \
+  "$(jq -r '[.views.map.nodes[].id] | sort | join(" ")' <<<"$data")" \
+  "$(jq -r '[.nodes[].id] | sort | join(" ")' test/fixtures/company/map/graph.json)"
+check "map: the description that tries to close the script tag survives" \
+  "$(jq -r '.views.map.nodes[] | select(.id == "repo:web") | .description' <<<"$data")" \
+  "Customer storefront </script><script>alert(1)</script>"
+check "map: a node carries what graph.html shows and no more" \
+  "$(jq -r '.views.map.nodes[0] | keys | join(",")' <<<"$data")" \
+  "description,id,kind,language,name,private,pushed,url"
+check "map: every edge keeps its confidence" \
+  "$(jq -r '[.views.map.edges[] | .confidence] | unique | join(",")' <<<"$data")" "extracted,inferred"
+check "map: the counts come from jq" \
+  "$(jq -r '.views.map.counts | [.repos, .nodes, .edges, .extracted, .inferred] | join(" ")' <<<"$data")" \
+  "10 49 71 64 7"
+check "map: the edge-kind legend carries the extracted/inferred split, in the filter's order" \
+  "$(jq -r '[.views.map.counts.edge_kinds[] | "\(.kind)=\(.extracted)/\(.inferred)"] | join(" ")' <<<"$data")" \
+  "uses=36/0 deploys-to=5/0 depends-on=7/0 reaches=1/0 references=4/0 imports=1/1 calls=0/2 shares-config=0/2 changes-with=0/2 written-in=10/0"
+check "map: the corners — nothing links to these" \
+  "$(jq -r '.views.map.corners.isolated | join(" ")' <<<"$data")" "host:api.acme.com"
+check "map: the corners — repos nothing points at" \
+  "$(jq -r '.views.map.corners.unreferenced | join(" ")' <<<"$data")" \
+  "repo:docs-site repo:legacy repo:ml-worker repo:mobile repo:ops-scripts"
+check "map: the corners — repos only inferred edges point at" \
+  "$(jq -r '.views.map.corners.only_inferred | join(" ")' <<<"$data")" "repo:warehouse-jobs repo:web"
+check "map: live is reduced to per-repo totals" \
+  "$(jq -r '.views.map.live.deployments[0] | keys | join(",")' <<<"$data")" "name,provider,repo,state,urls"
+check "map: depth is null when there is no depth.json, not an error" \
+  "$(jq -r '.views.map.depth' <<<"$data")" "null"
+
 # Budget (rule 10): under 2 MB on the fixture.
 size=$(wc -c <"$page")
 [[ $size -lt 2097152 ]] && echo "ok   the page is under 2 MB ($size bytes)" ||
@@ -458,6 +489,8 @@ check "overview: with no map it names the command that makes one" \
   "$(jq -r '.views.overview.missing' <<<"$empty_data")" "orgami scan"
 check "memory: with nothing recorded the view names the first command that writes memory" \
   "$(jq -r '.views.memory.missing' <<<"$empty_data")" "orgami note"
+check "map: with no graph the view says which command makes one" \
+  "$(jq -r '.views.map.missing' <<<"$empty_data")" "orgami scan"
 
 # A flag nobody asked for is orgami's error, and stdout stays the path only.
 DIR="$scratch/acme"
