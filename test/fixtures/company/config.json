@@ -1,0 +1,12 @@
+{
+  "company": "acme",
+  "org": "acme-inc",
+  "docs_repo": "https://github.com/acme-inc/orgami-reports",
+  "docs_path": "orgami",
+  "daily": true,
+  "daily_at": "08:00",
+  "exclude": [],
+  "include": [],
+  "report_model": "claude-sonnet-5",
+  "domains": ["acme.com"]
+}

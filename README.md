@@ -117,6 +117,7 @@ inferred by a model, and every claim can be opened and checked.
 orgami view              # the map, the repos, the notes and the recaps, in one screen
 orgami query thruster    # one node and its edges, as text
 orgami html              # the same graph, force-directed, in one openable file
+orgami web               # the whole map — repos, vendors, live, activity, memory — as one page
 ```
 
 `orgami view` is four tabs over the same data — Map, Repos, Notes, Recaps —

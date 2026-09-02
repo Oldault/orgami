@@ -1,0 +1,10 @@
+{
+  "generated": "2026-08-18T06:14:02Z",
+  "weeks_observed": 6,
+  "pairs": [
+    {"a": "api", "b": "web", "weeks": 4, "days": 6, "authors": ["dana", "sam"]},
+    {"a": "billing-api", "b": "warehouse-jobs", "weeks": 3, "days": 5, "authors": ["dana", "priya"]},
+    {"a": "api", "b": "billing-api", "weeks": 2, "days": 1, "authors": ["dana"]},
+    {"a": "infra", "b": "ops-scripts", "weeks": 1, "days": 1, "authors": ["sam"]}
+  ]
+}

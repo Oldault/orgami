@@ -1,0 +1,20 @@
+{
+  "generated": "2026-08-18T06:30:11Z",
+  "generated_epoch": 1786948211,
+  "providers": ["fly", "vercel"],
+  "deployments": [
+    {"provider": "fly", "name": "acme-api", "repo": "api", "match": "map", "state": "deployed",
+     "urls": ["acme-api.fly.dev"], "account": "acme-inc", "updated": null, "source": "fly:app/acme-api"},
+    {"provider": "vercel", "name": "web", "repo": "web", "match": "git", "state": "READY",
+     "urls": ["app.acme.com", "web-acme-inc.vercel.app"], "account": "team_acme", "updated": "2026-08-17T10:09:52Z",
+     "source": "vercel:project/prj_web"}
+  ],
+  "unmatched": [
+    {"provider": "fly", "name": "acme-api-staging", "state": "deployed", "urls": ["acme-api-staging.fly.dev"], "source": "fly:app/acme-api-staging"},
+    {"provider": "fly", "name": "some-old-thing", "state": "suspended", "urls": ["some-old-thing.fly.dev"], "source": "fly:app/some-old-thing"},
+    {"provider": "vercel", "name": "landing-2024", "state": "READY", "urls": ["landing-2024.vercel.app"], "source": "vercel:project/prj_landing"}
+  ],
+  "errors": [
+    {"provider": "aws", "message": "aws is not on PATH"}
+  ]
+}

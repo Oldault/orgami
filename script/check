@@ -248,6 +248,15 @@ html() {
   echo "html: self-contained, and every edge keeps its confidence"
 }
 
+# map/orgami.html is the whole company directory as one page, and it has to
+# hold to the same rules graph.html does: nothing fetched, the data block
+# still JSON, every registered view with a payload, the same bytes twice.
+# Runs against test/fixtures/company — no org, no token, no network.
+web() {
+  ./test/web_render_test.sh >/dev/null
+  echo "web: self-contained, every view in the payload, byte-identical twice"
+}
+
 # map/ARCHITECTURE.md and the repo cards are the pages a person opens, and the
 # markdown view of the graph must not drift from the HTML one above it. Runs
 # against hand-written fixtures under a temp ORGAMI_HOME — no scan, no token.
@@ -295,6 +304,7 @@ CHECKS=(
   --flags:flags
   --query:query
   --html:html
+  --web:web
   --doc:doc
   --completions:completions
 )
