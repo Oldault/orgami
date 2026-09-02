@@ -104,6 +104,56 @@ web_render 2>/dev/null
 sum2=$(cksum <"$page")
 check "a second render is byte-identical" "$sum2" "$sum1"
 
+# The vendors view. Every proposal advise.json ranks is in the payload, in the
+# same order — the page may not drop or reorder one — and an answered proposal
+# is joined to the note that answered it, so the reader can open the record.
+vendors=$(jq -c '.views.vendors' <<<"$data")
+check "vendors: every advise proposal id is in the payload, in advise's order" \
+  "$(jq -r '[.proposals[].id] | join(" ")' <<<"$vendors")" \
+  "$(jq -r '[.proposals[].id] | join(" ")' test/fixtures/company/map/advise.json)"
+check "vendors: the reject command is there to copy, per proposal" \
+  "$(jq -r '.proposals[0].command' <<<"$vendors")" \
+  'orgami advise --reject duplicate-category:payments:paddle+stripe "<reason>"'
+check "vendors: a suppressed proposal is linked to the note that answered it" \
+  "$(jq -r '.answered[0] | [.id, .note.id, .author, .date, .proposed] | join(" ")' <<<"$vendors")" \
+  "duplicate-category:error-tracking:rollbar+sentry 20260602-091500-dana-rollbar-is-deliberate-mobile-only dana 2026-06-02 true"
+check "vendors: the allow-list is read from advise.json, not copied" \
+  "$(jq -c '.substitutable' <<<"$vendors")" \
+  "$(jq -c '.excluded.substitutable_categories' test/fixtures/company/map/advise.json)"
+check "vendors: a category is marked substitutable by that list" \
+  "$(jq -r '[.categories[] | select(.category == "payments" or .category == "hosting") | "\(.category)=\(.substitutable)"] | join(" ")' <<<"$vendors")" \
+  "hosting=false payments=true"
+check "vendors: code and DNS are unioned per vendor, and each cell keeps its source" \
+  "$(jq -r '.vendors[] | select(.id == "stripe") | [.source, (.repos | join(",")), (.domains | join(",")), .code[0].confidence] | join(" ")' <<<"$vendors")" \
+  "both api,billing-api,web acme.com extracted"
+check "vendors: a vendor only DNS names has no repo and says so" \
+  "$(jq -r '.vendors[] | select(.id == "docusign") | [.source, (.repos | length), .dns[0].signal, .advise.proposals[0].id] | join(" ")' <<<"$vendors")" \
+  "dns 0 txt dns-only-vendor:docusign"
+check "vendors: not proposed, on purpose, is advise.json's excluded section" \
+  "$(jq -r '[.excluded.duplicate_category[].id, .excluded.ghost_env_var[].id] | join(" ")' <<<"$vendors")" \
+  "duplicate-category:hosting:aws+vercel ghost-env-var:slack@ops-scripts"
+check "vendors: the figures are computed in jq" \
+  "$(jq -r '.counts | [.vendors, .categories, .repos, .from_both, .dns_only, .proposals, .high, .answered, .excluded] | join(" ")' <<<"$vendors")" \
+  "13 10 9 3 2 14 4 1 2"
+check "vendors: every source says how old it is, with the command that refreshes it" \
+  "$(jq -r '[.sources.graph.command, .sources.dns.command, .sources.advise.command, .generated] | join(" ")' <<<"$vendors")" \
+  "orgami scan orgami dns orgami advise 2026-08-18T07:00:00Z"
+check "vendors: no amount anywhere in the payload" \
+  "$(grep -ciE '"(cost|amount|price|spend|usd|eur)"' <<<"$vendors" || true)" "0"
+
+# Without a DNS reading or an advise run the view still renders, and names the
+# command that produces each: the matrix from the graph alone, no proposals.
+rm -f "$DIR/map/dns.json" "$DIR/map/advise.json"
+web_render 2>/dev/null
+partial=$(sed -n '/<script id="data"/,/<\/script>/p' "$page" | sed '1d;$d' | jq -c '.views.vendors')
+check "vendors: with no DNS reading and no advise run, the view says which commands produce them" \
+  "$(jq -r '[.sources.dns.missing, .sources.advise.missing, .advise.missing, (.proposals | length), (.vendors | length), (.substitutable | tostring)] | join(" ")' <<<"$partial")" \
+  "orgami dns orgami advise orgami advise 0 11 null"
+check "vendors: an answer in the notes survives without advise.json, marked as no longer proposed" \
+  "$(jq -r '.answered[0] | [.id, .proposed] | join(" ")' <<<"$partial")" \
+  "duplicate-category:error-tracking:rollbar+sentry false"
+cp test/fixtures/company/map/dns.json test/fixtures/company/map/advise.json "$DIR/map/"
+
 # Every source read into the views is there, in the shape docs/web.md promises.
 sources=$(mktemp)
 web_sources >"$sources" 2>/dev/null
@@ -172,6 +222,51 @@ check "activity: the view draws with no clock and no random (rule 7)" \
   "$(grep -cE 'Date\.now|Math\.random|new Date\(\)' lib/web/60-activity.js || true)" "0"
 rm -f "$sources"
 
+# The repos view (lib/web/30-repos.*): the table's figures and the per-repo
+# page's sections are computed in jq, and the repo with the most edges carries
+# every kind of edge it has in graph.json — both directions — so the page can
+# draw them all.
+check "repos: the view carries the map's date and the org's counts" \
+  "$(jq -r '.views.repos | [.generated, .counts.repos, .counts.private, .counts.edges, .counts.deployed, .counts.notes] | join(" ")' <<<"$data")" \
+  "2026-08-18T06:12:40Z 10 9 71 2 6"
+busiest=$(jq -r '[.edges[] | (.from, .to)] | map(select(startswith("repo:"))) | group_by(.) | max_by(length) | .[0] | sub("^repo:"; "")' test/fixtures/company/map/graph.json)
+check "repos: the busiest fixture repo is the one with the most edges in its payload" \
+  "$(jq -r '.views.repos.repos | max_by(.edge_count) | .name' <<<"$data")" "$busiest"
+check "repos: every edge kind that touches it, in both directions, is in its payload" \
+  "$(jq -r --arg r "$busiest" '.views.repos.repos[] | select(.name == $r) | [.edges[] | .kind] | unique | join(",")' <<<"$data")" \
+  "$(jq -r --arg r "repo:$busiest" '[.edges[] | select(.from == $r or .to == $r) | .kind] | unique | join(",")' test/fixtures/company/map/graph.json)"
+check "repos: its edge count is the count of edges that touch it" \
+  "$(jq -r --arg r "$busiest" '.views.repos.repos[] | select(.name == $r) | .edge_count' <<<"$data")" \
+  "$(jq -r --arg r "repo:$busiest" '[.edges[] | select(.from == $r or .to == $r)] | length' test/fixtures/company/map/graph.json)"
+unlabelled=""
+for k in $(jq -r '[.edges[].kind] | unique | .[]' test/fixtures/company/map/graph.json); do
+  grep -q "\"$k\":" lib/web/30-repos.js || unlabelled="$unlabelled $k"
+done
+check "repos: the page has a word for every edge kind the graph holds" "$unlabelled" ""
+check "repos: an edge keeps its confidence, so an inferred one can be switched off" \
+  "$(jq -r --arg r "$busiest" '.views.repos.repos[] | select(.name == $r) | [.edges[] | select(.kind == "calls") | .confidence] | unique | join(",")' <<<"$data")" \
+  "inferred"
+check "repos: an env var shared with other repos names them" \
+  "$(jq -r '.views.repos.repos[] | select(.name == "api") | .env[] | select(.name == "STRIPE_WEBHOOK_URL") | .shared_with | join(",")' <<<"$data")" \
+  "billing-api,web"
+check "repos: a route carries the line it was read from" \
+  "$(jq -r '.views.repos.repos[] | select(.name == "api") | .routes[0] | .at + " " + .route' <<<"$data")" \
+  "src/orders/orders.controller.ts:12 GET /orders"
+check "repos: what is deployed comes from live.json, with the reading's date beside it" \
+  "$(jq -r '.views.repos | [(.repos[] | select(.name == "web") | .live[0] | .provider + " " + .state), .sources.live.generated] | join(" ")' <<<"$data")" \
+  "vercel READY 2026-08-18T06:30:11Z"
+check "repos: coupling is the pair's counts from coupling.json, closest first" \
+  "$(jq -r '.views.repos.repos[] | select(.name == "api") | .coupling[0] | [.other, .weeks, .days, (.authors | join("+"))] | join(" ")' <<<"$data")" \
+  "web 4 6 dana+sam"
+check "repos: notes are newest first and know what superseded them" \
+  "$(jq -r '.views.repos.repos[] | select(.name == "api") | [.note_count, .notes[0].author, .notes[0].date[0:10], (.notes[1].superseded_by != null)] | join(" ")' <<<"$data")" \
+  "2 sam 2026-07-20 true"
+check "repos: the runbook and the playbooks are found by the repo's name" \
+  "$(jq -r '.views.repos.repos | [(.[] | select(.name == "billing-api") | .runbook != null), (.[] | select(.name == "warehouse-jobs") | .playbooks[0].topic)] | join(" ")' <<<"$data")" \
+  "true broken-export"
+check "repos: a section with nothing in it has nothing to draw" \
+  "$(jq -r '.views.repos.repos[] | select(.name == "docs-site") | [(.env | length), (.notes | length), (.coupling | length), (.live | length), (.runbook == null)] | join(" ")' <<<"$data")" \
+  "0 0 0 0 true"
 # The live view (lib/web/50-live.*): deployed vs configured, and the DNS
 # reading. The two diffs carry evidence, and the figures are jq's.
 live=$(jq -c '.views.live' <<<"$data")
@@ -244,6 +339,8 @@ check "and a view's payload is still an object" \
   "$(jq -r '.views | type' <<<"$empty_data")" "object"
 check "activity: with no cache at all the view names the command that fills it" \
   "$(jq -r '.views.activity.missing' <<<"$empty_data")" "orgami pull"
+check "repos: with no map the view names the command that makes one" \
+  "$(jq -r '.views.repos.missing' <<<"$empty_data")" "orgami scan"
 
 # A flag nobody asked for is orgami's error, and stdout stays the path only.
 DIR="$scratch/acme"
