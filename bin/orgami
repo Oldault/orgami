@@ -59,6 +59,7 @@ The map
                                         rebuild the map from every repo
   orgami doc [--narrate]                render ARCHITECTURE.md and the repo cards
   orgami html                           the map as one page you can open
+  orgami web [--open]                   the whole map as one page you can open
   orgami view                           browse the map in the terminal
   orgami query <repo|host|tool|service|vendor> [--json]
                                         print one node and its edges
@@ -181,6 +182,10 @@ case $cmd in
   html)
     source "$ROOT/lib/html.sh"
     cmd_html "$@"
+    ;;
+  web)
+    source "$ROOT/lib/web.sh"
+    cmd_web "$@"
     ;;
   view | query | show | open)
     source "$ROOT/lib/style.sh"

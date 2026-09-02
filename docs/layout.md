@@ -14,6 +14,8 @@ lib/daily.sh           one day: merged, opened, waiting, commits
 lib/scan.sh            repo scan -> map/graph.json
 lib/doc.sh             graph.json -> ARCHITECTURE.md
 lib/html.sh            graph.json -> map/graph.html, self-contained
+lib/web.sh             the whole company directory -> map/orgami.html, one page
+lib/web/               the page's shell, and one .jq/.js/.css per view — docs/web.md
 lib/depth.sh           the tree-sitter pass: venv, symbol lookup, graph merge
 lib/depth.py           the parser itself, one node-type table per language
 lib/view.sh            orgami query, and the legacy show/open entry points
@@ -50,7 +52,7 @@ commands/              /orgami:context and /orgami:note
 skills/orgami/         the Claude Code skill
 script/check           everything CI runs, runnable locally
 test/*_test.sh         one per gate in script/check, all offline
-test/fixtures/         a fake week and a fake day, for testing with no org
+test/fixtures/         a fake week, a fake day and a fake company, for testing with no org
 bootstrap.sh           the one-command install for macOS, Linux and WSL
 bootstrap.ps1          the same for Windows
 systemd/               orgami-weekly@.service and .timer
@@ -76,6 +78,7 @@ Company state, never in this repo:
   notes/               one file per note, plus notes/archive/
   map/graph.json       nodes and edges, every one tagged extracted or inferred
   map/graph.html       the same graph, force-directed, in one openable file
+  map/orgami.html      everything below as one page: orgami web
   map/depth.json       what each repo exports and imports, parsed (orgami depth)
                        never published — too big for a diff anybody reads
   map/repos.json       one profile per repo

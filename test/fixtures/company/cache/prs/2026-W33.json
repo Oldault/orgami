@@ -1,0 +1,83 @@
+{
+  "week": "2026-W33",
+  "since": "2026-08-10",
+  "until": "2026-08-16",
+  "prs": [
+    {
+      "number": 412,
+      "title": "Retry the webhook delivery instead of dropping it",
+      "url": "https://github.com/acme-inc/billing-api/pull/412",
+      "repository": { "name": "billing-api" },
+      "author": { "login": "dev-one" },
+      "createdAt": "2026-08-10T09:12:00Z",
+      "mergedAt": "2026-08-10T16:40:00Z",
+      "additions": 84,
+      "deletions": 12,
+      "changedFiles": 4,
+      "body": "Stripe webhooks that failed once were never retried.",
+      "labels": { "nodes": [{ "name": "bug" }] },
+      "reviews": { "nodes": [{ "author": { "login": "dev-two" }, "state": "APPROVED" }] },
+      "reviewThreads": {
+        "nodes": [
+          {
+            "isResolved": true,
+            "path": "src/webhooks/handler.ts",
+            "comments": { "nodes": [{ "author": { "login": "dev-two" }, "body": "Cap the backoff." }] }
+          }
+        ]
+      },
+      "files": { "nodes": [{ "path": "src/webhooks/handler.ts" }, { "path": "test/webhooks.test.ts" }] }
+    },
+    {
+      "number": 89,
+      "title": "Move the nightly export to the jobs runner",
+      "url": "https://github.com/acme-inc/warehouse-jobs/pull/89",
+      "repository": { "name": "warehouse-jobs" },
+      "author": { "login": "dev-two" },
+      "createdAt": "2026-08-12T11:00:00Z",
+      "mergedAt": "2026-08-14T11:00:00Z",
+      "additions": 620,
+      "deletions": 430,
+      "changedFiles": 21,
+      "body": "The export was running on the web dyno and timing out.",
+      "labels": { "nodes": [] },
+      "reviews": { "nodes": [] },
+      "reviewThreads": { "nodes": [] },
+      "files": { "nodes": [{ "path": "jobs/nightly_export.rb" }] }
+    },
+    {
+      "number": 90,
+      "title": "Bump the base image",
+      "url": "https://github.com/acme-inc/warehouse-jobs/pull/90",
+      "repository": { "name": "warehouse-jobs" },
+      "author": { "login": "dependabot" },
+      "createdAt": "2026-08-15T02:00:00Z",
+      "mergedAt": "2026-08-15T02:30:00Z",
+      "additions": 2,
+      "deletions": 2,
+      "changedFiles": 1,
+      "body": "",
+      "labels": { "nodes": [{ "name": "dependencies" }] },
+      "reviews": { "nodes": [] },
+      "reviewThreads": { "nodes": [] },
+      "files": { "nodes": [{ "path": "Dockerfile" }] }
+    },
+    {
+      "number": 133,
+      "title": "chore(main): release warehouse-jobs 2.4.0",
+      "url": "https://github.com/acme-inc/warehouse-jobs/pull/133",
+      "repository": { "name": "warehouse-jobs" },
+      "author": { "login": "release-please[bot]" },
+      "createdAt": "2026-08-16T04:00:00Z",
+      "mergedAt": "2026-08-16T04:05:00Z",
+      "additions": 18,
+      "deletions": 3,
+      "changedFiles": 2,
+      "body": "",
+      "labels": { "nodes": [{ "name": "release" }] },
+      "reviews": { "nodes": [] },
+      "reviewThreads": { "nodes": [] },
+      "files": { "nodes": [{ "path": "CHANGELOG.md" }, { "path": "version.rb" }] }
+    }
+  ]
+}

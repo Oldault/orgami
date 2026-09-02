@@ -1,0 +1,820 @@
+{
+  "company": "acme",
+  "org": "acme-inc",
+  "generated": "2026-08-18T07:00:00Z",
+  "scanned": "2026-08-18",
+  "stale_days": 180,
+  "dns": {
+    "generated": "2026-08-18T06:20:00Z",
+    "domains": [
+      "acme.com"
+    ],
+    "age_days": 1,
+    "stale_days": 90,
+    "stale": false
+  },
+  "excluded": {
+    "duplicate_category": [
+      {
+        "kind": "duplicate-category",
+        "id": "duplicate-category:hosting:aws+vercel",
+        "category": "hosting",
+        "vendors": [
+          "aws",
+          "vercel"
+        ],
+        "names": [
+          "Vercel",
+          "AWS"
+        ],
+        "repo_count": 3,
+        "reason": "vendors in hosting coexist by design, so two of them is not two bills for one job"
+      }
+    ],
+    "ghost_env_var": [
+      {
+        "kind": "ghost-env-var",
+        "id": "ghost-env-var:slack@ops-scripts",
+        "vendor": "slack",
+        "name": "Slack",
+        "repo": "ops-scripts",
+        "reason": "no SDK to install — a webhook URL, a script tag or a variable the platform injects is the whole integration"
+      }
+    ],
+    "substitutable_categories": [
+      "billing",
+      "dmarc-reporting",
+      "e-signature",
+      "email",
+      "email-security",
+      "error-tracking",
+      "feature-flags",
+      "incident-response",
+      "payments",
+      "recruiting",
+      "sms",
+      "status-page",
+      "support",
+      "workspace"
+    ],
+    "policy": "lib/advise.jq — substitutable_categories, and the no-sdk flag in lib/vendors.tsv"
+  },
+  "counts": {
+    "proposals": 14,
+    "suppressed": 1,
+    "excluded": 2,
+    "vendors": 13,
+    "repos": 10,
+    "vendors_from_code": 11,
+    "vendors_from_dns": 5,
+    "vendors_from_both": 3,
+    "by_kind": {
+      "dns-only-vendor": 2,
+      "duplicate-category": 1,
+      "ghost-env-var": 2,
+      "orphan-vendor": 1,
+      "single-repo-vendor": 8
+    },
+    "high": 4,
+    "medium": 10
+  },
+  "vendors": [
+    {
+      "id": "aws",
+      "name": "AWS",
+      "category": "hosting",
+      "portal": "https://console.aws.amazon.com/billing/home",
+      "repos": [
+        "infra",
+        "warehouse-jobs"
+      ],
+      "repo_count": 2,
+      "domains": [],
+      "sources": [
+        "code"
+      ]
+    },
+    {
+      "id": "docusign",
+      "name": "DocuSign",
+      "category": "e-signature",
+      "portal": "https://account.docusign.com/billing",
+      "repos": [],
+      "repo_count": 0,
+      "domains": [
+        "acme.com"
+      ],
+      "sources": [
+        "dns"
+      ]
+    },
+    {
+      "id": "google-workspace",
+      "name": "Google Workspace",
+      "category": "workspace",
+      "portal": "https://admin.google.com/ac/billing",
+      "repos": [],
+      "repo_count": 0,
+      "domains": [
+        "acme.com"
+      ],
+      "sources": [
+        "dns"
+      ]
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "category": "ai",
+      "portal": "https://platform.openai.com/settings/organization/billing/overview",
+      "repos": [
+        "ml-worker"
+      ],
+      "repo_count": 1,
+      "domains": [],
+      "sources": [
+        "code"
+      ]
+    },
+    {
+      "id": "paddle",
+      "name": "Paddle",
+      "category": "payments",
+      "portal": "https://vendors.paddle.com/subscription",
+      "repos": [
+        "billing-api"
+      ],
+      "repo_count": 1,
+      "domains": [],
+      "sources": [
+        "code"
+      ]
+    },
+    {
+      "id": "posthog",
+      "name": "PostHog",
+      "category": "analytics",
+      "portal": "https://app.posthog.com/organization/billing",
+      "repos": [
+        "web"
+      ],
+      "repo_count": 1,
+      "domains": [],
+      "sources": [
+        "code"
+      ]
+    },
+    {
+      "id": "rollbar",
+      "name": "Rollbar",
+      "category": "error-tracking",
+      "portal": "https://rollbar.com/settings/billing/",
+      "repos": [
+        "mobile"
+      ],
+      "repo_count": 1,
+      "domains": [],
+      "sources": [
+        "code"
+      ]
+    },
+    {
+      "id": "sendgrid",
+      "name": "SendGrid",
+      "category": "email",
+      "portal": "https://app.sendgrid.com/account/billing",
+      "repos": [
+        "api"
+      ],
+      "repo_count": 1,
+      "domains": [
+        "acme.com"
+      ],
+      "sources": [
+        "code",
+        "dns"
+      ]
+    },
+    {
+      "id": "sentry",
+      "name": "Sentry",
+      "category": "error-tracking",
+      "portal": "https://sentry.io/settings/billing/",
+      "repos": [
+        "legacy",
+        "warehouse-jobs",
+        "web"
+      ],
+      "repo_count": 3,
+      "domains": [],
+      "sources": [
+        "code"
+      ]
+    },
+    {
+      "id": "slack",
+      "name": "Slack",
+      "category": "communication",
+      "portal": "https://slack.com/admin/billing",
+      "repos": [
+        "ops-scripts"
+      ],
+      "repo_count": 1,
+      "domains": [],
+      "sources": [
+        "code"
+      ]
+    },
+    {
+      "id": "stripe",
+      "name": "Stripe",
+      "category": "payments",
+      "portal": "https://dashboard.stripe.com/settings/billing",
+      "repos": [
+        "api",
+        "billing-api",
+        "web"
+      ],
+      "repo_count": 3,
+      "domains": [
+        "acme.com"
+      ],
+      "sources": [
+        "code",
+        "dns"
+      ]
+    },
+    {
+      "id": "twilio",
+      "name": "Twilio",
+      "category": "sms",
+      "portal": "https://console.twilio.com/us1/billing/manage-billing/billing-overview",
+      "repos": [
+        "api"
+      ],
+      "repo_count": 1,
+      "domains": [],
+      "sources": [
+        "code"
+      ]
+    },
+    {
+      "id": "vercel",
+      "name": "Vercel",
+      "category": "hosting",
+      "portal": "https://vercel.com/account/billing",
+      "repos": [
+        "web"
+      ],
+      "repo_count": 1,
+      "domains": [
+        "acme.com"
+      ],
+      "sources": [
+        "code",
+        "dns"
+      ]
+    }
+  ],
+  "proposals": [
+    {
+      "kind": "duplicate-category",
+      "id": "duplicate-category:payments:paddle+stripe",
+      "confidence": "high",
+      "category": "payments",
+      "vendors": [
+        "paddle",
+        "stripe"
+      ],
+      "candidate": "paddle",
+      "repos": [
+        "api",
+        "billing-api",
+        "web"
+      ],
+      "repo_count": 3,
+      "domains": [
+        "acme.com"
+      ],
+      "sources": [
+        "code",
+        "dns"
+      ],
+      "evidence": [
+        {
+          "vendor": "paddle",
+          "repo": "billing-api",
+          "domain": "",
+          "at": "go.mod:15",
+          "source": "code"
+        },
+        {
+          "vendor": "stripe",
+          "repo": "web",
+          "domain": "",
+          "at": "package.json:31",
+          "source": "code"
+        },
+        {
+          "vendor": "stripe",
+          "repo": "api",
+          "domain": "",
+          "at": "package.json:44",
+          "source": "code"
+        },
+        {
+          "vendor": "stripe",
+          "repo": "billing-api",
+          "domain": "",
+          "at": "go.mod:12",
+          "source": "code"
+        },
+        {
+          "vendor": "stripe",
+          "repo": "",
+          "domain": "acme.com",
+          "at": "TXT acme.com \"stripe-verification=421fc24e8a9b3c7d5e6f1a2b3c4d5e6f7a8b9c0d\" (dig 2026-08-18)",
+          "source": "dns"
+        }
+      ],
+      "claim": "2 payments vendors are in the map — Stripe (3 repos), Paddle (1 repo). Paddle is the least wired in of the 2 — fewest places to touch, so it is the cheapest to fold into the others.",
+      "suppressed": false,
+      "rank": 1
+    },
+    {
+      "kind": "orphan-vendor",
+      "id": "orphan-vendor:sentry@legacy",
+      "confidence": "high",
+      "vendors": [
+        "sentry"
+      ],
+      "repos": [
+        "legacy"
+      ],
+      "repo_count": 1,
+      "last_push": "2025-03-02",
+      "days_since_push": 533,
+      "sources": [
+        "code"
+      ],
+      "evidence": [
+        {
+          "vendor": "sentry",
+          "repo": "legacy",
+          "domain": "",
+          "at": "requirements.txt:8",
+          "source": "code"
+        }
+      ],
+      "claim": "Sentry is wired into legacy, which has not been pushed to since 2025-03-02 — 533 days. The code is idle; the subscription behind it may not be.",
+      "suppressed": false,
+      "rank": 2
+    },
+    {
+      "kind": "dns-only-vendor",
+      "id": "dns-only-vendor:docusign",
+      "confidence": "high",
+      "vendors": [
+        "docusign"
+      ],
+      "repos": [],
+      "repo_count": 0,
+      "domains": [
+        "acme.com"
+      ],
+      "sources": [
+        "dns"
+      ],
+      "signals": [
+        "txt"
+      ],
+      "evidence": [
+        {
+          "vendor": "docusign",
+          "repo": "",
+          "domain": "acme.com",
+          "at": "TXT acme.com \"docusign=5f2a1c8e-9b4d-4e7a-8c3f-1d2e3f4a5b6c\" (dig 2026-08-18)",
+          "source": "dns"
+        }
+      ],
+      "claim": "DocuSign has an account on acme.com — the txt record below says so — and no repository in the map names it. Nothing in the code was ever going to find this one.",
+      "suppressed": false,
+      "rank": 3
+    },
+    {
+      "kind": "dns-only-vendor",
+      "id": "dns-only-vendor:google-workspace",
+      "confidence": "high",
+      "vendors": [
+        "google-workspace"
+      ],
+      "repos": [],
+      "repo_count": 0,
+      "domains": [
+        "acme.com"
+      ],
+      "sources": [
+        "dns"
+      ],
+      "signals": [
+        "mx",
+        "spf",
+        "txt"
+      ],
+      "evidence": [
+        {
+          "vendor": "google-workspace",
+          "repo": "",
+          "domain": "acme.com",
+          "at": "MX acme.com \"1 aspmx.l.google.com.\" (dig 2026-08-18)",
+          "source": "dns"
+        },
+        {
+          "vendor": "google-workspace",
+          "repo": "",
+          "domain": "acme.com",
+          "at": "MX acme.com \"5 alt1.aspmx.l.google.com.\" (dig 2026-08-18)",
+          "source": "dns"
+        },
+        {
+          "vendor": "google-workspace",
+          "repo": "",
+          "domain": "acme.com",
+          "at": "TXT acme.com \"v=spf1 include:_spf.google.com include:sendgrid.net -all\" (dig 2026-08-18)",
+          "source": "dns"
+        },
+        {
+          "vendor": "google-workspace",
+          "repo": "",
+          "domain": "acme.com",
+          "at": "TXT acme.com \"google-site-verification=K3n9v2Qx8LmZp1RtYw4Bc7Df6Gh5Jk0As2Sd3Fg\" (dig 2026-08-18)",
+          "source": "dns"
+        }
+      ],
+      "claim": "Google Workspace has an account on acme.com — the mx, spf, txt records below say so — and no repository in the map names it. Nothing in the code was ever going to find this one.",
+      "suppressed": false,
+      "rank": 4
+    },
+    {
+      "kind": "single-repo-vendor",
+      "id": "single-repo-vendor:sendgrid",
+      "confidence": "medium",
+      "vendors": [
+        "sendgrid"
+      ],
+      "repos": [
+        "api"
+      ],
+      "repo_count": 1,
+      "domains": [
+        "acme.com"
+      ],
+      "sources": [
+        "code",
+        "dns"
+      ],
+      "evidence": [
+        {
+          "vendor": "sendgrid",
+          "repo": "api",
+          "domain": "",
+          "at": "package.json:40",
+          "source": "code"
+        },
+        {
+          "vendor": "sendgrid",
+          "repo": "",
+          "domain": "acme.com",
+          "at": "TXT acme.com \"v=spf1 include:_spf.google.com include:sendgrid.net -all\" (dig 2026-08-18)",
+          "source": "dns"
+        }
+      ],
+      "claim": "SendGrid is wired into one repository only (api). Dropping it, or folding it into a vendor already in the map, changes one repository. Public DNS also carries an account for it on acme.com, so dropping the code is not the same as dropping the bill.",
+      "suppressed": false,
+      "rank": 5
+    },
+    {
+      "kind": "single-repo-vendor",
+      "id": "single-repo-vendor:vercel",
+      "confidence": "medium",
+      "vendors": [
+        "vercel"
+      ],
+      "repos": [
+        "web"
+      ],
+      "repo_count": 1,
+      "domains": [
+        "acme.com"
+      ],
+      "sources": [
+        "code",
+        "dns"
+      ],
+      "evidence": [
+        {
+          "vendor": "vercel",
+          "repo": "web",
+          "domain": "",
+          "at": "package.json:18",
+          "source": "code"
+        },
+        {
+          "vendor": "vercel",
+          "repo": "",
+          "domain": "acme.com",
+          "at": "CNAME app.acme.com \"cname.vercel-dns.com.\" (dig 2026-08-18)",
+          "source": "dns"
+        }
+      ],
+      "claim": "Vercel is wired into one repository only (web). Dropping it, or folding it into a vendor already in the map, changes one repository. Public DNS also carries an account for it on acme.com, so dropping the code is not the same as dropping the bill.",
+      "suppressed": false,
+      "rank": 6
+    },
+    {
+      "kind": "ghost-env-var",
+      "id": "ghost-env-var:posthog@web",
+      "confidence": "medium",
+      "vendors": [
+        "posthog"
+      ],
+      "repos": [
+        "web"
+      ],
+      "repo_count": 1,
+      "sources": [
+        "code"
+      ],
+      "evidence": [
+        {
+          "vendor": "posthog",
+          "repo": "web",
+          "domain": "",
+          "at": ".env.example:6",
+          "source": "code"
+        }
+      ],
+      "claim": "PostHog is matched in web by an environment variable and nothing stronger — no package manifest, terraform provider or workflow action in that repository names it. The variable is declared; the SDK may never have been wired.",
+      "suppressed": false,
+      "rank": 7
+    },
+    {
+      "kind": "ghost-env-var",
+      "id": "ghost-env-var:twilio@api",
+      "confidence": "medium",
+      "vendors": [
+        "twilio"
+      ],
+      "repos": [
+        "api"
+      ],
+      "repo_count": 1,
+      "sources": [
+        "code"
+      ],
+      "evidence": [
+        {
+          "vendor": "twilio",
+          "repo": "api",
+          "domain": "",
+          "at": ".env.example:14",
+          "source": "code"
+        }
+      ],
+      "claim": "Twilio is matched in api by an environment variable and nothing stronger — no package manifest, terraform provider or workflow action in that repository names it. The variable is declared; the SDK may never have been wired.",
+      "suppressed": false,
+      "rank": 8
+    },
+    {
+      "kind": "single-repo-vendor",
+      "id": "single-repo-vendor:openai",
+      "confidence": "medium",
+      "vendors": [
+        "openai"
+      ],
+      "repos": [
+        "ml-worker"
+      ],
+      "repo_count": 1,
+      "domains": [],
+      "sources": [
+        "code"
+      ],
+      "evidence": [
+        {
+          "vendor": "openai",
+          "repo": "ml-worker",
+          "domain": "",
+          "at": "pyproject.toml:19",
+          "source": "code"
+        }
+      ],
+      "claim": "OpenAI is wired into one repository only (ml-worker). Dropping it, or folding it into a vendor already in the map, changes one repository.",
+      "suppressed": false,
+      "rank": 9
+    },
+    {
+      "kind": "single-repo-vendor",
+      "id": "single-repo-vendor:paddle",
+      "confidence": "medium",
+      "vendors": [
+        "paddle"
+      ],
+      "repos": [
+        "billing-api"
+      ],
+      "repo_count": 1,
+      "domains": [],
+      "sources": [
+        "code"
+      ],
+      "evidence": [
+        {
+          "vendor": "paddle",
+          "repo": "billing-api",
+          "domain": "",
+          "at": "go.mod:15",
+          "source": "code"
+        }
+      ],
+      "claim": "Paddle is wired into one repository only (billing-api). Dropping it, or folding it into a vendor already in the map, changes one repository.",
+      "suppressed": false,
+      "rank": 10
+    },
+    {
+      "kind": "single-repo-vendor",
+      "id": "single-repo-vendor:posthog",
+      "confidence": "medium",
+      "vendors": [
+        "posthog"
+      ],
+      "repos": [
+        "web"
+      ],
+      "repo_count": 1,
+      "domains": [],
+      "sources": [
+        "code"
+      ],
+      "evidence": [
+        {
+          "vendor": "posthog",
+          "repo": "web",
+          "domain": "",
+          "at": ".env.example:6",
+          "source": "code"
+        }
+      ],
+      "claim": "PostHog is wired into one repository only (web). Dropping it, or folding it into a vendor already in the map, changes one repository.",
+      "suppressed": false,
+      "rank": 11
+    },
+    {
+      "kind": "single-repo-vendor",
+      "id": "single-repo-vendor:rollbar",
+      "confidence": "medium",
+      "vendors": [
+        "rollbar"
+      ],
+      "repos": [
+        "mobile"
+      ],
+      "repo_count": 1,
+      "domains": [],
+      "sources": [
+        "code"
+      ],
+      "evidence": [
+        {
+          "vendor": "rollbar",
+          "repo": "mobile",
+          "domain": "",
+          "at": "package.json:35",
+          "source": "code"
+        }
+      ],
+      "claim": "Rollbar is wired into one repository only (mobile). Dropping it, or folding it into a vendor already in the map, changes one repository.",
+      "suppressed": false,
+      "rank": 12
+    },
+    {
+      "kind": "single-repo-vendor",
+      "id": "single-repo-vendor:slack",
+      "confidence": "medium",
+      "vendors": [
+        "slack"
+      ],
+      "repos": [
+        "ops-scripts"
+      ],
+      "repo_count": 1,
+      "domains": [],
+      "sources": [
+        "code"
+      ],
+      "evidence": [
+        {
+          "vendor": "slack",
+          "repo": "ops-scripts",
+          "domain": "",
+          "at": ".env.example:3",
+          "source": "code"
+        }
+      ],
+      "claim": "Slack is wired into one repository only (ops-scripts). Dropping it, or folding it into a vendor already in the map, changes one repository.",
+      "suppressed": false,
+      "rank": 13
+    },
+    {
+      "kind": "single-repo-vendor",
+      "id": "single-repo-vendor:twilio",
+      "confidence": "medium",
+      "vendors": [
+        "twilio"
+      ],
+      "repos": [
+        "api"
+      ],
+      "repo_count": 1,
+      "domains": [],
+      "sources": [
+        "code"
+      ],
+      "evidence": [
+        {
+          "vendor": "twilio",
+          "repo": "api",
+          "domain": "",
+          "at": ".env.example:14",
+          "source": "code"
+        }
+      ],
+      "claim": "Twilio is wired into one repository only (api). Dropping it, or folding it into a vendor already in the map, changes one repository.",
+      "suppressed": false,
+      "rank": 14
+    }
+  ],
+  "suppressed": [
+    {
+      "kind": "duplicate-category",
+      "id": "duplicate-category:error-tracking:rollbar+sentry",
+      "confidence": "high",
+      "category": "error-tracking",
+      "vendors": [
+        "rollbar",
+        "sentry"
+      ],
+      "candidate": "rollbar",
+      "repos": [
+        "legacy",
+        "mobile",
+        "warehouse-jobs",
+        "web"
+      ],
+      "repo_count": 4,
+      "domains": [],
+      "sources": [
+        "code"
+      ],
+      "evidence": [
+        {
+          "vendor": "rollbar",
+          "repo": "mobile",
+          "domain": "",
+          "at": "package.json:35",
+          "source": "code"
+        },
+        {
+          "vendor": "sentry",
+          "repo": "web",
+          "domain": "",
+          "at": "package.json:27",
+          "source": "code"
+        },
+        {
+          "vendor": "sentry",
+          "repo": "warehouse-jobs",
+          "domain": "",
+          "at": "Gemfile:9",
+          "source": "code"
+        },
+        {
+          "vendor": "sentry",
+          "repo": "legacy",
+          "domain": "",
+          "at": "requirements.txt:8",
+          "source": "code"
+        }
+      ],
+      "claim": "2 error-tracking vendors are in the map — Sentry (3 repos), Rollbar (1 repo). Rollbar is the least wired in of the 2 — fewest places to touch, so it is the cheapest to fold into the others.",
+      "suppressed": true,
+      "suppression": {
+        "id": "duplicate-category:error-tracking:rollbar+sentry",
+        "reason": "Rollbar is deliberate — mobile only. Sentry's React Native source maps were broken on Expo 52 and the mobile team kept Rollbar until that is fixed upstream.",
+        "author": "dana",
+        "date": "2026-06-02",
+        "note": "20260602-091500-dana-rollbar-is-deliberate-mobile-only"
+      }
+    }
+  ]
+}
