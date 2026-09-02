@@ -116,7 +116,8 @@ be useful on day one.</p>
     <h3>A map you can check</h3>
     <p>Every edge carries the <code>file:line</code> it came from, so nothing in it is a
     model's guess. A missing edge means “not found in committed configuration”, never
-    “not connected”.</p>
+    “not connected”. <code>orgami web</code> puts all of it — repos, vendors, what is
+    deployed, the weeks, the notes — on one page that opens from a file.</p>
   </div>
   <div class="card">
     <h3>Digests you can trust the numbers in</h3>
@@ -157,7 +158,8 @@ environment contracts. The result is <code>map/graph.json</code>; the architectu
 document, the mermaid diagrams and the terminal view all render from it.</p>
 <pre><code>orgami view              # the map, the repos, the notes and the recaps, in one screen
 orgami query thruster    # one node and its edges, as text
-orgami html              # the same graph, force-directed, in one openable file</code></pre>
+orgami html              # the same graph, force-directed, in one openable file
+orgami web               # the whole map — repos, vendors, live, activity, memory — as one page</code></pre>
 <p>Every edge says whether it is <em>extracted</em> — a literal string in a committed file,
 with the <code>file:line</code> you can open — or <em>inferred</em>, resolved by matching
 one repo's reading against another's. Both are worth having; only one can be checked, and

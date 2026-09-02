@@ -143,6 +143,19 @@ self-contained file with no CDN and no network, so it opens from a `file://` URL
 and inside a private repo. Click any node and the panel gives you both
 directions of every edge with the evidence behind it.
 
+`orgami web` goes wider: one page with the whole of `~/.orgami/<company>/` on
+it — the map, the repos, the vendors, what is deployed, the weeks, the notes —
+rendered from those files and nothing else. Every figure is computed by `jq`,
+every fact carries its evidence and says which of five kinds it is, a reading
+that is missing says which command produces it, and the same input renders the
+same bytes, so the published copy diffs cleanly week to week. `orgami doc`
+writes it, `orgami publish` copies it beside `ARCHITECTURE.md`, and the menu
+opens it. **[docs/web.md](docs/web.md)**.
+
+```bash
+orgami web --open        # map/orgami.html, in the browser
+```
+
 ### Which repo defines this
 
 `orgami scan` is pattern-matching, which is what keeps it cheap enough to run

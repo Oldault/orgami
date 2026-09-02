@@ -15,6 +15,14 @@ stays true: no server, no build step, no framework, no CDN, no network. It is a
 rendered artefact like `graph.html`, just wider — it opens from a `file://`
 URL, works inside a private docs repo, and works on a plane.
 
+`orgami doc` renders it beside `graph.html`, so `orgami weekly` produces it
+without a step of its own, and `orgami publish` copies it beside
+`ARCHITECTURE.md`. The page inlines the live reading, so the published copy
+follows the rule `live.json` already follows: unless `live_publish` is true it
+is rendered without `map/live.json`, and its Live view then says `orgami live`
+has not been run. The menu (`orgami`) has an entry that opens the page in a
+browser.
+
 ## The rules
 
 Every view is held to these. A view that cannot meet one says so in its own
