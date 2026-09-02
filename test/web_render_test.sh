@@ -104,6 +104,56 @@ web_render 2>/dev/null
 sum2=$(cksum <"$page")
 check "a second render is byte-identical" "$sum2" "$sum1"
 
+# The vendors view. Every proposal advise.json ranks is in the payload, in the
+# same order — the page may not drop or reorder one — and an answered proposal
+# is joined to the note that answered it, so the reader can open the record.
+vendors=$(jq -c '.views.vendors' <<<"$data")
+check "vendors: every advise proposal id is in the payload, in advise's order" \
+  "$(jq -r '[.proposals[].id] | join(" ")' <<<"$vendors")" \
+  "$(jq -r '[.proposals[].id] | join(" ")' test/fixtures/company/map/advise.json)"
+check "vendors: the reject command is there to copy, per proposal" \
+  "$(jq -r '.proposals[0].command' <<<"$vendors")" \
+  'orgami advise --reject duplicate-category:payments:paddle+stripe "<reason>"'
+check "vendors: a suppressed proposal is linked to the note that answered it" \
+  "$(jq -r '.answered[0] | [.id, .note.id, .author, .date, .proposed] | join(" ")' <<<"$vendors")" \
+  "duplicate-category:error-tracking:rollbar+sentry 20260602-091500-dana-rollbar-is-deliberate-mobile-only dana 2026-06-02 true"
+check "vendors: the allow-list is read from advise.json, not copied" \
+  "$(jq -c '.substitutable' <<<"$vendors")" \
+  "$(jq -c '.excluded.substitutable_categories' test/fixtures/company/map/advise.json)"
+check "vendors: a category is marked substitutable by that list" \
+  "$(jq -r '[.categories[] | select(.category == "payments" or .category == "hosting") | "\(.category)=\(.substitutable)"] | join(" ")' <<<"$vendors")" \
+  "hosting=false payments=true"
+check "vendors: code and DNS are unioned per vendor, and each cell keeps its source" \
+  "$(jq -r '.vendors[] | select(.id == "stripe") | [.source, (.repos | join(",")), (.domains | join(",")), .code[0].confidence] | join(" ")' <<<"$vendors")" \
+  "both api,billing-api,web acme.com extracted"
+check "vendors: a vendor only DNS names has no repo and says so" \
+  "$(jq -r '.vendors[] | select(.id == "docusign") | [.source, (.repos | length), .dns[0].signal, .advise.proposals[0].id] | join(" ")' <<<"$vendors")" \
+  "dns 0 txt dns-only-vendor:docusign"
+check "vendors: not proposed, on purpose, is advise.json's excluded section" \
+  "$(jq -r '[.excluded.duplicate_category[].id, .excluded.ghost_env_var[].id] | join(" ")' <<<"$vendors")" \
+  "duplicate-category:hosting:aws+vercel ghost-env-var:slack@ops-scripts"
+check "vendors: the figures are computed in jq" \
+  "$(jq -r '.counts | [.vendors, .categories, .repos, .from_both, .dns_only, .proposals, .high, .answered, .excluded] | join(" ")' <<<"$vendors")" \
+  "13 10 9 3 2 14 4 1 2"
+check "vendors: every source says how old it is, with the command that refreshes it" \
+  "$(jq -r '[.sources.graph.command, .sources.dns.command, .sources.advise.command, .generated] | join(" ")' <<<"$vendors")" \
+  "orgami scan orgami dns orgami advise 2026-08-18T07:00:00Z"
+check "vendors: no amount anywhere in the payload" \
+  "$(grep -ciE '"(cost|amount|price|spend|usd|eur)"' <<<"$vendors" || true)" "0"
+
+# Without a DNS reading or an advise run the view still renders, and names the
+# command that produces each: the matrix from the graph alone, no proposals.
+rm -f "$DIR/map/dns.json" "$DIR/map/advise.json"
+web_render 2>/dev/null
+partial=$(sed -n '/<script id="data"/,/<\/script>/p' "$page" | sed '1d;$d' | jq -c '.views.vendors')
+check "vendors: with no DNS reading and no advise run, the view says which commands produce them" \
+  "$(jq -r '[.sources.dns.missing, .sources.advise.missing, .advise.missing, (.proposals | length), (.vendors | length), (.substitutable | tostring)] | join(" ")' <<<"$partial")" \
+  "orgami dns orgami advise orgami advise 0 11 null"
+check "vendors: an answer in the notes survives without advise.json, marked as no longer proposed" \
+  "$(jq -r '.answered[0] | [.id, .proposed] | join(" ")' <<<"$partial")" \
+  "duplicate-category:error-tracking:rollbar+sentry false"
+cp test/fixtures/company/map/dns.json test/fixtures/company/map/advise.json "$DIR/map/"
+
 # Every source read into the views is there, in the shape docs/web.md promises.
 sources=$(mktemp)
 web_sources >"$sources" 2>/dev/null
