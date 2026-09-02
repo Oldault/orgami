@@ -131,6 +131,52 @@ check "sources: markdown files arrive as text, by path" \
   "map/decisions/2026-W33.md map/playbooks/warehouse-jobs--broken-export.md map/runbooks/billing-api.md reports/2026-W33.md reports/daily/2026-08-12.md"
 rm -f "$sources"
 
+# The repos view (lib/web/30-repos.*): the table's figures and the per-repo
+# page's sections are computed in jq, and the repo with the most edges carries
+# every kind of edge it has in graph.json — both directions — so the page can
+# draw them all.
+check "repos: the view carries the map's date and the org's counts" \
+  "$(jq -r '.views.repos | [.generated, .counts.repos, .counts.private, .counts.edges, .counts.deployed, .counts.notes] | join(" ")' <<<"$data")" \
+  "2026-08-18T06:12:40Z 10 9 71 2 6"
+busiest=$(jq -r '[.edges[] | (.from, .to)] | map(select(startswith("repo:"))) | group_by(.) | max_by(length) | .[0] | sub("^repo:"; "")' test/fixtures/company/map/graph.json)
+check "repos: the busiest fixture repo is the one with the most edges in its payload" \
+  "$(jq -r '.views.repos.repos | max_by(.edge_count) | .name' <<<"$data")" "$busiest"
+check "repos: every edge kind that touches it, in both directions, is in its payload" \
+  "$(jq -r --arg r "$busiest" '.views.repos.repos[] | select(.name == $r) | [.edges[] | .kind] | unique | join(",")' <<<"$data")" \
+  "$(jq -r --arg r "repo:$busiest" '[.edges[] | select(.from == $r or .to == $r) | .kind] | unique | join(",")' test/fixtures/company/map/graph.json)"
+check "repos: its edge count is the count of edges that touch it" \
+  "$(jq -r --arg r "$busiest" '.views.repos.repos[] | select(.name == $r) | .edge_count' <<<"$data")" \
+  "$(jq -r --arg r "repo:$busiest" '[.edges[] | select(.from == $r or .to == $r)] | length' test/fixtures/company/map/graph.json)"
+unlabelled=""
+for k in $(jq -r '[.edges[].kind] | unique | .[]' test/fixtures/company/map/graph.json); do
+  grep -q "\"$k\":" lib/web/30-repos.js || unlabelled="$unlabelled $k"
+done
+check "repos: the page has a word for every edge kind the graph holds" "$unlabelled" ""
+check "repos: an edge keeps its confidence, so an inferred one can be switched off" \
+  "$(jq -r --arg r "$busiest" '.views.repos.repos[] | select(.name == $r) | [.edges[] | select(.kind == "calls") | .confidence] | unique | join(",")' <<<"$data")" \
+  "inferred"
+check "repos: an env var shared with other repos names them" \
+  "$(jq -r '.views.repos.repos[] | select(.name == "api") | .env[] | select(.name == "STRIPE_WEBHOOK_URL") | .shared_with | join(",")' <<<"$data")" \
+  "billing-api,web"
+check "repos: a route carries the line it was read from" \
+  "$(jq -r '.views.repos.repos[] | select(.name == "api") | .routes[0] | .at + " " + .route' <<<"$data")" \
+  "src/orders/orders.controller.ts:12 GET /orders"
+check "repos: what is deployed comes from live.json, with the reading's date beside it" \
+  "$(jq -r '.views.repos | [(.repos[] | select(.name == "web") | .live[0] | .provider + " " + .state), .sources.live.generated] | join(" ")' <<<"$data")" \
+  "vercel READY 2026-08-18T06:30:11Z"
+check "repos: coupling is the pair's counts from coupling.json, closest first" \
+  "$(jq -r '.views.repos.repos[] | select(.name == "api") | .coupling[0] | [.other, .weeks, .days, (.authors | join("+"))] | join(" ")' <<<"$data")" \
+  "web 4 6 dana+sam"
+check "repos: notes are newest first and know what superseded them" \
+  "$(jq -r '.views.repos.repos[] | select(.name == "api") | [.note_count, .notes[0].author, .notes[0].date[0:10], (.notes[1].superseded_by != null)] | join(" ")' <<<"$data")" \
+  "2 sam 2026-07-20 true"
+check "repos: the runbook and the playbooks are found by the repo's name" \
+  "$(jq -r '.views.repos.repos | [(.[] | select(.name == "billing-api") | .runbook != null), (.[] | select(.name == "warehouse-jobs") | .playbooks[0].topic)] | join(" ")' <<<"$data")" \
+  "true broken-export"
+check "repos: a section with nothing in it has nothing to draw" \
+  "$(jq -r '.views.repos.repos[] | select(.name == "docs-site") | [(.env | length), (.notes | length), (.coupling | length), (.live | length), (.runbook == null)] | join(" ")' <<<"$data")" \
+  "0 0 0 0 true"
+
 # An empty company: every source missing, and the page still renders, saying
 # the map has not been made yet.
 mkdir -p "$scratch/empty"
@@ -141,6 +187,8 @@ check "with no files at all the page still renders" \
   "$(jq -r '.map.missing' <<<"$empty_data")" "orgami scan"
 check "and a view's payload is still an object" \
   "$(jq -r '.views | type' <<<"$empty_data")" "object"
+check "repos: with no map the view names the command that makes one" \
+  "$(jq -r '.views.repos.missing' <<<"$empty_data")" "orgami scan"
 
 # A flag nobody asked for is orgami's error, and stdout stays the path only.
 DIR="$scratch/acme"

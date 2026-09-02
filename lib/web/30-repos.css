@@ -1,0 +1,61 @@
+/* The repos view: the table, and the per-repo page's sections. Palette and
+   the shared components come from 00-shell.css; nothing here redefines them. */
+[data-view="repos"] .count { color: var(--muted); font-size: 12px; margin: -6px 0 10px; }
+[data-view="repos"] .count.faint { color: var(--faint); margin: 0 0 6px; min-height: 1em; }
+[data-view="repos"] .name { display: inline-flex; gap: 6px; align-items: baseline; }
+[data-view="repos"] .name a { font-weight: 600; text-decoration: none; }
+[data-view="repos"] .name a:hover { text-decoration: underline; }
+[data-view="repos"] td .live { display: block; white-space: nowrap; }
+[data-view="repos"] table.t td { white-space: nowrap; }
+[data-view="repos"] table.t td:first-child { white-space: normal; }
+
+/* the page */
+[data-view="repos"] .crumb { color: var(--muted); font-size: 12px; margin: 0 0 2px; }
+[data-view="repos"] .crumb a { text-decoration: none; }
+[data-view="repos"] h2 .tag { margin-left: 8px; font-weight: 400; }
+[data-view="repos"] .head {
+  display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline;
+  color: var(--muted); font-size: 13px; margin: -6px 0 12px;
+}
+[data-view="repos"] .small { font-size: 12px; }
+[data-view="repos"] .stale { color: var(--warn); }
+[data-view="repos"] .controls { display: flex; gap: 8px; margin: 0 0 10px; }
+
+[data-view="repos"] ul.links, [data-view="repos"] ul.kv, [data-view="repos"] ul.env, [data-view="repos"] ul.notes {
+  list-style: none; margin: 0; padding: 0;
+}
+[data-view="repos"] ul.links li {
+  display: grid; gap: 2px; padding: 7px 0; border-bottom: 1px solid var(--line);
+}
+[data-view="repos"] ul.links li:last-child { border-bottom: 0; }
+[data-view="repos"] .peer a { font-weight: 600; text-decoration: none; }
+[data-view="repos"] .peer a:hover { text-decoration: underline; }
+[data-view="repos"] .urls { font-size: 12px; }
+
+[data-view="repos"] ul.kv li { display: grid; grid-template-columns: minmax(80px, max-content) 1fr; gap: 12px; padding: 3px 0; }
+[data-view="repos"] ul.kv .k { color: var(--ink); font-weight: 600; }
+
+[data-view="repos"] ul.env { display: flex; flex-wrap: wrap; gap: 6px 14px; }
+[data-view="repos"] ul.env li { display: inline-flex; gap: 6px; align-items: baseline; font-size: 12px; }
+
+[data-view="repos"] ul.notes li { padding: 10px 0; border-bottom: 1px solid var(--line); }
+[data-view="repos"] ul.notes li:last-child { border-bottom: 0; }
+[data-view="repos"] ul.notes li.old .body { color: var(--muted); }
+[data-view="repos"] ul.notes .body p { margin: 0 0 4px; }
+[data-view="repos"] ul.notes .meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: 12px; color: var(--muted); }
+
+[data-view="repos"] .doc { border: 1px solid var(--line); border-radius: 9px; padding: 4px 16px 10px; }
+[data-view="repos"] .playbook { margin: 0 0 16px; }
+[data-view="repos"] .md h4 { font-size: 15px; margin: 14px 0 6px; }
+[data-view="repos"] .md h5 { font-size: 13px; margin: 12px 0 4px; }
+[data-view="repos"] .md p { margin: 6px 0; }
+[data-view="repos"] .md ul, [data-view="repos"] .md ol { margin: 6px 0; padding-left: 22px; }
+[data-view="repos"] .md li { margin: 2px 0; }
+[data-view="repos"] .md blockquote { margin: 8px 0; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--muted); }
+[data-view="repos"] .md hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+[data-view="repos"] .md table.t { margin: 6px 0; }
+[data-view="repos"] .md pre { white-space: pre-wrap; word-break: break-word; }
+
+@media (max-width: 900px) {
+  [data-view="repos"] ul.kv li { grid-template-columns: 1fr; gap: 2px; }
+}
