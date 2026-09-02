@@ -1,0 +1,42 @@
+/* The overview: bars drawn in CSS, no chart library. Scoped to the view. */
+[data-view="overview"] .orgline { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 0 0 10px; font-size: 13px; }
+[data-view="overview"] .small { font-size: 12px; }
+[data-view="overview"] h4 { margin: 0 0 4px; font-weight: 500; }
+[data-view="overview"] .n { font-variant-numeric: tabular-nums; cursor: help; }
+[data-view="overview"] .n.big { font-size: 22px; font-weight: 600; letter-spacing: -.01em; }
+[data-view="overview"] .n.warn { color: var(--warn); }
+[data-view="overview"] .stale { color: var(--warn); }
+
+/* bar rows: label, bar, count */
+[data-view="overview"] .bars { display: grid; grid-template-columns: minmax(80px, max-content) 1fr max-content; gap: 5px 10px; align-items: center; margin-top: 8px; font-size: 12px; }
+[data-view="overview"] .bars .row { display: contents; }
+[data-view="overview"] .bars .label { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+[data-view="overview"] .bar { display: flex; height: 9px; background: color-mix(in srgb, var(--line) 60%, transparent); border-radius: 2px; overflow: hidden; }
+[data-view="overview"] .bar i { display: block; height: 100%; background: var(--accent); }
+[data-view="overview"] .bar i.extracted { background: var(--ink); opacity: .75; }
+[data-view="overview"] .bar i.inferred { background: repeating-linear-gradient(90deg, var(--ink) 0 3px, transparent 3px 6px); opacity: .55; }
+[data-view="overview"] .key { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; }
+[data-view="overview"] .key .ev { white-space: nowrap; word-break: normal; }
+
+/* tiles: one figure and its label */
+[data-view="overview"] .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px 16px; }
+[data-view="overview"] .tile { display: flex; flex-direction: column; gap: 2px; color: inherit; text-decoration: none; min-width: 0; }
+[data-view="overview"] .tile span.muted { font-size: 12px; }
+[data-view="overview"] .tile.wide { grid-column: 1 / -1; }
+[data-view="overview"] a.tile:hover .n.big { color: var(--accent); }
+
+/* the top proposals */
+[data-view="overview"] ol.top { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; counter-reset: rank; }
+[data-view="overview"] ol.top li { counter-increment: rank; position: relative; padding-left: 40px; }
+[data-view="overview"] ol.top li::before { content: counter(rank); position: absolute; left: 14px; top: 12px; font-size: 18px; font-weight: 600; color: var(--faint); font-variant-numeric: tabular-nums; }
+[data-view="overview"] ol.top .head { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+[data-view="overview"] ol.top .claim { margin: 6px 0 4px; }
+[data-view="overview"] .tag.conf-high { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, var(--line)); }
+[data-view="overview"] .tag.conf-medium { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }
+
+[data-view="overview"] .cannot { margin-top: 26px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 13px; max-width: 72ch; }
+
+@media (max-width: 900px) {
+  [data-view="overview"] .bars { grid-template-columns: minmax(60px, max-content) 1fr max-content; }
+  [data-view="overview"] .bars .label { max-width: 110px; }
+}

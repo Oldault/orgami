@@ -326,6 +326,40 @@ web_render 2>/dev/null
 check "live: with neither reading the view is the freshness panel only" \
   "$(sed -n '/<script id="data"/,/<\/script>/p' "$DIR/map/orgami.html" | sed '1d;$d' | jq -r '.views.live | [.missing, (.generated | tostring)] | join(" ")')" \
   "orgami live, orgami dns null"
+# The overview (lib/web/10-overview.*): its figures are jq's, not the
+# browser's, so what the payload carries is what the page can show. The repo
+# count has to be the fixture's repo node count, the readings table has one
+# row per file orgami writes whether or not the file exists, the week's
+# figures are stats.jq's, and advise's first three are advise.json's first
+# three.
+check "overview: the repo count is the fixture's repo node count" \
+  "$(jq '.views.overview.counts.repos.total' <<<"$data")" \
+  "$(jq '[.nodes[] | select(.kind == "repo")] | length' test/fixtures/company/map/graph.json)"
+check "overview: nodes and edges are counted the same way the payload's map line counts them" \
+  "$(jq -r '[.views.overview.counts.nodes.total, .views.overview.counts.edges.total] | join(" ")' <<<"$data")" \
+  "$(jq -r '[.map.nodes, .map.edges] | join(" ")' <<<"$data")"
+check "overview: extracted and inferred edges add up to every edge" \
+  "$(jq '.views.overview.counts.edges | .extracted + .inferred == .total' <<<"$data")" "true"
+check "overview: every reading is a row, present or not, with the command that refreshes it" \
+  "$(jq -r '[.views.overview.readings[] | .id + ":" + (.present | tostring) + ":" + .command] | join(" ")' <<<"$data")" \
+  "map:true:orgami scan profiles:true:orgami scan live:true:orgami live dns:true:orgami dns advise:true:orgami advise coupling:true:orgami coupling depth:false:orgami depth recap:true:orgami report daily:true:orgami daily"
+check "overview: a reading older than the map says stale" \
+  "$(jq -r '[.views.overview.readings[] | select(.stale) | .id] | join(" ")' <<<"$data")" "recap daily"
+check "overview: the latest recap is dated by its own footer" \
+  "$(jq -r '.views.overview.readings[] | select(.id == "recap") | .file + " " + .generated' <<<"$data")" \
+  "reports/2026-W33.md 2026-08-17"
+check "overview: the week's figures are the ones stats.jq computed" \
+  "$(jq -r '.views.overview.week | [.week, .figures.merged, .figures.merged_by_bots, .figures.repos_touched] | join(" ")' <<<"$data")" \
+  "$(jq -r -L lib -f lib/stats.jq test/fixtures/company/cache/prs/2026-W33.json | jq -r '[.week, .merged, .merged_by_bots, .repos_touched] | join(" ")')"
+check "overview: advise's first three, in advise.json's order, none of them answered" \
+  "$(jq -r '[.views.overview.advise.top[] | .id] | join(" ")' <<<"$data")" \
+  "$(jq -r '[.proposals[] | select(.suppressed | not)] | sort_by(.rank) | .[0:3] | map(.id) | join(" ")' test/fixtures/company/map/advise.json)"
+check "overview: vendors are counted by category from the graph" \
+  "$(jq -r '.views.overview.counts.vendors | (.total | tostring) + " " + (.by_category | map(.count) | add | tostring)' <<<"$data")" \
+  "$(jq -r '[.nodes[] | select(.kind == "vendor")] | length | tostring + " " + tostring' test/fixtures/company/map/graph.json)"
+check "overview: every figure names its file" \
+  "$(jq -r '.views.overview | [.org.file, .counts.file, .counts.live.file, .week.file, .advise.file] | join(" ")' <<<"$data")" \
+  "map/graph.json map/graph.json map/live.json cache/prs/2026-W33.json map/advise.json"
 
 # An empty company: every source missing, and the page still renders, saying
 # the map has not been made yet.
@@ -341,6 +375,8 @@ check "activity: with no cache at all the view names the command that fills it" 
   "$(jq -r '.views.activity.missing' <<<"$empty_data")" "orgami pull"
 check "repos: with no map the view names the command that makes one" \
   "$(jq -r '.views.repos.missing' <<<"$empty_data")" "orgami scan"
+check "overview: with no map it names the command that makes one" \
+  "$(jq -r '.views.overview.missing' <<<"$empty_data")" "orgami scan"
 
 # A flag nobody asked for is orgami's error, and stdout stays the path only.
 DIR="$scratch/acme"
