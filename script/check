@@ -109,6 +109,14 @@ advise() {
   echo "advise: every proposal carries its file:line, and a rejection sticks"
 }
 
+# `orgami cost` is the one place money enters the map, and only against a
+# vendor the map or the DNS reading knows, with who typed it and when. Runs
+# against a copy of the fixture company — no org, no token, no network.
+cost() {
+  ./test/cost_test.sh >/dev/null
+  echo "cost: one row per known vendor with who and when, a stranger refused with the nearest names"
+}
+
 # `orgami dns` reads public DNS, so the one thing this must never do is make a
 # query. Runs the matcher against recorded `dig` output through a stub `dig`.
 dns() {
@@ -368,6 +376,7 @@ CHECKS=(
   --vendors:vendors
   --deploy:deploy
   --advise:advise
+  --cost:cost
   --dns:dns
   --live:live
   --depth:depth

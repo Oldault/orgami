@@ -1,0 +1,22 @@
+{
+  "generated": "2026-08-11T09:30:00Z",
+  "costs": [
+    {
+      "vendor": "docusign",
+      "amount": 480,
+      "period": "year",
+      "currency": "EUR",
+      "who": "dana",
+      "when": "2026-08-11T09:30:00Z",
+      "note": "one seat, renewed each June"
+    },
+    {
+      "vendor": "stripe",
+      "amount": 1240.5,
+      "period": "month",
+      "currency": "EUR",
+      "who": "sam",
+      "when": "2026-08-04T15:10:00Z"
+    }
+  ]
+}
