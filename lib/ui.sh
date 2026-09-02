@@ -295,6 +295,7 @@ cmd_menu() {
 
     action=$(gum choose \
       "browse the map" \
+      "open the map in a browser" \
       "see what to consolidate" \
       "read the org's DNS" \
       "read the latest recap" \
@@ -311,6 +312,12 @@ cmd_menu() {
         [[ -f $dir/map/graph.json ]] ||
           { gum style --foreground 3 "no map yet — rebuild it first"; ui_pause; continue; }
         "$ORGAMI_BIN" view
+        ;;
+      "open the map in a browser")
+        [[ -f $dir/map/graph.json ]] ||
+          { gum style --foreground 3 "no map yet — rebuild it first"; ui_pause; continue; }
+        "$ORGAMI_BIN" web --open >/dev/null ||
+          { gum style --foreground 3 "could not render the page — orgami web"; ui_pause; }
         ;;
       "see what to consolidate")
         [[ -f $dir/map/graph.json ]] ||

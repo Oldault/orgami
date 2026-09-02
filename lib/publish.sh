@@ -76,6 +76,8 @@ publish_front_page() {
       echo "| [DNS]($path/DNS.md) | the vendors the organization's public DNS says it has an account with |"
     [[ -f $DIR/map/CONVENTIONS.md ]] &&
       echo "| [Conventions]($path/CONVENTIONS.md) | every AGENTS.md and CLAUDE.md committed in the org |"
+    [[ -f $DIR/map/orgami.html ]] &&
+      echo "| [The whole map, one page]($path/orgami.html) | repos, vendors, what is deployed, the weeks, the notes — one file to open from a checkout; GitHub shows only its source |"
     echo "| [All recaps]($path/reports/) | week by week |"
     echo "| [Per-repo pages]($path/repos/) | one page per repository |"
     echo
@@ -198,6 +200,18 @@ cmd_publish() {
   # docs repo only when the org has said it should.
   if [[ $(cfg live_publish false) == true ]]; then
     cp -f "$DIR/map/live.json" "$dest/" 2>/dev/null || true
+  fi
+  # The page inlines the live reading, so it follows the same rule: the copy
+  # that leaves the machine is rendered without map/live.json unless the org
+  # has said the reading may go. Rendered, not copied, so the local page keeps
+  # what the local reader is allowed to see.
+  if [[ -f $DIR/map/orgami.html ]]; then
+    if [[ $(cfg live_publish false) == true || ! -f $DIR/map/live.json ]]; then
+      cp -f "$DIR/map/orgami.html" "$dest/"
+    else
+      source "$ROOT/lib/web.sh"
+      WEB_OMIT_LIVE=1 web_render "$dest/orgami.html"
+    fi
   fi
   if compgen -G "$DIR/map/repos/*.md" >/dev/null; then
     mkdir -p "$dest/repos"

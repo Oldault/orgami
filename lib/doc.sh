@@ -414,5 +414,12 @@ carry what was matched instead. Verify either before acting on it.</sub>"
   doc_ask_claude
   doc_decisions
 
+  # The whole map as one page, last: it reads what the steps above wrote — the
+  # cards, the runbooks, the playbook index, the decisions page — so it has to
+  # come after them. It goes where graph.html goes.
+  source "$ROOT/lib/web.sh"
+  web_render
+  echo "$DIR/map/orgami.html" >&2
+
   echo "$out"
 }

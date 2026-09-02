@@ -106,6 +106,16 @@ check "the hosts section is present when a host was extracted" \
 check "with the evidence column filled in" \
   "$(grep -c '^| `api.acme.com` | web | `fly.toml:9` |$' "$page")" "1"
 
+# --- the whole map as one page -----------------------------------------------
+# `orgami doc` renders map/orgami.html the way it renders graph.html, and last,
+# so the page carries the runbooks the same run wrote.
+check "orgami doc writes the map as one page" \
+  "$(test -f "$full/map/orgami.html" && echo yes)" "yes"
+check "and it is the page, not a stub" \
+  "$(grep -c '<script id="data"' "$full/map/orgami.html")" "1"
+check "with the runbook the same run wrote in it" \
+  "$(grep -q 'map/runbooks/web.md' "$full/map/orgami.html" && echo yes)" "yes"
+
 # --- the per-repo cards ------------------------------------------------------
 
 web="$full/map/repos/web.md"

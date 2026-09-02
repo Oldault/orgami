@@ -213,6 +213,33 @@ grep -q 'push --quiet origin HEAD' <<<"$CALLS" || fail "--yes should push, got '
 grep -q '^pushed: docs(orgami): acme ' <<<"$OUT" || fail "the push should be reported, got '$OUT'"
 grep -q 'push to git@github' <<<"$OUT$ERR" && fail "--yes must not have prompted"
 
+# --- the page leaves without the live reading, unless it may -------------------
+# map/orgami.html inlines map/live.json, and live.json leaves the machine only
+# when live_publish says so. So the published page is a fresh render with the
+# reading read as missing, and a plain copy once the org has said it may go.
+# The local page is never touched.
+
+printf '%s\n' '{"generated":"2026-08-18T06:30:11Z","providers":["fly"],"deployments":[{"repo":"api","provider":"fly","name":"acme-api-secret-name","state":"running","urls":[]}],"unmatched":[]}' >"$home/map/live.json"
+echo '<!doctype html><title>local page</title>acme-api-secret-name' >"$home/map/orgami.html"
+published="$home/cache/docs/orgami/orgami.html"
+STUB_ALLOW_PUSH=1
+run --yes
+[[ $RC == 0 ]] || fail "publishing with a page and a live reading should work, got $RC: $ERR"
+[[ -f $published ]] || fail "the page must be published"
+grep -q '<script id="data"' "$published" || fail "without live_publish the page must be rendered afresh, not copied"
+grep -q 'acme-api-secret-name' "$published" && fail "without live_publish the published page must not carry the live reading"
+grep -q '"missing":"orgami live' "$published" || fail "the published page should say the live reading was not read"
+grep -q 'acme-api-secret-name' "$home/map/orgami.html" || fail "the local page must be left as it was"
+grep -q '](orgami.html)' "$home/cache/docs/orgami/README.md" || fail "the front page should link the page"
+
+jq '. + {live_publish: true}' "$home/config.json" >"$home/config.tmp" && mv "$home/config.tmp" "$home/config.json"
+STUB_ALLOW_PUSH=1
+run --yes
+[[ $RC == 0 ]] || fail "publishing with live_publish should work, got $RC: $ERR"
+grep -q 'acme-api-secret-name' "$published" || fail "with live_publish the page is copied as it is"
+rm -f "$home/map/live.json" "$home/map/orgami.html"
+config "git@github.com:acme/engineering.git"
+
 # --- --yes reaches the push, and nothing else does -----------------------------
 # The behaviour above pins that the flag works and that answering the prompt
 # does not. What it cannot show is that no future edit sets `yes` from somewhere

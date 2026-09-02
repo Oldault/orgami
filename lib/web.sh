@@ -135,6 +135,14 @@ web_sources() {
   notes=$(mktemp) weeks=$(mktemp) days=$(mktemp) pages=$(mktemp) decisions=$(mktemp)
   playbooks=$(mktemp) runbooks=$(mktemp) reports=$(mktemp) daily=$(mktemp)
 
+  # The copy that leaves the machine goes without the live reading unless the
+  # org said it may go (lib/publish.sh, live_publish). With WEB_OMIT_LIVE=1 the
+  # file is read as missing, and every view says "orgami live" the way it does
+  # when nobody has run it.
+  local live_json
+  if [[ ${WEB_OMIT_LIVE:-0} == 1 ]]; then live_json=/dev/null
+  else live_json=$(web_json_or_null "$DIR/map/live.json"); fi
+
   web_notes >"$notes"
   web_weeks >"$weeks"
   web_days >"$days"
@@ -159,7 +167,7 @@ web_sources() {
     --slurpfile graph "$(web_json_or_null "$DIR/map/graph.json")" \
     --slurpfile repos "$(web_json_or_null "$DIR/map/repos.json")" \
     --slurpfile coupling "$(web_json_or_null "$DIR/map/coupling.json")" \
-    --slurpfile live "$(web_json_or_null "$DIR/map/live.json")" \
+    --slurpfile live "$live_json" \
     --slurpfile dns "$(web_json_or_null "$DIR/map/dns.json")" \
     --slurpfile advise "$(web_json_or_null "$DIR/map/advise.json")" \
     --slurpfile depth "$(web_json_or_null "$DIR/map/depth.json")" \
@@ -248,11 +256,15 @@ web_check_inline() {
   fi
 }
 
+# $1, when given, is where the page is written instead of map/orgami.html —
+# publish renders the copy it ships rather than copying the local one. Nothing
+# in this file passes it, which is what shellcheck's SC2120 is about.
+# shellcheck disable=SC2120
 web_render() {
   local g="$DIR/map/graph.json"
   [[ -f $g ]] || log "no map yet — the page will say so (orgami scan)"
   mkdir -p "$DIR/map"
-  local out="$DIR/map/orgami.html" sources payload tmp f
+  local out="${1:-$DIR/map/orgami.html}" sources payload tmp f
   sources=$(mktemp) payload=$(mktemp) tmp=$(mktemp)
 
   log "reading $DIR"
