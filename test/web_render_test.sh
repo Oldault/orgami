@@ -131,6 +131,66 @@ check "sources: markdown files arrive as text, by path" \
   "map/decisions/2026-W33.md map/playbooks/warehouse-jobs--broken-export.md map/runbooks/billing-api.md reports/2026-W33.md reports/daily/2026-08-12.md"
 rm -f "$sources"
 
+# The live view (lib/web/50-live.*): deployed vs configured, and the DNS
+# reading. The two diffs carry evidence, and the figures are jq's.
+live=$(jq -c '.views.live' <<<"$data")
+check "live: the payload carries both readings with their own freshness" \
+  "$(jq -r '[.generated, .live.generated, .live.command, .dns.generated, .dns.command] | join(" ")' <<<"$live")" \
+  "2026-08-18T06:30:11Z 2026-08-18T06:30:11Z orgami live 2026-08-18T06:20:00Z orgami dns"
+check "live: deployments are grouped by the providers read" \
+  "$(jq -r '[.live.providers[] | .provider + "=" + (.deployments | length | tostring)] | join(",")' <<<"$live")" \
+  "fly=1,vercel=1"
+check "live: a deployment carries the provider's reading and the deploys-to edge that names its host" \
+  "$(jq -r '[.live.providers[].deployments[] | .repo + ":" + .reading.command + ":" + .declared.at] | join(" ")' <<<"$live")" \
+  "api:fly:app/acme-api:fly.toml web:vercel:project/prj_web:vercel.json:3"
+check "live: the configured-not-seen diff is non-empty" \
+  "$(jq -r '.live.not_seen | length' <<<"$live")" "3"
+check "live: every configured-not-seen row carries its deploys-to evidence" \
+  "$(jq -r '[.live.not_seen[] | .repo + "@" + .host + "=" + .evidence.kind + ":" + .evidence.at] | join(" ")' <<<"$live")" \
+  "billing-api@billing.acme.com=extracted:config/deploy.yml:12 docs-site@docs.acme.com=extracted:public/CNAME:1 ml-worker@ml.acme.com=extracted:kubernetes ingress"
+check "live: a not-seen row says which provider it is configured for and whether that provider was read" \
+  "$(jq -r '[.live.not_seen[] | .provider + "/" + (.provider_read | tostring)] | join(" ")' <<<"$live")" \
+  "kamal/false github-pages/false kubernetes/false"
+check "live: repos the providers saw are not in the diff" \
+  "$(jq -r '[.live.configured[] | select(.seen) | .repo] | join(" ")' <<<"$live")" "api web"
+check "live: the seen-not-configured diff is the unmatched list, with its source" \
+  "$(jq -r '[.live.not_configured[] | .provider + ":" + .name + "=" + .source] | join(" ")' <<<"$live")" \
+  "fly:acme-api-staging=fly:app/acme-api-staging fly:some-old-thing=fly:app/some-old-thing vercel:landing-2024=vercel:project/prj_landing"
+check "live: the figures are computed in jq" \
+  "$(jq -r '.live.counts | [.providers, .read, .deployments, .repos, .configured, .not_seen, .not_configured, .errors] | join(" ")' <<<"$live")" \
+  "2 2 2 2 5 3 3 1"
+check "live: a provider error is kept for the page" \
+  "$(jq -r '.live.errors[0] | .provider + ": " + .message' <<<"$live")" "aws: aws is not on PATH"
+check "live: DNS records are grouped by kind, in the order dns.md lists them" \
+  "$(jq -r '[.dns.by_kind[] | .kind + "=" + (.records | length | tostring)] | join(",")' <<<"$live")" \
+  "txt=3,mx=2,spf=1,cname=1"
+check "live: one SPF record names every vendor it matched, once" \
+  "$(jq -r '[.dns.by_kind[] | select(.kind == "spf") | .records[0].vendors[].id] | join(",")' <<<"$live")" \
+  "google-workspace,sendgrid"
+check "live: a DNS row carries the dig date the evidence line names" \
+  "$(jq -r '[.dns.by_kind[].records[].dig] | unique | join(",")' <<<"$live")" "2026-08-18"
+check "live: the DNS figures are the reading's own" \
+  "$(jq -r '.dns.counts | [.domains, .queries, .records, .records_matched, .records_unmatched, .omitted] | join(" ")' <<<"$live")" \
+  "1 14 19 7 12 1"
+check "live: the stale thresholds are the ones live.sh and dns.sh use" \
+  "$(jq -r '[.live.stale_after_days, .dns.stale_after_days] | join(" ")' <<<"$live")" "7 90"
+
+# One reading missing, the other present: the view keeps them apart (rule 4).
+mkdir -p "$scratch/nolive"
+cp -r test/fixtures/company/. "$scratch/nolive/"
+rm -f "$scratch/nolive/map/live.json"
+DIR="$scratch/nolive"
+web_render 2>/dev/null
+nolive=$(sed -n '/<script id="data"/,/<\/script>/p' "$DIR/map/orgami.html" | sed '1d;$d' | jq -c '.views.live')
+check "live: without live.json the live half names its command and the DNS half still draws" \
+  "$(jq -r '[.live.missing, (.dns.by_kind | length | tostring), .generated] | join(" ")' <<<"$nolive")" \
+  "orgami live 4 2026-08-18T06:20:00Z"
+rm -f "$scratch/nolive/map/dns.json"
+web_render 2>/dev/null
+check "live: with neither reading the view is the freshness panel only" \
+  "$(sed -n '/<script id="data"/,/<\/script>/p' "$DIR/map/orgami.html" | sed '1d;$d' | jq -r '.views.live | [.missing, (.generated | tostring)] | join(" ")')" \
+  "orgami live, orgami dns null"
+
 # An empty company: every source missing, and the page still renders, saying
 # the map has not been made yet.
 mkdir -p "$scratch/empty"
