@@ -210,8 +210,9 @@ instead of taking the page down.
 node kind, every edge kind, extracted and inferred, a description that tries
 to close a script tag, a DNS reading, a live reading, six notes (one an
 advise rejection, one superseded, one archived), a week and a day of cache
-with their recaps, a decisions fragment, a playbook and a runbook. Every file
-takes its shape from the lib file that writes it. `map/advise.json` was
+with their recaps, a decisions fragment, a playbook with its `PLAYBOOKS.md`
+index, a runbook, and a note under `notes/draft/` that no view may show. Every
+file takes its shape from the lib file that writes it. `map/advise.json` was
 produced by `lib/advise.jq` over the fixture graph and DNS reading with the
 clock fixed at `2026-08-18T07:00:00Z`; rerun it that way if the graph or the
 notes change.
