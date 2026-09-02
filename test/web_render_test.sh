@@ -361,6 +361,85 @@ check "overview: every figure names its file" \
   "$(jq -r '.views.overview | [.org.file, .counts.file, .counts.live.file, .week.file, .advise.file] | join(" ")' <<<"$data")" \
   "map/graph.json map/graph.json map/live.json cache/prs/2026-W33.json map/advise.json"
 
+# The memory view (lib/web/70-memory.*): notes with the superseded chain folded
+# under the note that replaced it, decisions with a link only where the
+# reference is one, playbooks split into the model's prose and the evidence
+# beneath, runbooks with an anchor only where the section exists. And nothing
+# from notes/draft/: a drafted note is not a note anyone wrote.
+DIR="$scratch/acme"
+memory=$(jq -c '.views.memory' <<<"$data")
+check "memory: each of the four sources says how old it is and what refreshes it" \
+  "$(jq -r '[.generated, .sources.notes.generated, .sources.notes.command, .sources.decisions.generated, .sources.decisions.command, .sources.playbooks.command, .sources.runbooks.generated, .sources.runbooks.command] | join(" ")' <<<"$memory")" \
+  "2026-08-18T00:00:00Z 2026-08-05T16:30:00Z orgami note 2026-08-16T00:00:00Z orgami report orgami playbook <repo> --topic <topic> 2026-08-18T00:00:00Z orgami doc"
+check "memory: the figures are computed in jq" \
+  "$(jq -r '[.counts.notes, .counts.decisions, .counts.playbooks, .counts.runbooks, .notes.counts.replaced, .notes.counts.archived, .notes.counts.answers, .decisions.counts.linked, .playbooks.counts.instances, .playbooks.counts.todos] | join(" ")' <<<"$memory")" \
+  "5 2 1 1 1 1 1 2 2 1"
+check "memory: notes are newest first and the superseded one is not in the list" \
+  "$(jq -r '[.notes.list[] | .date[0:10]] | join(" ")' <<<"$memory")" \
+  "2026-08-05 2026-07-26 2026-07-20 2026-07-11 2026-06-02"
+check "memory: the superseded note is nested under the note that replaced it" \
+  "$(jq -r '.notes.list[] | select(.id == "20260720-101100-sam-fly-secrets-come-from-the-deploy-workflow-now") | .replaced[0] | [.id, .superseded_by == "20260720-101100-sam-fly-secrets-come-from-the-deploy-workflow-now", (.replaced | length)] | join(" ")' <<<"$memory")" \
+  "20260415-140200-sam-fly-deploys-need-the-secrets-set-first true 0"
+check "memory: the advise-suppressed note is listed with its tag and the proposal it answers" \
+  "$(jq -r '.notes.list[] | select(.author == "dana" and .repo == "mobile") | [(.tags | join(",")), .answers, (.body | contains("<!--") | not)] | join(" ")' <<<"$memory")" \
+  "advise-suppressed duplicate-category:error-tracking:rollbar+sentry true"
+check "memory: the archived note is reachable apart, not in the list" \
+  "$(jq -r '[(.notes.archived | length), .notes.archived[0].id, ([.notes.list[] | .id] | index("20260301-080000-sam-billing-api-rollback-is-kamal-rollback") == null)] | join(" ")' <<<"$memory")" \
+  "1 20260301-080000-sam-billing-api-rollback-is-kamal-rollback true"
+check "memory: tag and repo tallies are over the notes listed, largest first" \
+  "$(jq -r '[(.notes.tags[] | .tag + "=" + (.count | tostring)), (.notes.repos[] | .repo + "=" + (.count | tostring))] | join(" ")' <<<"$memory")" \
+  "pattern=2 advise-suppressed=1 deploy=1 incident=1 warehouse-jobs=3 api=1 mobile=1"
+check "memory: the note commands are there to copy" \
+  "$(jq -r '[.notes.note_command, .notes.list[0].supersede_command] | join(" | ")' <<<"$memory")" \
+  'orgami note --repo <repo> --tag <tag> "what you learned" | orgami note --supersede 20260805-163000-dana-carmax-style-empty-result-in-the-stripe-export "what is true now"'
+check "memory: nothing from notes/draft/ reaches the page" \
+  "$(grep -c 'DRAFT-NOT-PUBLISHED' "$page" || true)" "0"
+check "memory: decisions are one section per week with the week's own date" \
+  "$(jq -r '.decisions.weeks[0] | [.week, .file, .generated[0:10], (.bullets | length)] | join(" ")' <<<"$memory")" \
+  "2026-W33 map/decisions/2026-W33.md 2026-08-16 2"
+check "memory: a decision's pull request is a link where the file links it" \
+  "$(jq -r '.decisions.weeks[0].bullets[0].parts | map(.text + "=" + (.url // "-")) | last' <<<"$memory")" \
+  "billing-api#412=https://github.com/acme-inc/billing-api/pull/412"
+# The same rule linkify_prs applies: a repo in the map is a link, one the scan
+# never saw stays text, and so does another organization's — with no clock
+# and no random in the page's own script (rule 7).
+sources=$(mktemp)
+web_sources >"$sources" 2>/dev/null
+check "memory: a bare reference is a link only for a repo the map holds, in this org" \
+  "$(jq -c '{map: .map, decisions: [{file: "map/decisions/2026-W34.md", text: "## 2026-W34\n\n- api#498 and `web#12`, not nobody#5 nor other-org/api#7 (acme-inc/infra#3)"}]}' "$sources" \
+      | jq -L lib -r --arg dir "$DIR" --arg company acme --arg org acme-inc -f lib/web/70-memory.jq \
+      | jq -r '[.decisions.weeks[0].bullets[0].parts[] | select(.text | test("#")) | .text + "=" + (if .url then "link" else "text" end)] | join(" ")')" \
+  "api#498=link web#12=link  nobody#5=text  other-org/api#7=text acme-inc/infra#3=link"
+check "memory: the playbook is one row with the instance count from map/PLAYBOOKS.md" \
+  "$(jq -r '.playbooks.list[0] | [.repo, .topic, .instances, .written_from, .written, .model, .todos] | join(" ")' <<<"$memory")" \
+  "warehouse-jobs broken-export 2 2 2026-08-06 claude-opus-5 1"
+check "memory: the model's prose and the evidence beneath it are kept apart" \
+  "$(jq -r '.playbooks.list[0] | [(.prose | startswith("## When you are in this case")), (.prose | contains("What this was written from") | not), (.prose | contains("<sub>") | not), (.evidence | startswith("REPOSITORY: warehouse-jobs")), (.evidence | contains("THE INSTANCES"))] | join(" ")' <<<"$memory")" \
+  "true true true true true"
+check "memory: a hole the playbook left is kept in the prose, counted, never hidden" \
+  "$(jq -r '.playbooks.list[0] | [(.prose | contains("TODO — the evidence does not say how")), .todos] | join(" ")' <<<"$memory")" \
+  "true 1"
+check "memory: the playbook commands are there to copy" \
+  "$(jq -r '.playbooks.list[0] | [.record_command, .rewrite_command] | join(" | ")' <<<"$memory")" \
+  'orgami note --repo warehouse-jobs --tag pattern --topic broken-export "…" | orgami playbook warehouse-jobs --topic broken-export'
+check "memory: the runbook has an anchor only for the note tag whose section exists" \
+  "$(jq -r '.runbooks.list[0] | [.repo, .scan, .in_map, ([.anchors[] | .tag + ":" + .heading] | join(",")), (.sections | length)] | join(" ")' <<<"$memory")" \
+  "billing-api 2026-08-18 true rollback:Rolling it back 6"
+check "memory: the runbook tags are the seven lib/runbook.sh files a note under" \
+  "$(jq -r '[.runbooks.tags[].tag] | join(" ")' <<<"$memory")" \
+  "$(sed -n 's/^RUNBOOK_TAGS=(\(.*\))$/\1/p' lib/runbook.sh)"
+check "memory: without map/PLAYBOOKS.md the count is not invented and the index names its command" \
+  "$(jq -c 'del(.pages)' "$sources" | jq -L lib -r --arg dir "$DIR" --arg company acme --arg org acme-inc -f lib/web/70-memory.jq \
+      | jq -r '[.playbooks.index.missing, (.playbooks.list[0].instances | tostring), .playbooks.counts.instances] | join(" ")')" \
+  "orgami doc null 0"
+check "memory: with only runbooks on disk the other three say which command writes them" \
+  "$(jq -c '{runbooks: .runbooks}' "$sources" | jq -L lib -r --arg dir "$DIR" --arg company acme --arg org acme-inc -f lib/web/70-memory.jq \
+      | jq -r '[.sources.notes.missing, .sources.decisions.missing, .sources.playbooks.missing, .counts.runbooks, .runbooks.list[0].in_map] | join(" ")')" \
+  "orgami note orgami report orgami playbook 1 false"
+check "memory: the view draws with no clock and no random (rule 7)" \
+  "$(grep -cE 'Date\.now|Math\.random|new Date\(' lib/web/70-memory.js || true)" "0"
+rm -f "$sources"
+
 # An empty company: every source missing, and the page still renders, saying
 # the map has not been made yet.
 mkdir -p "$scratch/empty"
@@ -377,6 +456,8 @@ check "repos: with no map the view names the command that makes one" \
   "$(jq -r '.views.repos.missing' <<<"$empty_data")" "orgami scan"
 check "overview: with no map it names the command that makes one" \
   "$(jq -r '.views.overview.missing' <<<"$empty_data")" "orgami scan"
+check "memory: with nothing recorded the view names the first command that writes memory" \
+  "$(jq -r '.views.memory.missing' <<<"$empty_data")" "orgami note"
 
 # A flag nobody asked for is orgami's error, and stdout stays the path only.
 DIR="$scratch/acme"

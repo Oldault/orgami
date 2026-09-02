@@ -1,0 +1,88 @@
+/* The memory view: the four tabs, the notes list with its folded chains, the
+   decisions by week, and the playbook and runbook pages. Palette and the
+   shared components come from 00-shell.css; nothing here redefines them. */
+[data-view="memory"] .tabs { display: flex; gap: 2px; flex-wrap: wrap; margin: 0 0 12px; border-bottom: 1px solid var(--line); }
+[data-view="memory"] .tabs a {
+  color: var(--muted); text-decoration: none; padding: 6px 12px; font-size: 13px;
+  border-bottom: 2px solid transparent; margin-bottom: -1px;
+}
+[data-view="memory"] .tabs a:hover { color: var(--ink); }
+[data-view="memory"] .tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--accent); font-weight: 600; }
+[data-view="memory"] .tabs .n, [data-view="memory"] .chip .n { color: var(--faint); font-variant-numeric: tabular-nums; font-size: 11px; }
+
+[data-view="memory"] .count { color: var(--muted); font-size: 12px; margin: -6px 0 10px; }
+[data-view="memory"] .count.faint { color: var(--faint); margin: 0 0 6px; min-height: 1em; }
+[data-view="memory"] .small { font-size: 12px; }
+[data-view="memory"] .crumb { color: var(--muted); font-size: 12px; margin: 0 0 2px; }
+[data-view="memory"] .crumb a { text-decoration: none; }
+[data-view="memory"] h3.title { font-size: 16px; text-transform: none; letter-spacing: 0; color: var(--ink); margin: 6px 0 6px; }
+[data-view="memory"] h3.title a { text-decoration: none; }
+[data-view="memory"] .head {
+  display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline;
+  color: var(--muted); font-size: 13px; margin: 0 0 10px;
+}
+[data-view="memory"] .stale { color: var(--warn); }
+[data-view="memory"] .hole { color: var(--warn); }
+
+/* filters */
+[data-view="memory"] .controls { display: grid; gap: 6px; margin: 0 0 12px; }
+[data-view="memory"] .controls .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+[data-view="memory"] .controls .label, [data-view="memory"] .anchors .label {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--faint); min-width: 36px;
+}
+
+/* notes */
+[data-view="memory"] ul.notes { list-style: none; margin: 0; padding: 0; }
+[data-view="memory"] ul.notes.top > li { padding: 12px 0; border-bottom: 1px solid var(--line); }
+[data-view="memory"] ul.notes.top > li:last-child { border-bottom: 0; }
+[data-view="memory"] li.note.opened { background: var(--panel); margin: 0 -10px; padding-left: 10px; padding-right: 10px; border-radius: 7px; }
+[data-view="memory"] .note .body p { margin: 0 0 4px; }
+[data-view="memory"] .note.old .body { color: var(--muted); }
+[data-view="memory"] .note .meta { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: 12px; color: var(--muted); }
+[data-view="memory"] .note .meta a.repo { text-decoration: none; font-weight: 600; }
+[data-view="memory"] .note .meta a.id { text-decoration: none; margin-left: auto; }
+[data-view="memory"] details.replaced { margin: 8px 0 0 0; padding-left: 12px; border-left: 2px solid var(--line); }
+[data-view="memory"] details.replaced summary { cursor: pointer; color: var(--faint); font-size: 12px; }
+[data-view="memory"] details.replaced ul.notes li { padding: 8px 0 0; }
+[data-view="memory"] .cmd { margin: 8px 0 0; }
+[data-view="memory"] .cmd pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
+[data-view="memory"] .cmd p { margin: 4px 0 0; }
+[data-view="memory"] .note .cmd pre { padding: 6px 10px; }
+[data-view="memory"] .archived { margin-top: 18px; }
+
+/* decisions */
+[data-view="memory"] .week h3 { margin: 18px 0 6px; }
+[data-view="memory"] .week h3 code { text-transform: none; letter-spacing: 0; }
+[data-view="memory"] ul.decisions { margin: 0; padding-left: 20px; }
+[data-view="memory"] ul.decisions li { margin: 4px 0; }
+[data-view="memory"] ul.decisions a.pr { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+
+/* playbook and runbook pages */
+[data-view="memory"] .doc { border: 1px solid var(--line); border-radius: 9px; padding: 4px 16px 10px; }
+[data-view="memory"] .md h4 { font-size: 15px; margin: 14px 0 6px; }
+[data-view="memory"] .md h5 { font-size: 13px; margin: 12px 0 4px; }
+[data-view="memory"] .md p { margin: 6px 0; }
+[data-view="memory"] .md ul, [data-view="memory"] .md ol { margin: 6px 0; padding-left: 22px; }
+[data-view="memory"] .md li { margin: 2px 0; }
+[data-view="memory"] .md blockquote { margin: 8px 0; padding: 2px 12px; border-left: 3px solid var(--line); color: var(--muted); }
+[data-view="memory"] .md hr { border: 0; border-top: 1px solid var(--line); margin: 14px 0; }
+[data-view="memory"] .md table.t { margin: 6px 0; }
+[data-view="memory"] .md pre { white-space: pre-wrap; word-break: break-word; }
+[data-view="memory"] .md h4:focus, [data-view="memory"] .md h5:focus { outline: none; text-decoration: underline; text-decoration-color: var(--accent); }
+/* a hole the playbook left: shown, marked, never hidden */
+[data-view="memory"] .md .todo {
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  border-left: 3px solid var(--warn); padding: 4px 10px; margin-left: -13px; border-radius: 0 6px 6px 0;
+}
+[data-view="memory"] .md li.todo { list-style-position: inside; margin-left: 0; }
+[data-view="memory"] pre.evidence { white-space: pre-wrap; word-break: break-word; }
+[data-view="memory"] .anchors { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 10px; }
+[data-view="memory"] a.chip.anchor { text-decoration: none; color: var(--ink); }
+[data-view="memory"] table.t td a.chip.anchor { font-size: 11px; padding: 1px 7px; margin-right: 4px; }
+[data-view="memory"] table.t .name { display: inline-flex; gap: 6px; align-items: baseline; }
+[data-view="memory"] table.t a.open { font-weight: 600; text-decoration: none; }
+[data-view="memory"] table.t a.open:hover { text-decoration: underline; }
+
+@media (max-width: 900px) {
+  [data-view="memory"] li.note.opened { margin: 0; padding-left: 0; padding-right: 0; }
+}
