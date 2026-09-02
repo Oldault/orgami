@@ -257,6 +257,87 @@ web() {
   echo "web: self-contained, every view in the payload, byte-identical twice"
 }
 
+# The views map/orgami.html is built from: one line per lib/web/NN-<id> stem,
+# sorted. The page and its test both glob lib/web/, so when 0612efe rebased four
+# views out of the tree it took their assertions with them and every test still
+# passed. This list does not move with the tree. A view leaves by an edit here,
+# in a change that adds no view of its own — views() below holds both.
+WEB_VIEWS=(
+  00-shell
+  10-overview
+  20-map
+  30-repos
+  40-vendors
+  50-live
+  60-activity
+  70-memory
+)
+
+# The ids test/web_render_test.sh asserts on, read off `.views.<id>` and
+# `lib/web/NN-<id>` — a function so the same rule reads the file at HEAD and
+# at the merge base.
+tested_views() {
+  { grep -oE '(\.views\.|lib/web/[0-9]{2}-)[a-z0-9-]+' || true; } | sed -E 's|.*[./]||; s|^[0-9]{2}-||' | LC_ALL=C sort -u
+}
+
+# Every view is listed, on disk and asserted on; and nothing that main has
+# vanishes from a branch that is also adding a view. Removing a view is its own
+# change: drop it from WEB_VIEWS, its files and its checks, and nothing else.
+views() {
+  local bad=0 stem id here want tested base gone added
+  here=$(find lib/web -maxdepth 1 -name '[0-9][0-9]-*' \( -name '*.jq' -o -name '*.js' -o -name '*.css' \) |
+    sed -E 's/.*\///; s/\.(jq|js|css)$//' | LC_ALL=C sort -u)
+  want=$(printf '%s\n' "${WEB_VIEWS[@]}" | LC_ALL=C sort -u)
+  if [[ $here != "$want" ]]; then
+    echo "views: lib/web/ and WEB_VIEWS in script/check disagree:" >&2
+    diff <(echo "$want") <(echo "$here") | sed -n 's/^< /  listed, not on disk: lib\/web\//p; s/^> /  on disk, not listed: lib\/web\//p' >&2 || true
+    bad=1
+  fi
+  tested=$(tested_views <test/web_render_test.sh)
+  for stem in "${WEB_VIEWS[@]}"; do
+    id=${stem#[0-9][0-9]-}
+    [[ $id == shell ]] && continue
+    grep -qx "$id" <<<"$tested" ||
+      { echo "views: test/web_render_test.sh no longer asserts on the $id view (lib/web/$stem.*)" >&2; bad=1; }
+  done
+  [[ $bad == 0 ]] || return 1
+
+  base=$(git merge-base HEAD origin/main 2>/dev/null || git merge-base HEAD main 2>/dev/null) || {
+    echo "views: ${#WEB_VIEWS[@]} listed, on disk and asserted on (no main to compare against)"
+    return 0
+  }
+  gone=$(git ls-tree --name-only "$base" lib/web/ | { grep -E '/[0-9]{2}-[^/]+\.(jq|js|css)$' || true; } |
+    while IFS= read -r f; do [[ -f $f ]] || echo "$f"; done)
+  for id in $(git show "$base:test/web_render_test.sh" 2>/dev/null | tested_views); do
+    grep -qx "$id" <<<"$tested" || gone+="${gone:+$'\n'}test/web_render_test.sh: the $id view"
+  done
+  if [[ -n $gone ]]; then
+    added=$({ git diff --name-only --diff-filter=A "$base" -- lib/web; git ls-files --others --exclude-standard lib/web; } |
+      { grep -E '/[0-9]{2}-[^/]+\.(jq|js|css)$' || true; } | LC_ALL=C sort -u)
+    if [[ -n $added ]]; then
+      echo "views: since main this branch loses" >&2
+      sed 's/^/  /' <<<"$gone" >&2
+      echo "views: while adding" >&2
+      sed 's/^/  /' <<<"$added" >&2
+      echo "views: removing a view is its own change — drop it from WEB_VIEWS, its files and its checks, and add no view in the same branch" >&2
+      return 1
+    fi
+    echo "views: ${#WEB_VIEWS[@]} listed, on disk and asserted on; removed since main, on purpose:"
+    sed 's/^/  /' <<<"$gone"
+    return 0
+  fi
+  echo "views: ${#WEB_VIEWS[@]} listed, on disk and asserted on, none lost since main"
+}
+
+# The check above, replayed against what 0612efe did in a throwaway repository:
+# the incident fails, it still fails with the list edited to match, a removal
+# on its own passes. Its own flag, not a line in views(): the replay copies
+# this script into the scratch repo and runs `--views` there.
+views_test() {
+  ./test/check_views_test.sh >/dev/null
+  echo "views-test: the lost views fail, a removal on its own passes"
+}
+
 # map/ARCHITECTURE.md and the repo cards are the pages a person opens, and the
 # markdown view of the graph must not drift from the HTML one above it. Runs
 # against hand-written fixtures under a temp ORGAMI_HOME — no scan, no token.
@@ -305,6 +386,8 @@ CHECKS=(
   --query:query
   --html:html
   --web:web
+  --views:views
+  --views-test:views_test
   --doc:doc
   --completions:completions
 )
