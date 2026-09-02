@@ -104,6 +104,56 @@ web_render 2>/dev/null
 sum2=$(cksum <"$page")
 check "a second render is byte-identical" "$sum2" "$sum1"
 
+# The vendors view. Every proposal advise.json ranks is in the payload, in the
+# same order — the page may not drop or reorder one — and an answered proposal
+# is joined to the note that answered it, so the reader can open the record.
+vendors=$(jq -c '.views.vendors' <<<"$data")
+check "vendors: every advise proposal id is in the payload, in advise's order" \
+  "$(jq -r '[.proposals[].id] | join(" ")' <<<"$vendors")" \
+  "$(jq -r '[.proposals[].id] | join(" ")' test/fixtures/company/map/advise.json)"
+check "vendors: the reject command is there to copy, per proposal" \
+  "$(jq -r '.proposals[0].command' <<<"$vendors")" \
+  'orgami advise --reject duplicate-category:payments:paddle+stripe "<reason>"'
+check "vendors: a suppressed proposal is linked to the note that answered it" \
+  "$(jq -r '.answered[0] | [.id, .note.id, .author, .date, .proposed] | join(" ")' <<<"$vendors")" \
+  "duplicate-category:error-tracking:rollbar+sentry 20260602-091500-dana-rollbar-is-deliberate-mobile-only dana 2026-06-02 true"
+check "vendors: the allow-list is read from advise.json, not copied" \
+  "$(jq -c '.substitutable' <<<"$vendors")" \
+  "$(jq -c '.excluded.substitutable_categories' test/fixtures/company/map/advise.json)"
+check "vendors: a category is marked substitutable by that list" \
+  "$(jq -r '[.categories[] | select(.category == "payments" or .category == "hosting") | "\(.category)=\(.substitutable)"] | join(" ")' <<<"$vendors")" \
+  "hosting=false payments=true"
+check "vendors: code and DNS are unioned per vendor, and each cell keeps its source" \
+  "$(jq -r '.vendors[] | select(.id == "stripe") | [.source, (.repos | join(",")), (.domains | join(",")), .code[0].confidence] | join(" ")' <<<"$vendors")" \
+  "both api,billing-api,web acme.com extracted"
+check "vendors: a vendor only DNS names has no repo and says so" \
+  "$(jq -r '.vendors[] | select(.id == "docusign") | [.source, (.repos | length), .dns[0].signal, .advise.proposals[0].id] | join(" ")' <<<"$vendors")" \
+  "dns 0 txt dns-only-vendor:docusign"
+check "vendors: not proposed, on purpose, is advise.json's excluded section" \
+  "$(jq -r '[.excluded.duplicate_category[].id, .excluded.ghost_env_var[].id] | join(" ")' <<<"$vendors")" \
+  "duplicate-category:hosting:aws+vercel ghost-env-var:slack@ops-scripts"
+check "vendors: the figures are computed in jq" \
+  "$(jq -r '.counts | [.vendors, .categories, .repos, .from_both, .dns_only, .proposals, .high, .answered, .excluded] | join(" ")' <<<"$vendors")" \
+  "13 10 9 3 2 14 4 1 2"
+check "vendors: every source says how old it is, with the command that refreshes it" \
+  "$(jq -r '[.sources.graph.command, .sources.dns.command, .sources.advise.command, .generated] | join(" ")' <<<"$vendors")" \
+  "orgami scan orgami dns orgami advise 2026-08-18T07:00:00Z"
+check "vendors: no amount anywhere in the payload" \
+  "$(grep -ciE '"(cost|amount|price|spend|usd|eur)"' <<<"$vendors" || true)" "0"
+
+# Without a DNS reading or an advise run the view still renders, and names the
+# command that produces each: the matrix from the graph alone, no proposals.
+rm -f "$DIR/map/dns.json" "$DIR/map/advise.json"
+web_render 2>/dev/null
+partial=$(sed -n '/<script id="data"/,/<\/script>/p' "$page" | sed '1d;$d' | jq -c '.views.vendors')
+check "vendors: with no DNS reading and no advise run, the view says which commands produce them" \
+  "$(jq -r '[.sources.dns.missing, .sources.advise.missing, .advise.missing, (.proposals | length), (.vendors | length), (.substitutable | tostring)] | join(" ")' <<<"$partial")" \
+  "orgami dns orgami advise orgami advise 0 11 null"
+check "vendors: an answer in the notes survives without advise.json, marked as no longer proposed" \
+  "$(jq -r '.answered[0] | [.id, .proposed] | join(" ")' <<<"$partial")" \
+  "duplicate-category:error-tracking:rollbar+sentry false"
+cp test/fixtures/company/map/dns.json test/fixtures/company/map/advise.json "$DIR/map/"
+
 # Every source read into the views is there, in the shape docs/web.md promises.
 sources=$(mktemp)
 web_sources >"$sources" 2>/dev/null
@@ -176,6 +226,65 @@ check "repos: the runbook and the playbooks are found by the repo's name" \
 check "repos: a section with nothing in it has nothing to draw" \
   "$(jq -r '.views.repos.repos[] | select(.name == "docs-site") | [(.env | length), (.notes | length), (.coupling | length), (.live | length), (.runbook == null)] | join(" ")' <<<"$data")" \
   "0 0 0 0 true"
+# The live view (lib/web/50-live.*): deployed vs configured, and the DNS
+# reading. The two diffs carry evidence, and the figures are jq's.
+live=$(jq -c '.views.live' <<<"$data")
+check "live: the payload carries both readings with their own freshness" \
+  "$(jq -r '[.generated, .live.generated, .live.command, .dns.generated, .dns.command] | join(" ")' <<<"$live")" \
+  "2026-08-18T06:30:11Z 2026-08-18T06:30:11Z orgami live 2026-08-18T06:20:00Z orgami dns"
+check "live: deployments are grouped by the providers read" \
+  "$(jq -r '[.live.providers[] | .provider + "=" + (.deployments | length | tostring)] | join(",")' <<<"$live")" \
+  "fly=1,vercel=1"
+check "live: a deployment carries the provider's reading and the deploys-to edge that names its host" \
+  "$(jq -r '[.live.providers[].deployments[] | .repo + ":" + .reading.command + ":" + .declared.at] | join(" ")' <<<"$live")" \
+  "api:fly:app/acme-api:fly.toml web:vercel:project/prj_web:vercel.json:3"
+check "live: the configured-not-seen diff is non-empty" \
+  "$(jq -r '.live.not_seen | length' <<<"$live")" "3"
+check "live: every configured-not-seen row carries its deploys-to evidence" \
+  "$(jq -r '[.live.not_seen[] | .repo + "@" + .host + "=" + .evidence.kind + ":" + .evidence.at] | join(" ")' <<<"$live")" \
+  "billing-api@billing.acme.com=extracted:config/deploy.yml:12 docs-site@docs.acme.com=extracted:public/CNAME:1 ml-worker@ml.acme.com=extracted:kubernetes ingress"
+check "live: a not-seen row says which provider it is configured for and whether that provider was read" \
+  "$(jq -r '[.live.not_seen[] | .provider + "/" + (.provider_read | tostring)] | join(" ")' <<<"$live")" \
+  "kamal/false github-pages/false kubernetes/false"
+check "live: repos the providers saw are not in the diff" \
+  "$(jq -r '[.live.configured[] | select(.seen) | .repo] | join(" ")' <<<"$live")" "api web"
+check "live: the seen-not-configured diff is the unmatched list, with its source" \
+  "$(jq -r '[.live.not_configured[] | .provider + ":" + .name + "=" + .source] | join(" ")' <<<"$live")" \
+  "fly:acme-api-staging=fly:app/acme-api-staging fly:some-old-thing=fly:app/some-old-thing vercel:landing-2024=vercel:project/prj_landing"
+check "live: the figures are computed in jq" \
+  "$(jq -r '.live.counts | [.providers, .read, .deployments, .repos, .configured, .not_seen, .not_configured, .errors] | join(" ")' <<<"$live")" \
+  "2 2 2 2 5 3 3 1"
+check "live: a provider error is kept for the page" \
+  "$(jq -r '.live.errors[0] | .provider + ": " + .message' <<<"$live")" "aws: aws is not on PATH"
+check "live: DNS records are grouped by kind, in the order dns.md lists them" \
+  "$(jq -r '[.dns.by_kind[] | .kind + "=" + (.records | length | tostring)] | join(",")' <<<"$live")" \
+  "txt=3,mx=2,spf=1,cname=1"
+check "live: one SPF record names every vendor it matched, once" \
+  "$(jq -r '[.dns.by_kind[] | select(.kind == "spf") | .records[0].vendors[].id] | join(",")' <<<"$live")" \
+  "google-workspace,sendgrid"
+check "live: a DNS row carries the dig date the evidence line names" \
+  "$(jq -r '[.dns.by_kind[].records[].dig] | unique | join(",")' <<<"$live")" "2026-08-18"
+check "live: the DNS figures are the reading's own" \
+  "$(jq -r '.dns.counts | [.domains, .queries, .records, .records_matched, .records_unmatched, .omitted] | join(" ")' <<<"$live")" \
+  "1 14 19 7 12 1"
+check "live: the stale thresholds are the ones live.sh and dns.sh use" \
+  "$(jq -r '[.live.stale_after_days, .dns.stale_after_days] | join(" ")' <<<"$live")" "7 90"
+
+# One reading missing, the other present: the view keeps them apart (rule 4).
+mkdir -p "$scratch/nolive"
+cp -r test/fixtures/company/. "$scratch/nolive/"
+rm -f "$scratch/nolive/map/live.json"
+DIR="$scratch/nolive"
+web_render 2>/dev/null
+nolive=$(sed -n '/<script id="data"/,/<\/script>/p' "$DIR/map/orgami.html" | sed '1d;$d' | jq -c '.views.live')
+check "live: without live.json the live half names its command and the DNS half still draws" \
+  "$(jq -r '[.live.missing, (.dns.by_kind | length | tostring), .generated] | join(" ")' <<<"$nolive")" \
+  "orgami live 4 2026-08-18T06:20:00Z"
+rm -f "$scratch/nolive/map/dns.json"
+web_render 2>/dev/null
+check "live: with neither reading the view is the freshness panel only" \
+  "$(sed -n '/<script id="data"/,/<\/script>/p' "$DIR/map/orgami.html" | sed '1d;$d' | jq -r '.views.live | [.missing, (.generated | tostring)] | join(" ")')" \
+  "orgami live, orgami dns null"
 
 # An empty company: every source missing, and the page still renders, saying
 # the map has not been made yet.
