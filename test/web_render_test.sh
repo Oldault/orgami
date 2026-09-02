@@ -129,6 +129,47 @@ check "sources: the day's figures come from daily.jq" \
 check "sources: markdown files arrive as text, by path" \
   "$(jq -r '[.decisions[].file, .playbooks[].file, .runbooks[].file, .reports[].file, .daily[].file] | join(" ")' "$sources")" \
   "map/decisions/2026-W33.md map/playbooks/warehouse-jobs--broken-export.md map/runbooks/billing-api.md reports/2026-W33.md reports/daily/2026-08-12.md"
+
+# --- the activity view -------------------------------------------------------
+# Every figure it shows is one stats.jq, daily.jq or coupling.sh computed, so
+# the week the page draws has to carry the merged count script/check already
+# asserts for stats.jq on the same fixture week — read from that assertion,
+# not copied here, so the two cannot drift apart.
+want=$(sed -n '/^stats() {/,/^}/p' script/check | grep -oE '"merged=[0-9]+"' | head -1 | tr -dc '0-9')
+[[ -n $want ]] || { echo "FAIL script/check no longer asserts merged=N for stats.jq" >&2; fail=1; }
+activity=$(jq -c '.views.activity' <<<"$data")
+check "activity: the fixture week is listed, newest first" \
+  "$(jq -r '.list[0].week' <<<"$activity")" "2026-W33"
+check "activity: the week's merged count is the one script/check asserts for stats.jq" \
+  "$(jq -r '.list[0].stats.merged' <<<"$activity")" "$want"
+check "activity: the week carries its recap and its pull requests, bots marked" \
+  "$(jq -r '.list[0] | [(.recap | startswith("# acme — week 2026-W33")), (.prs | length), ([.prs[] | select(.bot)] | length)] | join(" ")' <<<"$activity")" \
+  "true 4 2"
+check "activity: the small multiples start with merged and never draw merged_by_people twice" \
+  "$(jq -r '[.figures[0].key, ([.figures[].key] | index("merged_by_people") == null), (.figures[] | select(.key == "lines_added") | .max)] | join(" ")' <<<"$activity")" \
+  "merged true 704"
+check "activity: the day carries daily.jq's figures and its digest" \
+  "$(jq -r '.days.list[0] | [.date, .stats.merged, .stats.commits_outside_prs, (.digest | contains("Outside a pull request"))] | join(" ")' <<<"$activity")" \
+  "2026-08-12 2 1 true"
+check "activity: coupling is the matrix's axis, sorted, with the largest pair for shading" \
+  "$(jq -r '.coupling | [(.repos | join(",")), .max.weeks, .max.days, .weeks_observed] | join(" ")' <<<"$activity")" \
+  "api,billing-api,infra,ops-scripts,warehouse-jobs,web 4 6 6"
+check "activity: each source says how old it is and what refreshes it" \
+  "$(jq -r '[.weeks.generated, .weeks.command, .days.generated, .days.command, .coupling.command] | join(" ")' <<<"$activity")" \
+  "2026-08-16 orgami pull 2026-08-12 orgami daily orgami coupling"
+# A quiet day — nothing merged, opened or pushed outside a pull request — is
+# absent, the same rule lib/daily.sh writes no digest by; and a week stats.jq
+# could not read is still listed, with no figures.
+check "activity: a quiet day is absent and an unreadable week is still listed" \
+  "$(jq -c '.days += [{file: "cache/daily/2026-08-13.json", date: "2026-08-13", stats: {merged: 0, opened: 0, commits_outside_prs: 0}}]
+            | .weeks += [{file: "cache/prs/2026-W34.json", week: "2026-W34", stats: null, prs: []}]' "$sources" \
+      | jq -L lib -r -f lib/web/60-activity.jq | jq -r '[([.days.list[].date] | join(",")), ([.list[] | .week + ":" + (.stats != null | tostring)] | join(","))] | join(" ")')" \
+  "2026-08-12 2026-W34:false,2026-W33:true"
+check "activity: with only a coupling reading the weeks and days say which command produces them" \
+  "$(jq -c '{map: {coupling: .map.coupling}}' "$sources" | jq -L lib -r -f lib/web/60-activity.jq | jq -r '[.weeks.missing, .days.missing, (.coupling.pairs | length)] | join(" ")')" \
+  "orgami pull orgami daily 4"
+check "activity: the view draws with no clock and no random (rule 7)" \
+  "$(grep -cE 'Date\.now|Math\.random|new Date\(\)' lib/web/60-activity.js || true)" "0"
 rm -f "$sources"
 
 # The live view (lib/web/50-live.*): deployed vs configured, and the DNS
@@ -201,6 +242,8 @@ check "with no files at all the page still renders" \
   "$(jq -r '.map.missing' <<<"$empty_data")" "orgami scan"
 check "and a view's payload is still an object" \
   "$(jq -r '.views | type' <<<"$empty_data")" "object"
+check "activity: with no cache at all the view names the command that fills it" \
+  "$(jq -r '.views.activity.missing' <<<"$empty_data")" "orgami pull"
 
 # A flag nobody asked for is orgami's error, and stdout stays the path only.
 DIR="$scratch/acme"
