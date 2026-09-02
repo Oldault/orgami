@@ -102,7 +102,7 @@ the directory is ignored by the payload.
 
 ## Adding a view
 
-Three files, no shared edits:
+Three files and one line, no other shared edits:
 
 1. **`lib/web/NN-<id>.jq`** — a jq program. Its input `.` is the sources
    object below, and it has `$dir`, `$company` and `$org`. It emits exactly one
@@ -121,6 +121,10 @@ Three files, no shared edits:
    `</` in a string — the renderer refuses a file that would close its own
    `<script>` tag.
 3. **`lib/web/NN-<id>.css`** — optional, scoped under `[data-view="<id>"]`.
+4. **`WEB_VIEWS` in `script/check`** — one line, the `NN-<id>` stem, in
+   order. `script/check --views` holds the list to what is on disk and to what
+   the web test asserts on, and fails a branch that loses a view main has while
+   adding one; a view is removed on its own, list and checks with it.
 
 Then extend `test/fixtures/company/` if the view needs a file the fixture
 lacks, and add assertions for the view to `test/web_render_test.sh`. Do not
