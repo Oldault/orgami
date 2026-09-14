@@ -3,16 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#f7f5f1" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#26231f" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
 <title>orgami — a map of your GitHub organization you can check</title>
-<meta name="description" content="orgami maps every repository in your GitHub organization — what each one is, how to run it, what it talks to, where it deploys — digests what the team shipped today and this week, keeps the things you only learn once, and hands all of it to your coding agent at session start. Bash, gh, jq. No daemon, no database, no web app.">
+<meta name="description" content="orgami maps every repository in your GitHub organization: what each one is, how to run it, what it talks to, where it deploys. It digests what the team shipped today and this week, keeps the things you only learn once, and hands all of it to your coding agent at session start. Bash, gh, jq. No daemon, no database, nothing hosted.">
 <meta property="og:type" content="website">
 <meta property="og:title" content="orgami — a map of your GitHub organization you can check">
 <meta property="og:description" content="Every edge carries the file:line it came from. Daily and weekly digests where jq computes the numbers. One memory for the team, handed to your coding agent at session start.">
 <meta property="og:url" content="https://orgami.dev/">
 <link rel="canonical" href="https://orgami.dev/">
-<meta property="og:image" content="https://raw.githubusercontent.com/achevalier-dev/orgami/main/docs/demo.gif">
+<link rel="icon" type="image/svg+xml" href="brand/favicon.svg">
+<link rel="apple-touch-icon" href="brand/logo.png">
+<meta property="og:image:alt" content="orgami folded elephant logo">
+<meta property="og:image" content="https://raw.githubusercontent.com/Oldault/orgami/main/docs/brand/logo.png">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -20,38 +23,51 @@
 <style>
 /* Crease — orgami landing tokens.
    Light on bare :root; dark under the guarded media query AND under [data-theme="dark"] so an explicit toggle wins both ways.
+   The ground is white or GitHub black. Green is an accent (GitHub's contribution-graph greens) and the hero grid, never a surface of its own.
    Every colour and font in this file goes through a token. No inline oklch/hex outside this block. */
 /* Hallmark · pre-emit critique: P5 H4 E4 S5 R4 V5 · macrostructure: Workbench (folded) · theme: Crease · nav: N1a · footer: Ft2 · contrast: pass (40–41) · slop: pass (42–45) · mobile: pass (34, 49, 50–57) */
 :root {
   color-scheme: light;
 
-  /* the sheet */
-  --paper:     oklch(97% 0.011 82);   /* page ground: oat, lighter and less yellow than the cream default */
-  --paper-2:   oklch(93.5% 0.014 82); /* a second sheet laid on the first: tiles, run card, tab strip */
-  --crease:    oklch(85% 0.018 82);   /* hairlines, crease lines, borders */
+  /* the sheet: GitHub light */
+  --paper:     #ffffff;   /* page ground */
+  --paper-2:   #f6f8fa;   /* a second sheet laid on the first: tiles, run card, tab strip */
+  --crease:    #d0d7de;   /* hairlines, crease lines, borders */
 
   /* the ink */
-  --ink:       oklch(24% 0.02 62);    /* headings, body. warm charcoal, never #000 */
-  --ink-2:     oklch(45% 0.018 62);   /* muted: captions, inferred evidence, comments (≈5:1 on paper) */
+  --ink:       #1f2328;   /* headings, body */
+  --ink-2:     #59636e;   /* muted: captions, inferred evidence, comments */
 
-  /* the reverse side — the one chromatic colour */
-  --fold:      oklch(46% 0.11 196);   /* deep verdigris. copy square, links, focus ring, tile A, turned corners */
-  --fold-deep: oklch(27% 0.05 200);   /* the paper turned fully over: the #agents band and the closing sheet */
-  --fold-tint: oklch(91% 0.045 196);  /* tile C, copied-state background */
-  --fold-lit:  oklch(74% 0.10 196);   /* light teal used ONLY on dark surfaces ($ prompt, section words, cursor) — same value in both modes */
-  --on-fold:   oklch(97% 0.011 82);   /* text on --fold / --fold-deep in light mode (= paper) */
-  --on-dark:   oklch(93% 0.012 82);   /* text on --fold-deep and --term in BOTH modes */
-  --on-dark-2: oklch(72% 0.014 76);   /* muted text on dark surfaces in BOTH modes */
+  /* the reverse side — the one chromatic colour, GitHub's contribution greens. Accent only: never a page or section ground */
+  --fold:      #1a7f37;   /* copy square, links, focus ring, tile A, turned corners */
+  --fold-deep: #0d1117;   /* the paper turned fully over: the #agents band and the closing sheet are black */
+  --fold-tint: #dafbe1;   /* tile C, copied-state background */
+  --fold-lit:  #3fb950;   /* green used ONLY on dark surfaces ($ prompt, section words, cursor) */
+  --on-fold:   #ffffff;   /* text on --fold */
+  --on-dark:   #e6edf3;   /* text on --fold-deep and --term in BOTH modes */
+  --on-dark-2: #8b949e;   /* muted text on dark surfaces in BOTH modes */
   --ear-fold:  color-mix(in oklch, var(--fold), var(--ink) 28%);        /* the corner turned on a --fold sheet */
-  --ear-deep:  var(--fold);                                             /* the corner turned on a --fold-deep sheet */
+  --ear-deep:  var(--fold-lit);                                         /* the corner turned on a --fold-deep sheet */
   --ear-paper: var(--fold);                                             /* the corner turned on a paper-2 sheet */
-  --copied:    color-mix(in oklch, var(--fold), var(--paper) 55%);      /* button background while "copied" */
+  --copied:    var(--fold-tint);                                        /* button background while "copied" */
   --fold-hover: color-mix(in oklch, var(--fold), var(--ink) 14%);       /* copy square under the pointer */
-  --fold-press: color-mix(in oklch, var(--fold), var(--ink) 28%);       /* copy square while pressed (= --ear-fold in light) */
-  --deep-bar:   var(--paper);   /* the install bar on the closing sheet: paper in light, the terminal ground in dark */
-  --deep-bar-ink: var(--ink);
-  --deep-prompt:  var(--fold);
-  --deep-bar-edge: transparent;  /* hairline on that bar; only needed in dark, where it sits on --term */
+  --fold-press: color-mix(in oklch, var(--fold), var(--ink) 28%);       /* copy square while pressed */
+  --deep-bar:   var(--term);   /* the install bar on the closing sheet sits on the terminal ground */
+  --deep-bar-ink: var(--on-dark);
+  --deep-prompt:  var(--fold-lit);
+  --deep-bar-edge: color-mix(in oklch, var(--on-dark) 20%, transparent);
+
+  /* the hero ground: the Dither Grid, drawn on a canvas by the script at the foot of the page. In light it is the
+     contribution graph's light ramp; the layers over it lighten toward the page, so it dissolves into white. */
+  --grid-0: #ebedf0;   /* level 0 @ 0%  */
+  --grid-1: #9be9a8;   /* level 1 @ 24% */
+  --grid-2: #216e39;   /* level 4 @ 61% */
+  --grid-3: #40c463;   /* level 2 @ 67% */
+  --grid-backdrop: var(--paper);          /* the 7% gaps between cells */
+  --grid-vignette: rgb(255 255 255 / .8); /* vignette 100, toward the page colour */
+  --scrim: transparent;                   /* no cap needed on the light ramp */
+  --shade: rgb(255 255 255 / .82);        /* under the hero copy, the caption and the install row: what makes the text read */
+  --ground-blend: normal;
 
   /* the machine surface. Sampled from docs/demo-still.png (edge pixels = #1d1c2d). Re-sample if demo.tape's theme changes. */
   --term:      #1d1c2d;
@@ -92,44 +108,50 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --paper:     oklch(19% 0.012 66);
-    --paper-2:   oklch(23.5% 0.014 66);
-    --crease:    oklch(32% 0.014 66);
-    --ink:       oklch(93% 0.012 82);
-    --ink-2:     oklch(70% 0.014 76);
-    --fold:      oklch(74% 0.10 196);   /* light teal: the underside is LIGHTER on dark, elevation by lightness */
-    --fold-deep: oklch(24% 0.06 200);   /* raised from 14.5%: the reverse side must still read against --paper (19%) */
-    --fold-tint: oklch(30% 0.055 196);
-    --on-fold:   oklch(16% 0.02 66);    /* dark ink on the light teal */
+    --paper:     #0d1117;
+    --paper-2:   #161b22;
+    --crease:    #30363d;
+    --ink:       #e6edf3;
+    --ink-2:     #8b949e;
+    --fold:      #3fb950;   /* the underside is LIGHTER on dark: elevation by lightness */
+    --fold-deep: #161b22;   /* the reverse side must still read against --paper */
+    --fold-tint: #0e4429;
+    --fold-lit:  #56d364;
+    --on-fold:   #0d1117;
     --ear-fold:  color-mix(in oklch, var(--fold), var(--paper) 22%);
     --copied:    color-mix(in oklch, var(--fold), var(--paper) 45%);
     --fold-hover: color-mix(in oklch, var(--fold), var(--paper) 14%);
     --fold-press: color-mix(in oklch, var(--fold), var(--paper) 28%);
-    --deep-bar:   var(--term);
-    --deep-bar-ink: var(--on-dark);
-    --deep-prompt:  var(--fold-lit);
-    --deep-bar-edge: color-mix(in oklch, var(--on-dark) 20%, transparent);
+    /* the hero ground on black: the Dither Grid palette as specified (Pine, Moss, Sprout, Fern), multiplied down toward the page */
+    --grid-0: #0e2417; --grid-1: #2e6b3e; --grid-2: #ddf0c8; --grid-3: #78b86b;
+    --grid-vignette: rgb(0 0 0 / .8);
+    --scrim: #b4c8ac;                   /* a light cap on the Sprout cells */
+    --shade: rgb(13 17 23 / .82);
+    --ground-blend: multiply;
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --paper:     oklch(19% 0.012 66);
-  --paper-2:   oklch(23.5% 0.014 66);
-  --crease:    oklch(32% 0.014 66);
-  --ink:       oklch(93% 0.012 82);
-  --ink-2:     oklch(70% 0.014 76);
-  --fold:      oklch(74% 0.10 196);
-  --fold-deep: oklch(24% 0.06 200);   /* raised from 14.5%: the reverse side must still read against --paper (19%) */
-  --fold-tint: oklch(30% 0.055 196);
-  --on-fold:   oklch(16% 0.02 66);    /* dark ink on the light teal */
+  --paper:     #0d1117;
+  --paper-2:   #161b22;
+  --crease:    #30363d;
+  --ink:       #e6edf3;
+  --ink-2:     #8b949e;
+  --fold:      #3fb950;   /* the underside is LIGHTER on dark: elevation by lightness */
+  --fold-deep: #161b22;   /* the reverse side must still read against --paper */
+  --fold-tint: #0e4429;
+  --fold-lit:  #56d364;
+  --on-fold:   #0d1117;
   --ear-fold:  color-mix(in oklch, var(--fold), var(--paper) 22%);
   --copied:    color-mix(in oklch, var(--fold), var(--paper) 45%);
   --fold-hover: color-mix(in oklch, var(--fold), var(--paper) 14%);
   --fold-press: color-mix(in oklch, var(--fold), var(--paper) 28%);
-  --deep-bar:   var(--term);
-  --deep-bar-ink: var(--on-dark);
-  --deep-prompt:  var(--fold-lit);
-  --deep-bar-edge: color-mix(in oklch, var(--on-dark) 20%, transparent);
+  /* the hero ground on black: the Dither Grid palette as specified (Pine, Moss, Sprout, Fern), multiplied down toward the page */
+  --grid-0: #0e2417; --grid-1: #2e6b3e; --grid-2: #ddf0c8; --grid-3: #78b86b;
+  --grid-vignette: rgb(0 0 0 / .8);
+  --scrim: #b4c8ac;                   /* a light cap on the Sprout cells */
+  --shade: rgb(13 17 23 / .82);
+  --ground-blend: multiply;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -164,31 +186,34 @@ button { font: inherit; color: inherit; }
   font: var(--fs-0) var(--font-mono); padding: .5em .8em; color: var(--ink); text-decoration: none; }
 .skip:focus-visible { top: var(--s-3); }
 
-/* ---------- the mark: a paper square whose lower-right corner turns over ---------- */
-.mark { position: relative; display: inline-block; width: 48px; aspect-ratio: 1; border-radius: 4px; overflow: hidden;
-  background: var(--paper-2); box-shadow: inset 0 0 0 1px var(--crease); vertical-align: middle; }
-.mark--hero { width: 48px; }
-.top .mark { width: 20px; border-radius: 2px; }
-.mark--close { width: 220px; border-radius: 12px; }
-.mark svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.mark .face { fill: none; stroke: none; }
-.mark .grid rect { fill: var(--ink); opacity: .28; }
-.mark .mountain { stroke: var(--ink-2); stroke-width: 1; vector-effect: non-scaling-stroke; }
-.mark .valley { stroke: var(--ink-2); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
-.mark__flap { position: absolute; inset: 0; background: var(--fold);
-  clip-path: polygon(100% 0, 100% 100%, 0 100%); }            /* END STATE: lower-right triangle is teal */
-@keyframes fold { from { clip-path: polygon(100% 0, 100% 0, 0 100%); } to { clip-path: polygon(100% 0, 100% 100%, 0 100%); } }
-@media (prefers-reduced-motion: no-preference) {
-  .mark--hero .mark__flap { animation: fold var(--dur-fold) var(--ease-out) 250ms both; }
-  .mark--close.will-fold .mark__flap { clip-path: polygon(100% 0, 100% 0, 0 100%); }
-  .mark--close.is-folding .mark__flap { animation: fold var(--dur-fold) var(--ease-out) both; }
+/* The supplied elephant artwork stays intact; invert it on dark surfaces. */
+.mark { display: inline-block; width: 56px; height: 56px; object-fit: contain; vertical-align: middle; flex-shrink: 0; }
+.top .mark { width: 32px; height: 32px; }
+.mark--close { width: 220px; height: 220px; filter: brightness(0) invert(1); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .mark { filter: brightness(0) invert(1); }
 }
+:root[data-theme="dark"] .mark { filter: brightness(0) invert(1); }
 
-/* ---------- sheets and the dog-ear (the only gradient on the page) ---------- */
+/* ---------- the ground: a Bayer-dithered cell grid on a canvas behind the hero only, fading into the paper ---------- */
+.ground { position: absolute; top: 0; left: 0; right: 0; height: max(100vh, 54rem); z-index: -1; isolation: isolate; pointer-events: none; background: var(--paper);
+  mask-image: linear-gradient(to bottom, #000 62%, transparent); -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent); }
+.ground canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.ground::after { content: ""; position: absolute; inset: 0; z-index: 1; mix-blend-mode: overlay; opacity: .5;  /* grain 100 */
+  background: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>") 0 0 / 120px 120px; }
+.ground::before { content: ""; position: absolute; inset: 0; z-index: 2; mix-blend-mode: var(--ground-blend);  /* vignette 100, the shade under the copy column, then the scrim */
+  background: radial-gradient(circle at 50% 50%, transparent 52%, var(--grid-vignette) 100%),
+    linear-gradient(to bottom, var(--shade) 0, var(--shade) 64px, transparent 200px),   /* the header row sits on paper, whatever the grid does under it */
+    linear-gradient(to right, var(--shade) 0, var(--shade) 46%, transparent 68%),      /* solid to the video's left edge, so the whole copy column reads */
+    linear-gradient(to bottom, transparent 300px, var(--shade) 440px), var(--scrim); }        /* the recording's caption, below the video, sits on paper at every viewport height */
+@media print { .ground { display: none; } }
+
+/* ---------- sheets and the dog-ear ---------- */
 .sheet { position: relative; background: var(--paper-2); border: 1px solid var(--crease); border-radius: var(--r-2) 0 var(--r-2) var(--r-2);
-  --ear-size: var(--ear); --ear-color: var(--ear-paper); }
+  --ear-size: var(--ear); --ear-color: var(--ear-paper);
+  clip-path: polygon(0 0, calc(100% - var(--ear-size)) 0, 100% var(--ear-size), 100% 100%, 0 100%); }  /* the corner is cut, so the ground shows through it */
 .sheet::before { content: ""; position: absolute; top: -1px; right: -1px; width: var(--ear-size); height: var(--ear-size);
-  background: linear-gradient(225deg, var(--paper) 0 50%, var(--ear-color) 50% 100%); border-bottom-left-radius: 4px; }
+  background: linear-gradient(225deg, transparent 0 50%, var(--ear-color) 50% 100%); border-bottom-left-radius: 4px; }
 .sheet--fold { background: var(--fold); color: var(--on-fold); border-color: transparent; --ear-color: var(--ear-fold); }
 .sheet--tint { background: var(--fold-tint); color: var(--ink); border-color: transparent; }
 .sheet--deep { background: var(--fold-deep); color: var(--on-dark); border-color: transparent; --ear-size: var(--ear-lg); --ear-color: var(--ear-deep); }
@@ -199,7 +224,7 @@ button { font: inherit; color: inherit; }
 .bar { scrollbar-width: none; }
 .bar::-webkit-scrollbar { display: none; }
 .bar { flex: 1; min-width: 0; margin: 0; background: var(--term); color: var(--on-dark); border-radius: var(--r-1); padding: .8rem 1rem;
-  white-space: nowrap; overflow-x: auto; line-height: 1.4; }
+  white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.4; }
 [data-scrolls] { mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent);
   -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 24px), transparent); }
 .bar code { font-size: inherit; }
@@ -213,14 +238,17 @@ button { font: inherit; color: inherit; }
 .top { height: 64px; display: flex; justify-content: space-between; align-items: center; }
 .brand { display: inline-flex; align-items: center; gap: var(--s-3); text-decoration-color: transparent; font: 600 1.05rem/1 var(--font-display); letter-spacing: -0.01em; }
 .brand:hover, .brand:focus-visible { text-decoration-color: var(--fold); }
+.ver { font: 500 var(--fs-0)/1 var(--font-mono); color: var(--ink-2); border: 1px solid var(--crease); border-radius: var(--r-1); padding: .3rem .4rem; margin-left: var(--s-1); }
 .top nav { display: flex; gap: var(--s-5); }
 .top nav a { font: 500 var(--fs-1)/1 var(--font-body); white-space: nowrap; padding-block: .75rem; text-decoration-color: transparent; }
 .top nav a:hover, .top nav a:focus-visible { text-decoration-color: var(--fold); }
 
 /* ---------- hero ---------- */
-#top { padding-block: 2rem 5rem; overflow: visible; display: grid; grid-template-columns: 5fr 7fr; gap: var(--s-7); align-items: start; }
+#top { padding-block: 2rem 5rem; overflow: visible; display: grid; grid-template-columns: 5fr 7fr; gap: var(--s-7); align-items: center; }  /* the recording sits on the copy column's vertical centre */
 .hero__copy { min-width: 0; }
 .mark--hero { margin-bottom: var(--s-5); }
+.eyebrow { display: flex; flex-wrap: wrap; gap: var(--s-2) var(--s-4); font: 500 var(--fs-0)/1 var(--font-mono); color: var(--ink-2); margin-bottom: var(--s-4); letter-spacing: .01em; }
+.eyebrow span + span::before { content: "/"; color: var(--crease); margin-right: var(--s-4); }
 .lede { font-size: var(--fs-4); line-height: 1.35; max-width: 48ch; margin-top: var(--s-5); }
 .sub { color: var(--ink-2); margin-top: var(--s-3); }
 .after { font-size: var(--fs-0); color: var(--ink-2); margin-top: var(--s-4); }
@@ -229,14 +257,14 @@ button { font: inherit; color: inherit; }
 .rec { margin: 0; min-width: 0; }
 .rec__frame { position: relative; padding: 0 20px 20px 0; }
 .rec__sheet { position: absolute; top: 20px; left: 20px; right: -20px; bottom: 0; z-index: 0; background: var(--fold); border-radius: var(--r-2) 0 var(--r-2) var(--r-2); }
-.rec picture { position: relative; z-index: 1; display: block; width: 100%; max-width: 1200px; }
-.rec img { border-radius: var(--r-2); border: 1px solid var(--crease); display: block; width: 100%; height: auto; background: var(--term); }
+.rec video { position: relative; z-index: 1; display: block; width: 100%; max-width: 1200px; height: auto; aspect-ratio: 1200 / 720;
+  border-radius: var(--r-2); border: 1px solid var(--crease); background: var(--term) url(demo-still.png) center / cover no-repeat; }
 .pause { flex: none; min-height: 44px; padding: 0 .8em; background: var(--term); color: var(--on-dark);
   border: 1px solid var(--on-dark-2); border-radius: var(--r-1); font: 500 var(--fs-0) var(--font-mono); cursor: pointer;
   transition: border-color var(--dur-state) var(--ease-out); }
 .pause:hover { border-color: var(--on-dark); }
 .pause:active { color: var(--fold-lit); }
-.rec figcaption { font-size: var(--fs-0); color: var(--ink-2); margin-top: var(--s-3); max-width: none; display: flex; gap: var(--s-3); align-items: flex-start; }
+.rec figcaption { font-size: var(--fs-0); color: var(--ink); margin-top: var(--s-3); max-width: none; display: flex; gap: var(--s-3); align-items: flex-start; }
 .rec figcaption p { margin: 0; max-width: none; padding-block: .35rem; }
 .rec figcaption code { font-size: inherit; }
 
@@ -270,9 +298,18 @@ button { font: inherit; color: inherit; }
 
 /* ---------- #who: pure type ---------- */
 #who { padding-block: 8rem 8rem; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); }
-#who > div { grid-column: 3 / 12; }
+#who > div { grid-column: 3 / 11; }
 .statement { font-family: var(--font-display); font-weight: 500; font-variation-settings: "opsz" 96; font-size: var(--fs-6); line-height: 1.15;
   letter-spacing: -0.015em; max-width: 32ch; color: var(--ink); margin-top: var(--s-5); text-wrap: pretty; }
+.who__sub { margin-top: var(--s-6); color: var(--ink-2); max-width: 56ch; }
+.cmds { margin: var(--s-6) 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-3) var(--s-7); border-top: 1px solid var(--crease); padding-top: var(--s-5); }
+.cmds > div { display: grid; grid-template-columns: 9.5rem 1fr; gap: var(--s-3); align-items: baseline; font-size: var(--fs-1); }
+.cmds dt code { font-size: inherit; color: var(--ink); }
+.cmds dt code::before { content: "orgami "; color: var(--ink-2); white-space: nowrap; }
+.cmds dt { white-space: nowrap; }
+.cmds dd { margin: 0; color: var(--ink-2); }
+.bento h3 code { font-size: .9em; color: var(--fold); font-weight: 500; }
+.tile-a h3 code { color: inherit; }
 
 /* ---------- #agents: the dark band ---------- */
 #agents { margin-inline: calc(-1 * var(--gutter)); padding-inline: var(--gutter); padding-block: 6rem; background: var(--fold-deep); color: var(--on-dark); }
@@ -305,9 +342,9 @@ h2 + p { margin-top: var(--s-5); }
 .run { margin: 0; background: var(--paper-2); border: 1px solid var(--crease); border-radius: var(--r-2); overflow: hidden; }
 .run-head { background: var(--paper); border-bottom: 1px solid var(--crease); height: 32px; display: flex; align-items: center; padding-inline: var(--s-4);
   font: 500 var(--fs-0) var(--font-body); color: var(--ink-2); }
-[data-state=idle] .run-head::before { content: "Run: orgami query thruster --json"; }
+[data-state=idle] .run-head::before { content: "Example: what orgami query --json prints for one repo"; }
 [data-state=running] .run-head::before { content: "Running…"; }
-[data-state=output] .run-head::before { content: "Ran: orgami query thruster --json"; }
+[data-state=output] .run-head::before { content: "Example: what orgami query --json prints for one repo"; }
 .run pre { margin: 0; padding: var(--s-4) var(--s-5); background: var(--term); color: var(--on-dark); overflow-x: auto; line-height: var(--lh-mono); white-space: pre; }
 .run b { font-weight: 500; color: var(--fold-lit); }
 .ev { color: var(--fold-lit); }
@@ -360,11 +397,12 @@ h2 + p { margin-top: var(--s-5); }
 
 /* ---------- mobile collapse ---------- */
 @media (max-width: 960px) {
+  .ground::before { background: radial-gradient(circle at 50% 50%, transparent 52%, var(--grid-vignette) 100%), linear-gradient(var(--shade), var(--shade)), var(--scrim); }  /* one column: the copy spans the width, so the shade does too */
   #top, #agents .wrap, #check, #join, #cost, .close { grid-template-columns: minmax(0, 1fr); }
   .lede { font-size: var(--fs-3); }
   #who > div { grid-column: 1 / -1; }
   .close { padding: var(--s-6); }
-  .mark--close { width: 120px; }
+  .mark--close { width: 120px; height: 120px; }
   .clients { grid-template-columns: 1fr; row-gap: var(--s-1); }
   .clients dd { margin-bottom: var(--s-3); }
   .typed { font-size: var(--fs-0); }
@@ -373,11 +411,13 @@ h2 + p { margin-top: var(--s-5); }
 }
 @media (max-width: 640px) {
   .top { height: 56px; }
+  .ground { height: 21rem; mask-image: linear-gradient(to bottom, #000 35%, transparent); -webkit-mask-image: linear-gradient(to bottom, #000 35%, transparent); }
   .bento .sheet, .tile-a, .tile-b, .tile-c { grid-column: 1 / -1; }
   .bento .sheet { padding: var(--s-5); }
   .close { padding: var(--s-5); }
-  .mark--hero { width: 40px; }
+  .mark--hero { width: 40px; height: 40px; }
   h1 { font-size: 2.5rem; }
+  .cmds { grid-template-columns: minmax(0, 1fr); }
   .statement { font-size: 1.75rem; }
   .rec__frame { padding: 0 12px 12px 0; }
   .rec__sheet { top: 12px; left: 12px; right: -12px; --ear-size: 32px; }
@@ -393,7 +433,6 @@ h2 + p { margin-top: var(--s-5); }
 /* ---------- reduced motion ---------- */
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
-  .mark__flap { animation: none; }
   .ln.cur::after { animation: none; }
   .out { transition: none; }
   [role=tab], summary::after, a, .copy { transition: none; }
@@ -401,25 +440,19 @@ h2 + p { margin-top: var(--s-5); }
 </style>
 </head>
 <body>
+<div class="ground" aria-hidden="true"><canvas id="ground"></canvas></div>
 <a class="skip" href="#main">Skip to content</a>
 
 <!-- header: three text links, not sticky, no border. The nav mark is the end state, never animated. -->
 <header class="top wrap">
   <a href="#top" class="brand">
-    <span class="mark" aria-hidden="true">
-      <span class="mark__flap"></span>
-      <svg viewBox="0 0 96 96">
-        <rect class="face" x="1" y="1" width="94" height="94" rx="4"/>
-        <g class="grid"><rect x="18" y="18" width="12" height="12"/><rect x="42" y="18" width="12" height="12"/><rect x="66" y="18" width="12" height="12"/><rect x="18" y="42" width="12" height="12"/><rect x="42" y="42" width="12" height="12"/><rect x="66" y="42" width="12" height="12"/><rect x="18" y="66" width="12" height="12"/><rect x="42" y="66" width="12" height="12"/><rect x="66" y="66" width="12" height="12"/></g>
-        <line class="mountain" x1="1" y1="1" x2="95" y2="95"/>
-        <line class="valley" x1="95" y1="1" x2="1" y2="95"/>
-      </svg>
-    </span>
+    <img class="mark" src="brand/logo.png" width="1280" height="1280" alt="" aria-hidden="true">
     <span translate="no">orgami</span>
+    <span class="ver" translate="no">v1.1.0</span>
   </a>
   <nav aria-label="Primary">
-    <a href="https://github.com/achevalier-dev/orgami/blob/main/docs/map.md">Docs</a>
-    <a href="https://github.com/achevalier-dev/orgami">GitHub</a>
+    <a href="https://github.com/Oldault/orgami/blob/main/docs/map.md">Docs</a>
+    <a href="https://github.com/Oldault/orgami">GitHub</a>
     <a href="#install">Install</a>
   </nav>
 </header>
@@ -429,18 +462,11 @@ h2 + p { margin-top: var(--s-5); }
 <!-- quotes: README 8, 9–12, 17–18, 37, 50, 56, 62–63, 66 -->
 <section id="top" class="wrap">
   <div class="hero__copy">
-    <span class="mark mark--hero" aria-hidden="true">
-      <span class="mark__flap"></span>
-      <svg viewBox="0 0 96 96">
-        <rect class="face" x="1" y="1" width="94" height="94" rx="4"/>
-        <g class="grid"><rect x="18" y="18" width="12" height="12"/><rect x="42" y="18" width="12" height="12"/><rect x="66" y="18" width="12" height="12"/><rect x="18" y="42" width="12" height="12"/><rect x="42" y="42" width="12" height="12"/><rect x="66" y="42" width="12" height="12"/><rect x="18" y="66" width="12" height="12"/><rect x="42" y="66" width="12" height="12"/><rect x="66" y="66" width="12" height="12"/></g>
-        <line class="mountain" x1="1" y1="1" x2="95" y2="95"/>
-        <line class="valley" x1="95" y1="1" x2="1" y2="95"/>
-      </svg>
-    </span>
+    <img class="mark mark--hero" src="brand/logo.png" width="1280" height="1280" alt="" aria-hidden="true">
+    <p class="eyebrow"><span>Open-source CLI</span><span>bash · gh · jq</span><span>MIT</span></p>
     <h1>Ten repos, eight people, nobody writing the docs.</h1>
-    <p class="lede">orgami maps every repository in your GitHub organization — what each one is, how to run it, what it talks to, where it deploys — and hands all of it to your coding agent at session start.</p>
-    <p class="sub cmd">Bash, gh, jq. No daemon, no database, no web app.</p>
+    <p class="lede">orgami maps every repository in your GitHub organization: what each one is, how to run it, what it talks to, where it deploys. Then it hands all of that to your coding agent at session start.</p>
+    <p class="sub cmd">One script on your machine. No daemon, no database, nothing hosted.</p>
 
     <div class="install" id="install-hero">
       <div class="tabs" role="tablist" aria-label="Shell">
@@ -448,7 +474,7 @@ h2 + p { margin-top: var(--s-5); }
         <button type="button" role="tab" id="tab-pwsh" aria-selected="false" aria-controls="install-panel" data-sh="pwsh" tabindex="-1">PowerShell</button>
       </div>
       <div class="install-row" role="tabpanel" id="install-panel" aria-labelledby="tab-bash">
-        <pre class="bar" tabindex="0"><span class="prompt" aria-hidden="true">$</span> <code id="install-line" data-bash="curl -fsSL https://raw.githubusercontent.com/achevalier-dev/orgami/main/bootstrap.sh | bash" data-pwsh="irm https://raw.githubusercontent.com/achevalier-dev/orgami/main/bootstrap.ps1 | iex">curl -fsSL https://raw.githubusercontent.com/achevalier-dev/orgami/main/bootstrap.sh | bash</code></pre>
+        <pre class="bar" tabindex="0"><span class="prompt" aria-hidden="true">$</span> <code id="install-line" data-bash="curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.sh | bash" data-pwsh="irm https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.ps1 | iex">curl -fsSL https://<wbr>raw.githubusercontent.com/<wbr>Oldault/<wbr>orgami/<wbr>main/<wbr>bootstrap.sh | bash</code></pre>
         <button type="button" class="copy" data-copy="install-line" aria-live="polite" aria-label="Copy the install command">
           <svg class="i-copy" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="6" y="6" width="9" height="9" rx="1"/><path d="M12 6V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h2"/></svg>
           <svg class="i-check" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true" hidden><path d="M3.5 9.5l3.5 3.5 7.5-8"/></svg>
@@ -458,18 +484,15 @@ h2 + p { margin-top: var(--s-5); }
       <p class="shell-note" data-bash="macOS, Linux, WSL" data-pwsh="Windows, in PowerShell">macOS, Linux, WSL</p>
     </div>
 
-    <p class="after">Then <code>gh auth login</code> and <code>orgami init</code>. Everyone else runs <code>orgami join</code>. <a href="https://github.com/achevalier-dev/orgami/blob/main/docs/install.md">Install by hand</a></p>
+    <p class="after">Then <code>gh auth login</code> and <code>orgami init</code>. <a href="https://github.com/Oldault/orgami/blob/main/docs/install.md">Install by hand</a></p>
   </div>
 
   <figure class="rec">
     <div class="rec__frame">
     <span class="sheet sheet--fold rec__sheet" aria-hidden="true"></span>
-    <picture>
-      <source id="plate-still" srcset="demo-still.png" media="(prefers-reduced-motion: reduce)">
-      <img src="demo.gif" width="1200" height="720" loading="eager" fetchpriority="high" decoding="async" alt="orgami in a terminal: the context an agent is handed, one node and its evidence, the map, and the week's numbers">
-    </picture>
+    <video id="plate" src="demo.mp4" poster="demo-still.png" width="1200" height="720" autoplay muted loop playsinline preload="auto" aria-label="orgami in a terminal: the context an agent is handed, one node and its evidence, the map, and the week’s numbers"></video>
     </div>
-    <figcaption><button type="button" class="pause" data-pause aria-label="Pause the recording" hidden>pause</button><p>Recorded against a public organization (<a href="https://github.com/honojs">honojs</a>) with <code>vhs docs/demo.tape</code> — every line in it came out of a committed file.</p></figcaption>
+    <figcaption><button type="button" class="pause" data-pause aria-label="Pause the recording" hidden>pause</button><p>Recorded against a public organization (<a href="https://github.com/honojs">honojs</a>) with <code>vhs docs/demo.tape</code>. Every line in it came out of a committed file.</p></figcaption>
   </figure>
 </section>
 
@@ -478,6 +501,21 @@ h2 + p { margin-top: var(--s-5); }
   <div>
     <h2>Built for the team where everyone touches everything.</h2>
     <p class="statement">No architect holding the diagram, no wiki that survived the last three months, and a new hire or a coding agent expected to be useful on day one.</p>
+    <p class="who__sub">orgami installs in under a minute and writes one folder, <code>map/</code>, that you can open, diff and commit. Twelve commands, all of them in <code>orgami help</code>.</p>
+    <dl class="cmds" aria-label="Commands">
+      <div><dt><code>init</code></dt><dd>map your organization</dd></div>
+      <div><dt><code>scan</code></dt><dd>rebuild the map from every repo</dd></div>
+      <div><dt><code>query</code></dt><dd>one node, its edges, its evidence</dd></div>
+      <div><dt><code>context</code></dt><dd>what an agent is handed before it edits</dd></div>
+      <div><dt><code>note</code></dt><dd>record what nobody should rediscover</dd></div>
+      <div><dt><code>daily</code></dt><dd>what the org did today</dd></div>
+      <div><dt><code>report</code></dt><dd>this week’s recap</dd></div>
+      <div><dt><code>playbook</code></dt><dd>the runbook two jobs wrote</dd></div>
+      <div><dt><code>live</code></dt><dd>what is actually deployed</dd></div>
+      <div><dt><code>publish</code></dt><dd>commit map and reports to the docs repo</dd></div>
+      <div><dt><code>schedule</code></dt><dd>run it on a timer</dd></div>
+      <div><dt><code>view</code></dt><dd>the map, the repos, the notes</dd></div>
+    </dl>
   </div>
 </section>
 
@@ -485,20 +523,20 @@ h2 + p { margin-top: var(--s-5); }
 <section id="agents">
   <div class="wrap">
     <div>
-      <h2>Nothing to run. It's already in the session.</h2>
-      <p>Open Claude Code or Cursor in a mapped checkout and the repo's stack, commands, linked repos and notes are already in the session. Outside a mapped repo it prints nothing at all.</p>
+      <h2>Nothing to run. It’s already in the session.</h2>
+      <p>Open Claude Code or Cursor in a mapped checkout and the repo’s stack, commands, linked repos and notes arrive before your first prompt. Outside a mapped repo it prints nothing at all.</p>
       <dl class="clients">
-        <dt>Claude Code</dt><dd>the plugin's session-start hook</dd>
+        <dt>Claude Code</dt><dd>the plugin’s session-start hook</dd>
         <dt>Cursor</dt><dd>its sessionStart hook</dd>
         <dt>MCP clients</dt><dd><code>orgami mcp --config</code> for opencode, codex, windsurf, zed, vscode</dd>
         <dt>Anything else</dt><dd><code>orgami agents</code> writes <code>AGENTS.md</code></dd>
       </dl>
-      <p><code>install.sh</code> links a skill into <code>~/.claude/skills/orgami/</code> that teaches Claude to run <code>orgami context</code> first, cite the evidence line for anything it claims, say when the map is stale rather than trusting it silently, distinguish “not found in committed configuration” from “not connected”, and never run <code>orgami publish</code> on its own.</p>
-      <p><a href="https://github.com/achevalier-dev/orgami/blob/main/docs/agents.md">Read docs/agents.md</a></p>
+      <p><code>install.sh</code> links a skill into <code>~/.claude/skills/orgami/</code> that teaches Claude to run <code>orgami context</code> first, cite the evidence line for anything it claims, say when the map is stale rather than trusting it silently, and never run <code>orgami publish</code> on its own.</p>
+      <p><a href="https://github.com/Oldault/orgami/blob/main/docs/agents.md">Read docs/agents.md</a></p>
     </div>
     <div>
       <p class="cap cmd">what the session-start hook injects, verbatim</p>
-<pre class="typed" tabindex="0" aria-label="The context injected at session start"><span class="ln">orgami — winit (winitapp), map from 2026-08-17</span>
+<pre class="typed" role="group" tabindex="0" aria-label="The context injected at session start"><span class="ln">orgami — winit (winitapp), map from 2026-08-17</span>
 <span class="ln"></span>
 <span class="ln">WinIt-backend — TypeScript, Agenda jobs, Express, Parse SDK, Parse Server</span>
 <span class="ln"></span>
@@ -524,8 +562,8 @@ h2 + p { margin-top: var(--s-5); }
     <h2>Every edge carries the <code>file:line</code> it came from.</h2>
     <p>Nothing in the graph is inferred by a model, and every claim can be opened and checked. A missing edge means “not found in committed configuration”, never “not connected”.</p>
     <ul class="legend">
-      <li><svg width="28" height="8" aria-hidden="true"><line class="mountain" x1="0" y1="4" x2="28" y2="4"/></svg><span>extracted — a line you can open</span></li>
-      <li><svg width="28" height="8" aria-hidden="true"><line class="valley" x1="0" y1="4" x2="28" y2="4"/></svg><span>inferred, printed as <code>~</code> — a match orgami made</span></li>
+      <li><svg width="28" height="8" aria-hidden="true"><line class="mountain" x1="0" y1="4" x2="28" y2="4"/></svg><span>extracted: a line you can open</span></li>
+      <li><svg width="28" height="8" aria-hidden="true"><line class="valley" x1="0" y1="4" x2="28" y2="4"/></svg><span>inferred, printed as <code>~</code>: a match orgami made</span></li>
     </ul>
   </div>
   <figure class="run" data-state="output">
@@ -556,25 +594,25 @@ h2 + p { margin-top: var(--s-5); }
 
 <!-- quotes: README 30–31, 319–320, 323, 28–29, 287, 284, 32–34, 379 -->
 <section id="team" class="wrap">
-  <h2>Three things it does for the team.</h2>
+  <h2>Three commands the team ends up living in.</h2>
   <div class="bento">
     <article class="sheet sheet--fold tile-a">
-      <h3>One memory for the team.</h3>
-      <p>The cause someone found at 2am gets written down once — often without anyone typing it — and everyone's agent reads it. On a team this size that knowledge lives in one or two heads, and leaves with them.</p>
-<pre class="bar" tabindex="0"><span class="prompt" aria-hidden="true">$</span> orgami note "Copying the dashboard config into SSM by hand drops every user's apps[]."</pre>
+      <h3><code>orgami note</code> · one memory for the team.</h3>
+      <p>The cause someone found at 2am gets written down once, often without anyone typing it, and everyone’s agent reads it. On a team this size that knowledge lives in one or two heads, and leaves with them.</p>
+<pre class="bar" tabindex="0"><span class="prompt" aria-hidden="true">$</span> orgami note "Copying the dashboard config into SSM by hand drops every user’s apps[]."</pre>
     </article>
     <article class="sheet tile-b">
-      <h3>Digests you can trust the numbers in.</h3>
+      <h3><code>orgami daily</code> · digests you can trust the numbers in.</h3>
       <p><code>jq</code> computes every figure; Claude only writes the prose, and is told the numbers rather than asked to count. A quiet day produces no file.</p>
 <pre class="bar" tabindex="0"><span class="prompt" aria-hidden="true">$</span> orgami daily --stats-only   <span class="c"># the numbers, no model call, no cost</span></pre>
     </article>
     <article class="sheet sheet--tint tile-c">
       <div>
-        <h3>Two instances write the playbook.</h3>
-        <p>Two recorded instances of the same job — one more fetcher, one more endpoint — write the playbook for it, so the next one starts from what the last two learned.</p>
+        <h3><code>orgami playbook</code> · two runs of the same job write its runbook.</h3>
+        <p>Once the same kind of job has been recorded twice, one more fetcher or one more endpoint, orgami writes the playbook for it. The next run starts from what the last two learned.</p>
       </div>
       <div>
-<pre class="bar" tabindex="0"><span class="prompt" aria-hidden="true">$</span> orgami playbook scraphome --topic broken-fetcher</pre>
+<pre class="bar" tabindex="0"><span class="prompt" aria-hidden="true">$</span> orgami playbook --topic broken-fetcher</pre>
       </div>
     </article>
   </div>
@@ -589,35 +627,27 @@ h2 + p { margin-top: var(--s-5); }
 <pre class="bar" tabindex="0"><span class="prompt" aria-hidden="true">$</span> gh auth login
 <span class="prompt" aria-hidden="true">$</span> orgami init      <span class="c"># map your organization</span>
 <span class="prompt" aria-hidden="true">$</span> orgami join      <span class="c"># everyone else: no scan, no clones</span></pre>
-    <p><code>orgami weekly</code> runs the whole sequence; <code>orgami schedule</code> puts it on a systemd user timer, a launchd agent, or a cron line.</p>
+    <p>From then on <code>orgami weekly</code> runs the whole cycle, scan to publish, in one command. <code>orgami schedule</code> puts it on a systemd user timer, a launchd agent, or a cron line.</p>
   </div>
 </section>
 
 <!-- quotes: README 433–436; FAQ 1: README 77–80, 95, 354–356; FAQ 2: README 303–310, 433–435; FAQ 3: README 106–107, 78–80, 141–143 -->
 <section id="cost" class="wrap">
   <div>
-    <h2>Two Claude calls a week.</h2>
-    <p>The recap and the decision mining, plus one short one per weekday morning if the daily digest is on. One more if you use <code>orgami doc --narrate</code>. Everything else — the scan, the map, <code>orgami live</code>, every <code>--stats-only</code> run — is <code>gh</code>, <code>git</code>, <code>jq</code> and <code>grep</code>, and costs nothing at all.</p>
+    <h2>Two scheduled Claude calls a week.</h2>
+    <p>The weekly recap and the decision mining, plus one short call per weekday morning if the daily digest is on. A few more happen only when you ask for them: <code>orgami doc --narrate</code>, <code>orgami playbook</code>, and the note a session drafts on its way out. The scan, the map, <code>orgami live</code> and every <code>--stats-only</code> run are <code>gh</code>, <code>git</code>, <code>jq</code> and <code>grep</code>. They cost nothing.</p>
   </div>
   <div class="faq">
-    <details><summary>Where does it write, and with what?</summary><div class="answer"><p><code>orgami init</code> picks the organization from the ones your <code>gh</code> token can see, then asks where the reports should be committed — an existing repo in the org, a new one it creates for you, a git URL you type, or nowhere at all. <code>orgami publish</code> commits both into the docs repo. Notes are screened for credentials before they are written and again before anything is pushed, and they can require a pull request to reach the team.</p></div></details>
-    <details><summary>What does it send to a model?</summary><div class="answer"><p><code>jq</code> computes every number — PR counts, median diff size, median hours to merge, how many merged with no review at all, who reviews whom. Claude writes the prose, and is told the numbers rather than asked to count. Two Claude calls a week — the recap and the decision mining — plus one short one per weekday morning if the daily digest is on. One more if you use <code>orgami doc --narrate</code>. <code>orgami report --stats-only</code> shows just the numbers, and costs nothing.</p></div></details>
-    <details><summary>Can I run it against a private organization?</summary><div class="answer"><p><code>orgami scan</code> shallow-clones every non-archived, non-fork repo in the org and pattern-matches what is committed. The reports go to an existing repo in the org, a new one it creates for you (private or public), a git URL you type, or nowhere at all. <code>map/graph.html</code> is one self-contained file with no CDN and no network, so it opens from a <code>file://</code> URL and inside a private repo.</p></div></details>
+    <details><summary>Where does it write, and with what?</summary><div class="answer"><p><code>orgami init</code> picks the organization from the ones your <code>gh</code> token can see, then asks where the reports should be committed: an existing repo in the org, a new one it creates for you, a git URL you type, or nowhere at all. <code>orgami publish</code> commits the map and the reports into that repo. Notes are screened for credentials before they are written and again before anything is pushed, and they can require a pull request to reach the team.</p></div></details>
+    <details><summary>What does it send to a model?</summary><div class="answer"><p>Numbers, never clones. <code>jq</code> computes every figure first: PR counts, median diff size, median hours to merge, how many merged with no review at all, who reviews whom. Claude gets those figures and the PR titles and writes the prose. The note drafted at session end sends a digest of that session’s transcript, with tokens and keys redacted first.</p></div></details>
+    <details><summary>Can I run it against a private organization?</summary><div class="answer"><p>Yes. <code>orgami scan</code> shallow-clones every non-archived, non-fork repo in the org and pattern-matches what is committed. The scan runs with your own <code>gh</code> token and never sends a clone anywhere. <code>map/graph.html</code> is one self-contained file with no CDN and no network, so it opens from a <code>file://</code> URL and inside a private repo.</p></div></details>
   </div>
 </section>
 
 <!-- quotes: README 40, 444–445 -->
 <section id="install" class="wrap">
   <div class="sheet sheet--deep close">
-    <span class="mark mark--close" aria-hidden="true">
-      <span class="mark__flap"></span>
-      <svg viewBox="0 0 96 96">
-        <rect class="face" x="1" y="1" width="94" height="94" rx="4"/>
-        <g class="grid"><rect x="18" y="18" width="12" height="12"/><rect x="42" y="18" width="12" height="12"/><rect x="66" y="18" width="12" height="12"/><rect x="18" y="42" width="12" height="12"/><rect x="42" y="42" width="12" height="12"/><rect x="66" y="42" width="12" height="12"/><rect x="18" y="66" width="12" height="12"/><rect x="42" y="66" width="12" height="12"/><rect x="66" y="66" width="12" height="12"/></g>
-        <line class="mountain" x1="1" y1="1" x2="95" y2="95"/>
-        <line class="valley" x1="95" y1="1" x2="1" y2="95"/>
-      </svg>
-    </span>
+    <img class="mark mark--close" src="brand/logo.png" width="1280" height="1280" loading="lazy" alt="" aria-hidden="true">
     <div>
       <h2>org + origami.</h2>
       <p class="lede">Folding a flat sheet of repositories into a shape you can see.</p>
@@ -627,7 +657,7 @@ h2 + p { margin-top: var(--s-5); }
           <button type="button" role="tab" id="tab-pwsh-2" aria-selected="false" aria-controls="install-panel-2" data-sh="pwsh" tabindex="-1">PowerShell</button>
         </div>
         <div class="install-row" role="tabpanel" id="install-panel-2" aria-labelledby="tab-bash-2">
-          <pre class="bar" tabindex="0"><span class="prompt" aria-hidden="true">$</span> <code id="install-line-2" data-bash="curl -fsSL https://raw.githubusercontent.com/achevalier-dev/orgami/main/bootstrap.sh | bash" data-pwsh="irm https://raw.githubusercontent.com/achevalier-dev/orgami/main/bootstrap.ps1 | iex">curl -fsSL https://raw.githubusercontent.com/achevalier-dev/orgami/main/bootstrap.sh | bash</code></pre>
+          <pre class="bar" tabindex="0"><span class="prompt" aria-hidden="true">$</span> <code id="install-line-2" data-bash="curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.sh | bash" data-pwsh="irm https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.ps1 | iex">curl -fsSL https://<wbr>raw.githubusercontent.com/<wbr>Oldault/<wbr>orgami/<wbr>main/<wbr>bootstrap.sh | bash</code></pre>
           <button type="button" class="copy" data-copy="install-line-2" aria-live="polite" aria-label="Copy the install command">
             <svg class="i-copy" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="6" y="6" width="9" height="9" rx="1"/><path d="M12 6V4a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h2"/></svg>
             <svg class="i-check" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true" hidden><path d="M3.5 9.5l3.5 3.5 7.5-8"/></svg>
@@ -636,22 +666,99 @@ h2 + p { margin-top: var(--s-5); }
         </div>
         <p class="shell-note" data-bash="macOS, Linux, WSL" data-pwsh="Windows, in PowerShell">macOS, Linux, WSL</p>
       </div>
-      <p>If the scan got your organization's shape wrong, that is the most useful report there is. <a href="https://github.com/achevalier-dev/orgami/issues">Open an issue.</a></p>
+      <p>If the scan got your organization’s shape wrong, that is the most useful report there is. <a href="https://github.com/Oldault/orgami/issues">Open an issue.</a></p>
     </div>
   </div>
   <footer class="foot">
     <span>MIT licensed</span>
-    <span aria-hidden="true">·</span><a href="https://github.com/achevalier-dev/orgami/blob/main/CONTRIBUTING.md">Contributing</a>
-    <span aria-hidden="true">·</span><a href="https://github.com/achevalier-dev/orgami/blob/main/docs/map.md">docs/map.md</a>
-    <span aria-hidden="true">·</span><a href="https://github.com/achevalier-dev/orgami/blob/main/docs/agents.md">docs/agents.md</a>
-    <span aria-hidden="true">·</span><a href="https://github.com/achevalier-dev/orgami/blob/main/docs/layout.md">docs/layout.md</a>
-    <span aria-hidden="true">·</span><a href="https://github.com/achevalier-dev/orgami">github.com/achevalier-dev/orgami</a>
+    <span aria-hidden="true">·</span><a href="https://github.com/Oldault/orgami/blob/main/CONTRIBUTING.md">Contributing</a>
+    <span aria-hidden="true">·</span><a href="https://github.com/Oldault/orgami/blob/main/docs/map.md">docs/map.md</a>
+    <span aria-hidden="true">·</span><a href="https://github.com/Oldault/orgami/blob/main/docs/agents.md">docs/agents.md</a>
+    <span aria-hidden="true">·</span><a href="https://github.com/Oldault/orgami/blob/main/docs/layout.md">docs/layout.md</a>
+    <span aria-hidden="true">·</span><a href="https://github.com/Oldault/orgami">github.com/Oldault/orgami</a>
   </footer>
 </section>
 
 </main>
 
 <script>
+/* the ground: 21st.dev "Dither Grid" (pixel mode). 25 columns of square cells across the width; each cell samples the
+   continuous palette ramp, read along the 62° diagonal, with a Bayer 4×4 ordered-dither offset so neighbours jitter
+   around the ramp instead of banding. Grain and vignette are CSS layers on .ground. Motion: an elapsed-seconds clock t,
+   ph = t * 0.71, amt = 0.60, dir = 1; the ramp slides along the diagonal by sin(ph * 0.9 * dir) * 0.5 * amt and every
+   modulation is exactly 0 at ph = 0, so nothing snaps when the loop starts. Nothing animated is rounded. Under reduced
+   motion, or a hidden tab, it draws one frame at ph = 0 and stops. */
+(function () {
+  var c = document.getElementById('ground');
+  if (!c || !c.getContext) return;
+  var ctx = c.getContext('2d', { alpha: false });
+  var P = { cols: 25, angle: 62, dither: .76, gap: .07, wave: .12, distortion: 28, speed: .71, amt: .60, dir: 1,
+    stops: [0, .24, .61, .67] };  /* Pine, Moss, Sprout, Fern — Sprout sits before Fern on the ramp */
+  var BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+  var pal = [], back = '', W = 0, H = 0, cell = 0, nx = 0, ny = 0;
+  var reduced = matchMedia('(prefers-reduced-motion: reduce)');
+  var raf = 0, t0 = 0;
+
+  function rgb(hex) { var n = parseInt(hex.slice(1), 16); return [n >> 16 & 255, n >> 8 & 255, n & 255]; }
+  function tokens() {
+    var cs = getComputedStyle(document.documentElement);
+    pal = [0, 1, 2, 3].map(function (i) { return rgb(cs.getPropertyValue('--grid-' + i).trim()); });
+    back = cs.getPropertyValue('--grid-backdrop').trim();
+  }
+  function size() {
+    W = c.clientWidth; H = c.clientHeight;
+    var dpr = Math.min(devicePixelRatio || 1, 2);
+    c.width = Math.round(W * dpr); c.height = Math.round(H * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    cell = W / P.cols;                                  /* 25 columns across, whatever the height */
+    nx = P.cols; ny = Math.ceil(H / cell);
+  }
+  /* the continuous ramp: v in [0,1] → an rgb() string, linear between the sorted stops, clamped past the ends */
+  function ramp(v) {
+    var s = P.stops, n = s.length, a, b, f;
+    if (v <= s[0]) return pal[0];
+    if (v >= s[n - 1]) return pal[n - 1];
+    for (var i = 0; i < n - 1; i++) if (v < s[i + 1]) { a = pal[i]; b = pal[i + 1]; f = (v - s[i]) / (s[i + 1] - s[i]); break; }
+    return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+  }
+  function draw(ph) {
+    var spin = ph * P.dir;
+    var slide = Math.sin(ph * .9 * P.dir) * .5 * P.amt;                 /* the sine sweep along the diagonal, 0 at ph = 0 */
+    var drift = (Math.cos(spin * .4) - 1) * .8;                          /* the wave's phase, 0 at ph = 0 */
+    var a = P.angle * Math.PI / 180, ca = Math.cos(a), sa = Math.sin(a);
+    var span = Math.abs(W * ca) + Math.abs(H * sa), perp = Math.abs(W * sa) + Math.abs(H * ca);
+    var k = Math.PI * 2 * (P.distortion / 20), g = cell * P.gap, inner = cell - g;
+    ctx.fillStyle = back; ctx.fillRect(0, 0, W, H);
+    for (var j = 0; j < ny; j++) {
+      for (var i = 0; i < nx; i++) {
+        var x = i * cell, y = j * cell, px = x + cell / 2 - W / 2, py = y + cell / 2 - H / 2;
+        var v = (px * ca + py * sa) / span + .5;
+        var w = (-px * sa + py * ca) / perp;
+        v += Math.sin(w * k + drift) * P.wave * .5 + slide;
+        v += ((BAYER[(i & 3) + ((j & 3) << 2)] + .5) / 16 - .5) * P.dither * .22;   /* ±8% of the ramp at full strength */
+        var col = ramp(v);
+        ctx.fillStyle = 'rgb(' + col[0] + ',' + col[1] + ',' + col[2] + ')';
+        ctx.fillRect(x + g / 2, y + g / 2, inner, inner);
+      }
+    }
+  }
+  function frame(now) {
+    if (!t0) t0 = now;
+    draw((now - t0) / 1000 * P.speed);
+    raf = requestAnimationFrame(frame);
+  }
+  function stop() { if (raf) cancelAnimationFrame(raf); raf = 0; }
+  function start() {
+    stop();
+    if (reduced.matches || document.hidden) { draw(0); return; }
+    t0 = 0; raf = requestAnimationFrame(frame);
+  }
+  tokens(); size(); start();
+  addEventListener('resize', function () { size(); if (!raf) draw(0); });
+  document.addEventListener('visibilitychange', start);
+  if (reduced.addEventListener) reduced.addEventListener('change', start);
+})();
+
 /* copy: every .copy[data-copy=<id>] copies that element's text; the SVG swaps, the $ becomes ✓, the sr text announces */
 document.querySelectorAll('.copy[data-copy]').forEach(function (b) {
   var timer = null;
@@ -682,11 +789,19 @@ document.querySelectorAll('.copy[data-copy]').forEach(function (b) {
 document.querySelectorAll('[role=tablist]').forEach(function (list) {
   var tabs = Array.prototype.slice.call(list.querySelectorAll('[role=tab]'));
   var install = list.closest('.install'), note = install.querySelector('.shell-note');
+  /* a <wbr> after every slash lets the URL wrap at path boundaries; textContent (what copy reads) is unchanged */
+  function setLine(code, text) {
+    code.textContent = '';
+    text.split('/').forEach(function (part, i, all) {
+      code.appendChild(document.createTextNode(part + (i < all.length - 1 ? '/' : '')));
+      if (i < all.length - 1) code.appendChild(document.createElement('wbr'));
+    });
+  }
   function select(tab) {
     tabs.forEach(function (t) { var on = t === tab; t.setAttribute('aria-selected', on); t.tabIndex = on ? 0 : -1; });
     var panel = document.getElementById(tab.getAttribute('aria-controls')), code = panel.querySelector('code[data-bash]'), sh = tab.dataset.sh;
     panel.setAttribute('aria-labelledby', tab.id);
-    code.textContent = code.dataset[sh]; if (note) note.textContent = note.dataset[sh];
+    setLine(code, code.dataset[sh]); if (note) note.textContent = note.dataset[sh];
     dispatchEvent(new Event('resize'));
     tab.focus();
   }
@@ -703,13 +818,14 @@ document.querySelectorAll('[role=tablist]').forEach(function (list) {
   });
 });
 
-/* pause: the recording runs longer than five seconds, so it needs a stop; the still is the paused frame */
+/* pause: the recording runs longer than five seconds, so it needs a stop. The video is the real vhs recording
+   (docs/demo.mp4, encoded from demo.gif); under reduced motion it is held on its first frame and the chip starts as "play". */
 (function () {
-  var b = document.querySelector('[data-pause]'), src = document.getElementById('plate-still');
-  if (!b || !src) return;
+  var b = document.querySelector('[data-pause]'), v = document.getElementById('plate');
+  if (!b || !v) return;
   var paused = matchMedia('(prefers-reduced-motion: reduce)').matches;
   var render = function () {
-    src.media = paused ? 'all' : 'not all';
+    if (paused) { v.pause(); v.removeAttribute('autoplay'); } else { var p = v.play(); if (p && p.catch) p.catch(function () {}); }
     b.textContent = paused ? 'play' : 'pause';
     b.setAttribute('aria-label', paused ? 'Play the recording' : 'Pause the recording');
   };
@@ -718,11 +834,10 @@ document.querySelectorAll('[role=tablist]').forEach(function (list) {
 })();
 
 /* motion: the HTML ships every end state. Only when motion is allowed and IntersectionObserver exists does JS
-   wind things back — the closing mark, the transcript, the run card — and let them arrive on intersection. */
+   wind things back — the transcript, the run card — and let them arrive on intersection. */
 (function () {
   var motion = matchMedia('(prefers-reduced-motion: no-preference)').matches && 'IntersectionObserver' in window;
   var run = document.querySelector('.run');
-  var closeMark = document.querySelector('.mark--close');
   var pre = document.querySelector('#agents .typed');
 
   /* the run card unfolds on intersection, but never while the transcript is typing: it waits its turn.
@@ -743,17 +858,6 @@ document.querySelectorAll('[role=tablist]').forEach(function (list) {
       });
     }, { threshold: .5 });
     io.observe(run);
-  }
-
-  if (closeMark) {
-    closeMark.classList.add('will-fold');
-    var mo = new IntersectionObserver(function (es) {
-      es.forEach(function (e) {
-        if (!e.isIntersecting) return;
-        mo.unobserve(closeMark); closeMark.classList.add('is-folding');
-      });
-    }, { threshold: .6 });
-    mo.observe(closeMark);
   }
 
   if (!pre) { armRun(); return; }
