@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>orgami — mark candidates</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700&display=swap" rel="stylesheet">
+<style>
+/* ---- tokens copied verbatim from docs/index.html :root / dark blocks. Do not retype values by hand
+   again on the next design pass — recopy from index.html so this page never drifts. ---- */
+:root {
+  color-scheme: light;
+  --paper:     oklch(97% 0.011 82);
+  --paper-2:   oklch(93.5% 0.014 82);
+  --crease:    oklch(85% 0.018 82);
+  --ink:       oklch(24% 0.02 62);
+  --ink-2:     oklch(45% 0.018 62);
+  --fold:      oklch(46% 0.11 196);
+  --fold-deep: oklch(27% 0.05 200);
+  --fold-tint: oklch(91% 0.045 196);
+  --fold-lit:  oklch(74% 0.10 196);
+  --on-fold:   oklch(97% 0.011 82);
+  --on-dark:   oklch(93% 0.012 82);
+  --on-dark-2: oklch(72% 0.014 76);
+  --font-display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper:     oklch(19% 0.012 66);
+    --paper-2:   oklch(23.5% 0.014 66);
+    --crease:    oklch(32% 0.014 66);
+    --ink:       oklch(93% 0.012 82);
+    --ink-2:     oklch(70% 0.014 76);
+    --fold:      oklch(74% 0.10 196);
+    --fold-deep: oklch(24% 0.06 200);
+    --fold-tint: oklch(30% 0.055 196);
+    --on-fold:   oklch(16% 0.02 66);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper:     oklch(19% 0.012 66);
+  --paper-2:   oklch(23.5% 0.014 66);
+  --crease:    oklch(32% 0.014 66);
+  --ink:       oklch(93% 0.012 82);
+  --ink-2:     oklch(70% 0.014 76);
+  --fold:      oklch(74% 0.10 196);
+  --fold-deep: oklch(24% 0.06 200);
+  --fold-tint: oklch(30% 0.055 196);
+  --on-fold:   oklch(16% 0.02 66);
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 2.5rem clamp(1rem, 4vw, 3rem) 5rem;
+  background: var(--paper); color: var(--ink);
+  font: 15px/1.5 ui-sans-serif, system-ui, sans-serif;
+}
+h1 { font: 700 clamp(1.5rem, 1rem + 1.5vw, 2.25rem)/1.1 var(--font-display); letter-spacing: -0.02em; margin: 0 0 .35rem; }
+p.lede { color: var(--ink-2); max-width: 60ch; margin: 0 0 2.5rem; }
+h2 { font: 600 1.1rem/1.2 var(--font-display); letter-spacing: -0.01em; margin: 0 0 .15rem; }
+.idea { color: var(--ink-2); font-size: .875rem; max-width: 62ch; margin: 0 0 1.1rem; }
+
+.candidate { border: 1px solid var(--crease); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.75rem; background: var(--paper-2); }
+.candidate--current { border-style: dashed; }
+
+.grounds { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+@media (max-width: 640px) { .grounds { grid-template-columns: 1fr; } }
+
+.ground { border-radius: 8px; padding: 1.25rem 1rem; }
+.ground--light { background: var(--paper); box-shadow: inset 0 0 0 1px var(--crease); color: var(--ink); }
+.ground--dark  { background: var(--fold-deep); color: var(--on-dark); }
+
+.sizes { display: flex; align-items: flex-end; gap: 2rem; flex-wrap: wrap; }
+.size-cell { display: flex; flex-direction: column; align-items: flex-start; gap: .5rem; }
+.size-cell .label { font: 500 .75rem/1 var(--font-mono); opacity: .6; }
+.swatch { display: inline-flex; align-items: center; justify-content: center; border-radius: 4px; overflow: hidden; }
+.swatch img { display: block; }
+
+.wordmark-row { display: flex; align-items: center; gap: .6rem; margin-top: .35rem; }
+.wordmark { font: 700 1.3rem/1 var(--font-display); letter-spacing: -0.01em; }
+
+.legend { display: flex; gap: 1.5rem; font-size: .8rem; color: var(--ink-2); margin: 2.5rem 0 1.5rem; flex-wrap: wrap; }
+.legend span { display: inline-flex; align-items: center; gap: .4rem; }
+.legend svg { flex: none; }
+</style>
+</head>
+<body>
+
+<h1>orgami — mark candidates</h1>
+<p class="lede">C2 plus the original four proposals and the current mark, each at 20 / 48 / 220px, on paper and on the dark (--fold-deep) ground. All keep the crease notation: solid = mountain = extracted, dashed = valley = inferred.</p>
+
+<div class="legend">
+  <span><svg width="20" height="12"><line x1="0" y1="6" x2="20" y2="6" stroke="currentColor" stroke-width="2.5"/></svg> mountain / solid / extracted</span>
+  <span><svg width="20" height="12"><line x1="0" y1="6" x2="20" y2="6" stroke="currentColor" stroke-width="2.5" stroke-dasharray="1.5 4"/></svg> valley / dashed / inferred</span>
+</div>
+
+<!-- Candidate C2 — refinement round, recommended -->
+<section class="candidate">
+  <h2>Mark C2 — quartered sheet, lifted corner <em style="font-style:normal;color:var(--fold)">(recommended)</em></h2>
+  <p class="idea">A refinement of C after the first round showed two problems: C's crease crossing collapsed into a plain "+" at 20px, and node dots on every candidate read as a stats/plot icon rather than paper. C2 removes every node but the centre (the org, where the two creases cross) and lets the four quadrant colour blocks — three paper tones pinwheeling around the centre, the lower-right one teal — carry the read instead. The creases are drawn short, stopping at the seam around the teal quarter, so they can't out-compete the quadrants and flatten into a cross. The teal quarter sits behind a sliver of bare paper on its two inner edges: the "lift," with no drop shadow.</p>
+  <div class="grounds">
+    <div class="ground ground--light"><div class="sizes" id="c2-light"></div></div>
+    <div class="ground ground--dark"><div class="sizes" id="c2-dark"></div></div>
+  </div>
+</section>
+
+<!-- Candidate A -->
+<section class="candidate">
+  <h2>Mark A — crane fold</h2>
+  <p class="idea">A paper-crane head and neck built from two straight facets: the body (large repo) and head (small repo) triangles. The neck crease is the mountain edge joining them; the beak crease is the dashed, inferred continuation. Unmistakably a crane at any size, but the "graph" reading needs the caption to land — it's the most purely origami of the four.</p>
+  <div class="grounds">
+    <div class="ground ground--light"><div class="sizes" id="a-light"></div></div>
+    <div class="ground ground--dark"><div class="sizes" id="a-dark"></div></div>
+  </div>
+</section>
+
+<!-- Candidate B -->
+<section class="candidate">
+  <h2>Mark B — accordion map</h2>
+  <p class="idea">Three panels of a folded paper map, each panel one repo. A node sits atop each panel and a line strings them into a 3-node path — the fold lines double as the path's edges. Reads instantly as "a folded map with parts," which matches the org-map idea directly, though at 20px the three panels compress into a plain striped square.</p>
+  <div class="grounds">
+    <div class="ground ground--light"><div class="sizes" id="b-light"></div></div>
+    <div class="ground ground--dark"><div class="sizes" id="b-dark"></div></div>
+  </div>
+</section>
+
+<!-- Candidate C — recommended -->
+<section class="candidate">
+  <h2>Mark C — triangulated node sheet</h2>
+  <p class="idea">One mountain diagonal and one valley diagonal quarter a square into four triangular repo facets, crossing at a centre "org" node — the two creases ARE the graph's edges, radiating from a hub. This is the most literal fusion of fold-notation and graph of the set, and the only one where removing either reading (fold or graph) breaks the other. Legible as a folded, quartered sheet at 20px; legible as a 4-node star graph at 220px.</p>
+  <div class="grounds">
+    <div class="ground ground--light"><div class="sizes" id="c-light"></div></div>
+    <div class="ground ground--dark"><div class="sizes" id="c-dark"></div></div>
+  </div>
+</section>
+
+<!-- Candidate D -->
+<section class="candidate">
+  <h2>Mark D — waterbomb pinwheel</h2>
+  <p class="idea">The opening of a real origami waterbomb base: four triangular flaps folding toward a centre hub, one caught lifted to show its teal underside. Each flap tip is a repo node, the four spokes are crease-edges — the 4-spoke star is the shape a small org's dependency map most often actually takes. Truest to a real fold sequence, but the most detail to preserve at 20px.</p>
+  <div class="grounds">
+    <div class="ground ground--light"><div class="sizes" id="d-light"></div></div>
+    <div class="ground ground--dark"><div class="sizes" id="d-dark"></div></div>
+  </div>
+</section>
+
+<!-- Current mark, for comparison -->
+<section class="candidate candidate--current">
+  <h2>Current mark — for comparison</h2>
+  <p class="idea">Nine faint squares, one solid and one dashed diagonal crease, a teal flap clipped to the lower-right triangle. Reads as a generic "folded-corner document" icon rather than as origami or as a map of anything in particular.</p>
+  <div class="grounds">
+    <div class="ground ground--light"><div class="sizes" id="cur-light"></div></div>
+    <div class="ground ground--dark"><div class="sizes" id="cur-dark"></div></div>
+  </div>
+</section>
+
+<h2 style="margin-top:2.5rem;">With the wordmark</h2>
+<p class="idea">Mark C2 (recommended) at nav scale, next to "orgami" set in Bricolage Grotesque 700.</p>
+<div class="grounds">
+  <div class="ground ground--light">
+    <div class="wordmark-row"><span class="swatch" style="width:20px;height:20px;color:var(--ink)"><img src="mark-c2.svg" width="20" height="20" alt=""></span><span class="wordmark">orgami</span></div>
+  </div>
+  <div class="ground ground--dark">
+    <div class="wordmark-row"><span class="swatch" style="width:20px;height:20px;color:var(--ink)"><img src="mark-c2.svg" width="20" height="20" alt=""></span><span class="wordmark">orgami</span></div>
+  </div>
+</div>
+
+<script>
+// No interaction — just DOM assembly so each candidate's markup isn't repeated six times by hand.
+const sizes = [20, 48, 220];
+const candidates = [
+  { key: "c2", file: "mark-c2.svg" },
+  { key: "a", file: "mark-a.svg" },
+  { key: "b", file: "mark-b.svg" },
+  { key: "c", file: "mark-c.svg" },
+  { key: "d", file: "mark-d.svg" },
+];
+
+function cell(file, size) {
+  const wrap = document.createElement("div");
+  wrap.className = "size-cell";
+  const label = document.createElement("span");
+  label.className = "label";
+  label.textContent = size + "px";
+  const swatch = document.createElement("span");
+  swatch.className = "swatch";
+  swatch.style.width = size + "px";
+  swatch.style.height = size + "px";
+  const img = document.createElement("img");
+  img.src = file;
+  img.width = size;
+  img.height = size;
+  img.alt = "";
+  swatch.appendChild(img);
+  wrap.appendChild(swatch);
+  wrap.appendChild(label);
+  return wrap;
+}
+
+candidates.forEach(({ key, file }) => {
+  ["light", "dark"].forEach((ground) => {
+    const host = document.getElementById(`${key}-${ground}`);
+    sizes.forEach((s) => host.appendChild(cell(file, s)));
+  });
+});
+
+// current mark: inline the real markup (nine squares + diagonal creases + teal flap), matching
+// docs/index.html's .mark exactly, at the same three sizes, folded end-state (no animation here).
+function currentMark(size) {
+  const wrap = document.createElement("div");
+  wrap.className = "size-cell";
+  const label = document.createElement("span");
+  label.className = "label";
+  label.textContent = size + "px";
+  const box = document.createElement("span");
+  box.style.cssText = `position:relative;display:inline-block;width:${size}px;aspect-ratio:1;border-radius:${size >= 220 ? 12 : size >= 48 ? 4 : 2}px;overflow:hidden;background:var(--paper-2);box-shadow:inset 0 0 0 1px var(--crease);`;
+  box.innerHTML = `
+    <span style="position:absolute;inset:0;background:var(--fold);clip-path:polygon(100% 0, 100% 100%, 0 100%);"></span>
+    <svg viewBox="0 0 96 96" style="position:absolute;inset:0;width:100%;height:100%;display:block;">
+      <rect x="1" y="1" width="94" height="94" rx="4" fill="none" stroke="none"/>
+      <g fill="var(--ink)" opacity=".28"><rect x="18" y="18" width="12" height="12"/><rect x="42" y="18" width="12" height="12"/><rect x="66" y="18" width="12" height="12"/><rect x="18" y="42" width="12" height="12"/><rect x="42" y="42" width="12" height="12"/><rect x="66" y="42" width="12" height="12"/><rect x="18" y="66" width="12" height="12"/><rect x="42" y="66" width="12" height="12"/><rect x="66" y="66" width="12" height="12"/></g>
+      <line x1="1" y1="1" x2="95" y2="95" stroke="var(--ink-2)" stroke-width="1" vector-effect="non-scaling-stroke"/>
+      <line x1="95" y1="1" x2="1" y2="95" stroke="var(--ink-2)" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>
+    </svg>`;
+  wrap.appendChild(box);
+  wrap.appendChild(label);
+  return wrap;
+}
+["light", "dark"].forEach((ground) => {
+  const host = document.getElementById(`cur-${ground}`);
+  sizes.forEach((s) => host.appendChild(currentMark(s)));
+});
+</script>
+</body>
+</html>

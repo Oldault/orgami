@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220" fill="none" role="img" aria-label="orgami mark: four triangular flaps folding toward a centre, one lifted to show its teal underside, joined by crease-edges into a star graph">
+  <!-- Candidate D — Waterbomb pinwheel: the classic origami waterbomb-base opening, four triangular
+       flaps folding toward the centre, drawn mid-fold like a pinwheel. Genuinely an origami base
+       pattern, not an invented shape. One flap is caught lifted, showing the teal underside — the
+       fold-in-progress the animation would finish. Each flap tip is a repo node; the four creases
+       running tip-to-centre are the edges of a 4-spoke star graph, the commonest shape a small org's
+       dependency map actually takes (one hub, several repos hanging off it). -->
+  <rect x="1" y="1" width="218" height="218" rx="20" fill="var(--paper-2, #eee7da)" stroke="currentColor" stroke-opacity=".14"/>
+
+  <path d="M110 110 L110 26 L172 68 Z" fill="currentColor" fill-opacity=".07"/>
+  <path d="M110 110 L172 68 L194 130 Z" fill="currentColor" fill-opacity=".05"/>
+  <path d="M110 110 L194 130 L138 194 Z" fill="currentColor" fill-opacity=".07"/>
+  <!-- lifted flap: teal underside showing -->
+  <path d="M110 110 L138 194 L48 172 Z" fill="var(--fold, #2f7a72)" fill-opacity=".9"/>
+  <path d="M110 110 L48 172 L26 110 Z" fill="currentColor" fill-opacity=".05"/>
+  <path d="M110 110 L26 110 L110 26 Z" fill="currentColor" fill-opacity=".07"/>
+
+  <!-- spokes: solid mountain creases (extracted edges) -->
+  <path d="M110 110 L172 68 M110 110 L194 130 M110 110 L26 110 M110 110 L110 26" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- one spoke into the lifted flap: valley (inferred) -->
+  <path d="M110 110 L48 172" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 10"/>
+
+  <!-- hub node + tip nodes -->
+  <circle cx="110" cy="110" r="8" fill="currentColor"/>
+  <circle cx="172" cy="68" r="5.5" fill="currentColor"/>
+  <circle cx="194" cy="130" r="5.5" fill="currentColor"/>
+  <circle cx="26" cy="110" r="5.5" fill="currentColor"/>
+  <circle cx="110" cy="26" r="5.5" fill="currentColor"/>
+  <circle cx="48" cy="172" r="6.5" fill="var(--on-fold, #f4efe4)" stroke="currentColor" stroke-width="2"/>
+</svg>

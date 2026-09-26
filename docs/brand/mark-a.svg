@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220" fill="none" role="img" aria-label="orgami mark: a folded crane head, its neck crease reading as a graph edge between two repos">
+  <!-- Candidate A — Crane fold: a paper-crane's head+neck, built from two straight facets. The neck crease
+       (mountain, solid) is the edge from the body-repo to the head-repo; the beak crease (valley, dashed)
+       is the inferred continuation. Body triangle + head triangle = two repo facets; a third small facet
+       (the underside flap) turns teal. Reads as crane at a glance, and as two nodes joined by one edge. -->
+  <rect x="1" y="1" width="218" height="218" rx="20" fill="var(--paper-2, #eee7da)" stroke="currentColor" stroke-opacity=".14"/>
+
+  <!-- body facet (large repo) -->
+  <path d="M40 180 L110 40 L165 150 Z" fill="currentColor" fill-opacity=".07"/>
+  <!-- head facet (small repo), folded off the body's top vertex -->
+  <path d="M110 40 L165 150 L188 96 Z" fill="var(--fold, #2f7a72)" fill-opacity=".9"/>
+
+  <!-- node dots: repo centers -->
+  <circle cx="88" cy="122" r="6" fill="currentColor"/>
+  <circle cx="154" cy="112" r="6" fill="var(--on-fold, #f4efe4)" stroke="currentColor" stroke-width="2"/>
+
+  <!-- mountain crease = edge: body -> head (solid) -->
+  <path d="M88 122 L154 112" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+  <!-- neck/beak structural creases -->
+  <path d="M110 40 L165 150" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+  <!-- valley crease = inferred edge: head -> beak tip (dashed) -->
+  <path d="M154 112 L188 96" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 10"/>
+  <path d="M40 180 L165 150" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-opacity=".5"/>
+</svg>

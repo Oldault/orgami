@@ -2,6 +2,12 @@
 #
 #   vhs docs/demo.tape        # writes docs/demo.gif, run from the repo root
 #
+# The landing page plays docs/demo.mp4, encoded from the GIF (vhs is not always
+# installed where the page is edited). Re-encode after every re-record:
+#
+#   ffmpeg -y -i docs/demo.gif -movflags +faststart -pix_fmt yuv420p \
+#     -c:v libx264 -preset slow -crf 24 -tune stillimage -an docs/demo.mp4
+#
 # It records against a mapped copy of a public organization, so nothing in the
 # GIF belongs to a client. Reproduce that first — it takes about a minute:
 #

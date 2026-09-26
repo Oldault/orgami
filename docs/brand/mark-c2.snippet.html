@@ -1,0 +1,117 @@
+<!--
+  Drop-in replacement for the `.mark` markup and CSS in docs/index.html (currently the nine-square
+  grid + corner-triangle flap). This keeps the SAME outer contract — three usages
+  (`.mark` bare, `.mark--hero`, `.mark--close`), the same 20/48/220px sizes, the same `.mark__flap`
+  layer and `@keyframes fold` clip-path sweep, the same `.mark--close.will-fold` /
+  `.mark--close.is-folding` state classes and reduced-motion override — so no JS or surrounding markup
+  needs to change, only the three `.mark` instances' inner SVG and two CSS rules.
+
+  WHICH LAYER IS THE FLAP: the lower-right quarter square (`.mark__flap`, teal, `var(--fold)`) is the
+  flap, same role as today's clipped lower-right triangle — just a square clip-path instead of a
+  triangle. It sits over an inline SVG that draws the other three quarters (three paper-tone
+  triangles pinwheeling around the centre) plus the two full creases and one centre node; the flap
+  covers the SVG's own (unfilled) fourth quarter, so at rest the two layers tile exactly into the
+  full quartered square.
+
+  WHAT THE ANIMATION SWEEPS: `@keyframes fold` animates `.mark__flap`'s `clip-path` from a
+  4-vertex polygon collapsed onto the centre node (48,48 four times — the flap pinned shut at the
+  crease crossing) to the full flap square (48,48 / 88.15,48 / 88.15,88.15 / 48,88.15). Vertex count
+  stays 4 throughout, so it interpolates in every engine exactly like the original 3-vertex sweep did.
+  The visual read is the lower-right facet swinging OUT of the centre crossing along the two creases,
+  rather than a diagonal wipe — a more literal "fold" for this shape.
+-->
+
+<!-- ================= CSS: replaces the existing .mark / .mark__flap / @keyframes fold rules ================= -->
+<style>
+/* ---------- the mark: a quartered paper sheet whose lower-right quarter is lifted, teal ---------- */
+.mark { position: relative; display: inline-block; width: 48px; aspect-ratio: 1; border-radius: 4px; overflow: hidden;
+  background: var(--paper-2); box-shadow: inset 0 0 0 1px var(--crease); vertical-align: middle; }
+.mark--hero { width: 48px; }
+.top .mark { width: 20px; border-radius: 2px; }
+.mark--close { width: 220px; border-radius: 12px; }
+.mark svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.mark .face { fill: none; stroke: none; }
+.mark .quarter { fill: var(--ink); }
+.mark .quarter--dim  { opacity: .05; }
+.mark .quarter--near { opacity: .1; }
+.mark .node { fill: var(--ink); }
+.mark .mountain { stroke: var(--ink); stroke-width: 3.5; stroke-linecap: round; vector-effect: non-scaling-stroke; }
+.mark .valley   { stroke: var(--ink); stroke-width: 3.5; stroke-linecap: round; vector-effect: non-scaling-stroke;
+  stroke-dasharray: .5 6; }
+
+/* the flap: the lower-right quarter, teal, sitting over the SVG's own unfilled fourth quadrant */
+.mark__flap { position: absolute; inset: 0; background: var(--fold);
+  clip-path: polygon(48px 48px, 88.15px 48px, 88.15px 88.15px, 48px 88.15px); }  /* END STATE: lower-right quarter, in the 96-unit mark grid */
+@keyframes fold {
+  from { clip-path: polygon(48px 48px, 48px 48px, 48px 48px, 48px 48px); }      /* collapsed onto the centre node */
+  to   { clip-path: polygon(48px 48px, 88.15px 48px, 88.15px 88.15px, 48px 88.15px); }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .mark--hero .mark__flap { animation: fold var(--dur-fold) var(--ease-out) 250ms both; }
+  .mark--close.will-fold .mark__flap { clip-path: polygon(48px 48px, 48px 48px, 48px 48px, 48px 48px); }
+  .mark--close.is-folding .mark__flap { animation: fold var(--dur-fold) var(--ease-out) both; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mark__flap { animation: none; }  /* already the existing rule in the page's reduced-motion block; no change needed */
+}
+</style>
+
+<!-- ================= HTML: replaces each of the three `.mark` spans in docs/index.html ================= -->
+
+<!-- nav (static, 20px, never animated) -->
+<span class="mark" aria-hidden="true">
+  <span class="mark__flap"></span>
+  <svg viewBox="0 0 96 96">
+    <rect class="face" x="1" y="1" width="94" height="94" rx="4"/>
+    <path class="quarter quarter--dim"  d="M48 3.4 L88.15 48 L48 48 Z"/>
+    <path class="quarter quarter--near" d="M48 3.4 L7.85 48 L48 48 Z"/>
+    <path class="quarter quarter--dim"  d="M7.85 48 L48 92.6 L48 48 Z"/>
+    <line class="mountain" x1="48" y1="26.2" x2="48" y2="69.8"/>
+    <line class="valley"   x1="26.2" y1="48" x2="69.8" y2="48"/>
+    <circle class="node" cx="48" cy="48" r="3.5"/>
+  </svg>
+</span>
+
+<!-- hero (48px, folds once 250ms after load) -->
+<span class="mark mark--hero" aria-hidden="true">
+  <span class="mark__flap"></span>
+  <svg viewBox="0 0 96 96">
+    <rect class="face" x="1" y="1" width="94" height="94" rx="4"/>
+    <path class="quarter quarter--dim"  d="M48 3.4 L88.15 48 L48 48 Z"/>
+    <path class="quarter quarter--near" d="M48 3.4 L7.85 48 L48 48 Z"/>
+    <path class="quarter quarter--dim"  d="M7.85 48 L48 92.6 L48 48 Z"/>
+    <line class="mountain" x1="48" y1="26.2" x2="48" y2="69.8"/>
+    <line class="valley"   x1="26.2" y1="48" x2="69.8" y2="48"/>
+    <circle class="node" cx="48" cy="48" r="3.5"/>
+  </svg>
+</span>
+
+<!-- closing sheet (220px, folds once on first intersection at threshold .6 — JS toggles .will-fold / .is-folding, unchanged) -->
+<span class="mark mark--close" aria-hidden="true">
+  <span class="mark__flap"></span>
+  <svg viewBox="0 0 96 96">
+    <rect class="face" x="1" y="1" width="94" height="94" rx="4"/>
+    <path class="quarter quarter--dim"  d="M48 3.4 L88.15 48 L48 48 Z"/>
+    <path class="quarter quarter--near" d="M48 3.4 L7.85 48 L48 48 Z"/>
+    <path class="quarter quarter--dim"  d="M7.85 48 L48 92.6 L48 48 Z"/>
+    <line class="mountain" x1="48" y1="26.2" x2="48" y2="69.8"/>
+    <line class="valley"   x1="26.2" y1="48" x2="69.8" y2="48"/>
+    <circle class="node" cx="48" cy="48" r="3.5"/>
+  </svg>
+</span>
+
+<!--
+  Notes:
+  - Coordinates above are the 220-viewBox mark-c2.svg's own points scaled by 96/220 (≈0.4364) so the
+    inline SVG matches mark-c2.svg exactly, just re-based onto the 96-unit grid the existing markup
+    already uses (rect x=1 y=1 width=94 height=94 rx=4, same as today).
+  - `.mark .quarter` reuses `var(--ink)` at two opacity steps (.05 / .1) instead of the old
+    `.mark .grid rect { fill: var(--ink); opacity:.28 }` — matches mark-c2.svg's own quarter-opacity
+    values so the standalone SVG and the inline nav markup render identically.
+  - `.mark .mountain` / `.mark .valley` are heavier (3.5 vs the old 1px hairline) and shorter (stop at
+    the seam, not corner-to-corner) — this is the fix for the crease crossing reading as a bare "+" at
+    20px once node dots were removed; do not thin them back down without re-testing at 20px.
+  - The `will-fold` / `is-folding` class toggling, the IntersectionObserver at threshold .6, and every
+    other piece of `docs/index.html`'s JS are unchanged — only the CSS rules and the three `.mark`
+    span contents above move.
+-->

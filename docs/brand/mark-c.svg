@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220" fill="none" role="img" aria-label="orgami mark: a square folded on both diagonals into four triangular repos, joined at a shared crease crossing">
+  <!-- Candidate C — Triangulated node sheet: one mountain diagonal (solid) and one valley diagonal
+       (dashed) quarter a square sheet into four triangular facets = four repos. The two creases ARE
+       the graph edges, crossing at the centre node (the org). Three of the four facet centres carry a
+       repo node; the fourth facet is the flap that turns teal on fold. Most literal fusion of
+       fold-notation and graph in the set — reads as a folded sheet from across a room, as a 4-node
+       star graph up close. -->
+  <rect x="1" y="1" width="218" height="218" rx="20" fill="var(--paper-2, #eee7da)" stroke="currentColor" stroke-opacity=".14"/>
+
+  <path d="M110 22 L198 110 L110 198 Z" fill="currentColor" fill-opacity=".07"/>
+  <path d="M110 22 L22 110 L110 198 Z" fill="currentColor" fill-opacity=".05"/>
+  <!-- flap: lower-right quadrant turns over -->
+  <path d="M110 198 L198 110 L110 110 Z" fill="var(--fold, #2f7a72)" fill-opacity=".9"/>
+
+  <!-- diagonals: mountain (solid, extracted) / valley (dashed, inferred) -->
+  <path d="M110 22 L110 198" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+  <path d="M22 110 L198 110" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 10"/>
+
+  <!-- nodes: repo centres + org centre -->
+  <circle cx="110" cy="65" r="6" fill="currentColor"/>
+  <circle cx="65" cy="110" r="6" fill="currentColor"/>
+  <circle cx="155" cy="110" r="6" fill="var(--on-fold, #f4efe4)" stroke="currentColor" stroke-width="2"/>
+  <circle cx="110" cy="110" r="7" fill="currentColor"/>
+</svg>

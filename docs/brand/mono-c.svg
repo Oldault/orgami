@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220" fill="none" role="img" aria-label="orgami mark, monochrome: a square folded on both diagonals into four triangular repos">
+  <!-- Single-colour variant of candidate C for favicons, stamps, and any context restricted to one ink.
+       Facets are opacity steps of currentColor instead of the teal token; creases and nodes stay solid
+       currentColor so the crease notation remains legible with zero colour. -->
+  <rect x="1" y="1" width="218" height="218" rx="20" fill="none" stroke="currentColor" stroke-opacity=".14"/>
+
+  <path d="M110 22 L198 110 L110 198 Z" fill="currentColor" fill-opacity=".07"/>
+  <path d="M110 22 L22 110 L110 198 Z" fill="currentColor" fill-opacity=".05"/>
+  <path d="M110 198 L198 110 L110 110 Z" fill="currentColor" fill-opacity=".22"/>
+
+  <path d="M110 22 L110 198" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+  <path d="M22 110 L198 110" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 10"/>
+
+  <circle cx="110" cy="65" r="6" fill="currentColor"/>
+  <circle cx="65" cy="110" r="6" fill="currentColor"/>
+  <circle cx="155" cy="110" r="6" fill="currentColor"/>
+  <circle cx="110" cy="110" r="7" fill="currentColor"/>
+</svg>

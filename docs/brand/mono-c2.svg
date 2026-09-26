@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220" fill="none" role="img" aria-label="orgami mark, monochrome: a square sheet quartered by a mountain and a valley crease, one corner lifted">
+  <!-- Single-colour variant of C2. The teal quarter becomes the darkest opacity step of currentColor
+     so the quartering (and which corner is "lifted") still reads with zero colour. -->
+  <rect x="1" y="1" width="218" height="218" rx="20" fill="none" stroke="currentColor" stroke-opacity=".14"/>
+
+  <path d="M110 18 L202 110 L110 110 Z" fill="currentColor" fill-opacity=".05"/>
+  <path d="M110 18 L18 110 L110 110 Z" fill="currentColor" fill-opacity=".1"/>
+  <path d="M18 110 L110 202 L110 110 Z" fill="currentColor" fill-opacity=".05"/>
+  <path d="M116 116 L196 116 L196 196 L116 196 Z" fill="currentColor" fill-opacity=".28"/>
+
+  <path d="M110 60 L110 160" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+  <path d="M60 110 L160 110" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-dasharray="1 14"/>
+
+  <circle cx="110" cy="110" r="8" fill="currentColor"/>
+</svg>

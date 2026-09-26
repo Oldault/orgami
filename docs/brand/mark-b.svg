@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220" fill="none" role="img" aria-label="orgami mark: a three-panel accordion fold, each panel a repo, joined by a crease-line graph">
+  <!-- Candidate B — Accordion map: a sheet folded into three vertical panels, like a folded paper map.
+       Each panel is a repo facet. The two fold lines between panels are drawn as one solid mountain
+       crease and one dashed valley crease (extracted vs inferred). A thin edge-line strings a node at
+       the top of each panel together, so the fold pattern doubles as a 3-node path graph. -->
+  <rect x="1" y="1" width="218" height="218" rx="20" fill="var(--paper-2, #eee7da)" stroke="currentColor" stroke-opacity=".14"/>
+
+  <!-- three panels, middle one folded back narrower (perspective of the fold) -->
+  <path d="M28 46 L83 46 L83 174 L28 174 Z" fill="currentColor" fill-opacity=".07"/>
+  <path d="M83 46 L140 60 L140 160 L83 174 Z" fill="var(--fold, #2f7a72)" fill-opacity=".9"/>
+  <path d="M140 60 L192 46 L192 174 L140 160 Z" fill="currentColor" fill-opacity=".07"/>
+
+  <!-- fold lines between panels -->
+  <path d="M83 46 L83 174" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+  <path d="M140 60 L140 160" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-dasharray="2 10"/>
+
+  <!-- graph: a node per panel, edges along the top -->
+  <circle cx="55" cy="46" r="7" fill="currentColor"/>
+  <circle cx="111" cy="53" r="7" fill="var(--on-fold, #f4efe4)" stroke="currentColor" stroke-width="2"/>
+  <circle cx="166" cy="46" r="7" fill="currentColor"/>
+  <path d="M55 46 L111 53 L166 46" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+</svg>

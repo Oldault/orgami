@@ -26,15 +26,20 @@ the page does not split by audience.
 
 ## System — Crease
 
-A warm sheet of paper that is verdigris teal on the reverse. Wherever the page
-folds, a corner turns over and shows the colour underneath. The crease
+A sheet of paper, white or GitHub black, that is contribution-graph green on
+the reverse. Green is an accent and never a ground. Behind the hero, and only
+there, a living ground: an animated Bayer-dithered grid of green cells (the
+"Dither Grid" gradient) on a canvas that dissolves into the paper before the
+first section. Wherever the page
+folds, a corner turns over and shows the colour underneath; wherever a corner
+is cut, the grid shows through it. The crease
 notation — solid line = mountain fold = extracted, dashed line = valley fold =
 inferred — is the product's own evidence vocabulary drawn as origami.
 
 - Macrostructure · Workbench (folded): the recording and real transcripts are
   the content; copy is captions around them
-- Enrichment · E1: the real recording on a teal backing sheet, plus the folded
-  mark
+- Enrichment · E1: the real recording on a green backing sheet, plus the folded
+  mark, all of it over the dithered ground
 - Nav · N1a: wordmark with the static mark, three text links, not sticky, no
   border, no button
 - Footer · Ft2 inline, under the closing sheet, the only middle-dot line
@@ -46,45 +51,40 @@ inferred — is the product's own evidence vocabulary drawn as origami.
 The `:root` block in `docs/index.html` is the source of truth; copy it, do
 not retype it. Light is the default on bare `:root`; dark answers both
 `prefers-color-scheme: dark` (guarded with `:root:not([data-theme="light"])`)
-and `:root[data-theme="dark"]`, same values in both blocks.
+and `:root[data-theme="dark"]`, same values in both blocks. Both grounds are
+neutral: white, or GitHub's `#0d1117`. Every green is GitHub's contribution
+palette and is used only as an accent or in the hero grid.
 
 ```css
 :root {
   color-scheme: light;
-  --paper:     oklch(97% 0.011 82);   /* page ground: oat */
-  --paper-2:   oklch(93.5% 0.014 82); /* a second sheet: tiles, run card, tab strip */
-  --crease:    oklch(85% 0.018 82);   /* hairlines, crease lines, borders */
-  --ink:       oklch(24% 0.02 62);    /* headings, body. warm charcoal, never #000 */
-  --ink-2:     oklch(45% 0.018 62);   /* muted: captions, inferred evidence, comments */
-  --fold:      oklch(46% 0.11 196);   /* deep verdigris: copy square, links, focus ring, tile A, turned corners */
-  --fold-deep: oklch(27% 0.05 200);   /* the paper turned fully over: the #agents band and the closing sheet */
-  --fold-tint: oklch(91% 0.045 196);  /* tile C, copied-state background */
-  --fold-lit:  oklch(74% 0.10 196);   /* light teal ONLY on dark surfaces ($ prompt, section words, cursor); same in both modes */
-  --on-fold:   oklch(97% 0.011 82);   /* text on --fold / --fold-deep in light mode (= paper) */
-  --on-dark:   oklch(93% 0.012 82);   /* text on --fold-deep and --term in BOTH modes */
-  --on-dark-2: oklch(72% 0.014 76);   /* muted text on dark surfaces in BOTH modes */
-  --ear-fold:  color-mix(in oklch, var(--fold), var(--ink) 28%);   /* the corner turned on a --fold sheet */
-  --ear-deep:  var(--fold);                                        /* on a --fold-deep sheet */
-  --ear-paper: var(--fold);                                        /* on a paper-2 sheet */
-  --copied:    color-mix(in oklch, var(--fold), var(--paper) 55%); /* button background while "copied" */
-  --fold-hover: color-mix(in oklch, var(--fold), var(--ink) 14%);  /* copy square under the pointer */
-  --fold-press: color-mix(in oklch, var(--fold), var(--ink) 28%);  /* copy square while pressed */
-  --deep-bar: var(--paper); --deep-bar-ink: var(--ink); --deep-prompt: var(--fold); /* the install bar on the closing sheet */
-  /* the machine surface. Sampled from docs/demo-still.png (edge pixels = #1d1c2d). Re-sample if demo.tape's theme changes. */
-  --term:      #1d1c2d;
+  --paper: #ffffff; --paper-2: #f6f8fa; --crease: #d0d7de;    /* GitHub light: ground, second sheet, hairlines */
+  --ink: #1f2328; --ink-2: #59636e;
+  --fold:      #1a7f37;   /* copy square, links, focus ring, tile A, turned corners */
+  --fold-deep: #0d1117;   /* the paper turned fully over: the #agents band and the closing sheet are black */
+  --fold-tint: #dafbe1;   /* tile C, copied-state background */
+  --fold-lit:  #3fb950;   /* green ONLY on dark surfaces ($ prompt, section words, cursor) */
+  --on-fold: #ffffff; --on-dark: #e6edf3; --on-dark-2: #8b949e;
+  --ear-fold: color-mix(in oklch, var(--fold), var(--ink) 28%); --ear-deep: var(--fold-lit); --ear-paper: var(--fold);
+  --copied: var(--fold-tint);
+  --fold-hover: color-mix(in oklch, var(--fold), var(--ink) 14%); --fold-press: color-mix(in oklch, var(--fold), var(--ink) 28%);
+  --deep-bar: var(--term); --deep-bar-ink: var(--on-dark); --deep-prompt: var(--fold-lit);
+  --deep-bar-edge: color-mix(in oklch, var(--on-dark) 20%, transparent);
+  /* the hero ground: the contribution graph's light ramp, lightened toward white by the layers over it */
+  --grid-0: #ebedf0; --grid-1: #9be9a8; --grid-2: #216e39; --grid-3: #40c463;   /* @ 0, 24, 61, 67% */
+  --grid-backdrop: var(--paper); --grid-vignette: rgb(255 255 255 / .8);
+  --scrim: transparent; --shade: rgb(255 255 255 / .82); --ground-blend: normal;
+  --term: #1d1c2d;   /* sampled from docs/demo-still.png; re-sample if demo.tape's theme changes */
 }
 /* dark (both blocks): */
-  --paper: oklch(19% 0.012 66); --paper-2: oklch(23.5% 0.014 66); --crease: oklch(32% 0.014 66);
-  --ink: oklch(93% 0.012 82); --ink-2: oklch(70% 0.014 76);
-  --fold: oklch(74% 0.10 196);        /* the underside is LIGHTER on dark: elevation by lightness */
-  --fold-deep: oklch(24% 0.06 200);   /* the reverse side must still read against --paper at 19% */
-  --fold-tint: oklch(30% 0.055 196); --on-fold: oklch(16% 0.02 66);
+  --paper: #0d1117; --paper-2: #161b22; --crease: #30363d; --ink: #e6edf3; --ink-2: #8b949e;
+  --fold: #3fb950; --fold-deep: #161b22; --fold-tint: #0e4429; --fold-lit: #56d364; --on-fold: #0d1117;
   --ear-fold: color-mix(in oklch, var(--fold), var(--paper) 22%);
   --copied: color-mix(in oklch, var(--fold), var(--paper) 45%);
-  --fold-hover: color-mix(in oklch, var(--fold), var(--paper) 14%);
-  --fold-press: color-mix(in oklch, var(--fold), var(--paper) 28%);
-  --deep-bar: var(--term); --deep-bar-ink: var(--on-dark); --deep-prompt: var(--fold-lit); /* in dark the closing bar sits on the terminal ground, not on paper */
-  --deep-bar-edge: color-mix(in oklch, var(--on-dark) 20%, transparent); /* hairline on that bar (transparent in light) */
+  --fold-hover: color-mix(in oklch, var(--fold), var(--paper) 14%); --fold-press: color-mix(in oklch, var(--fold), var(--paper) 28%);
+  /* the hero ground on black: the Dither Grid palette as specified, multiplied down toward the page */
+  --grid-0: #0e2417; --grid-1: #2e6b3e; --grid-2: #ddf0c8; --grid-3: #78b86b;
+  --grid-vignette: rgb(0 0 0 / .8); --scrim: #b4c8ac; --shade: rgb(13 17 23 / .82); --ground-blend: multiply;
 ```
 
 Shape: `--r-1` 4px (tabs, copy square, bars, pause chip), `--r-2` 12px
@@ -126,8 +126,9 @@ base, `--s-1` .25rem to `--s-10` 8rem. Motion: `--dur-state` 160ms,
 ## Surfaces
 
 - `.sheet`: paper-2, hairline, 12px radius with the top-right corner square,
-  dog-ear via `::before` (a hard-stop two-colour fill: page colour over the
-  reverse side). `.sheet--fold` (teal, `--on-fold` text), `.sheet--tint`,
+  the corner cut away with a `clip-path` polygon so the ground shows through
+  it, and the dog-ear via `::before` (a hard-stop fill: transparent over the
+  reverse side). `.sheet--fold` (green, `--on-fold` text), `.sheet--tint`,
   `.sheet--deep` (the closing sheet, 48px ear).
 - `pre.bar`: `--term`, 4px radius, `$` in `--fold-lit`, comments in
   `--on-dark-2`; one-line bars scroll with the native track hidden and a 24px
@@ -144,17 +145,54 @@ base, `--s-1` .25rem to `--s-10` 8rem. Motion: `--dur-state` 160ms,
 
 ## The mark
 
-`.mark`: an HTML square (`--paper-2`, inset hairline) holding an inline SVG
-of nine faint squares, a solid mountain crease and a dashed valley crease,
-with a `--fold` flap layer whose `clip-path` polygon is the lower-right
-triangle. Sizes 20 (nav, static), 48 (hero, folds once 250ms after load) and
-220 (closing sheet, folds once on first intersection at threshold .6). The
-fold is a 2D `clip-path` sweep from the diagonal into the corner, 900ms; the
-vertex count is constant so it interpolates in every engine.
+The approved mark is the folded elephant supplied in `logo.png`. Its unchanged
+web copy is `docs/brand/logo.png`; do not redraw it or restore the old sheet mark.
+The landing page uses it in the navigation (32px), hero (56px), and closing
+sheet (220px). On dark surfaces CSS renders the silhouette light. The mark is
+static, including under reduced motion.
+
+`docs/brand/favicon.svg` embeds the same pixels on a warm paper background for
+visibility in either browser theme. Generated web and graph pages embed both
+the favicon and logo so exports still open offline. README and social metadata
+use the same PNG. Earlier proposals in `docs/brand/` are historical references.
+
+## The ground
+
+`.ground` is a `position: absolute; top: 0; z-index: -1` layer behind the
+hero only, `max(100vh, 54rem)` tall and masked to transparent over its last
+38% so it dissolves into `--paper` before `#who`. It holds one `<canvas>`
+(the grid), with grain (`::after`, the 120px `feTurbulence` tile at opacity
+.5, `mix-blend-mode: overlay`) and, multiplied over that (`::before`), the
+vignette, the shade and the scrim, blended with `--ground-blend` (multiply
+on black, normal on white, so each lightens or darkens toward its page).
+`--scrim` is a light cap on the dark ramp; `--shade` (the page colour at .82) covers
+the left 30% fading out by 60%, and the lower 30%, which is what lets the
+hero copy, the caption and the install row read; under 960px the copy spans
+the width and so does the shade. The layer is `aria-hidden`, has no pointer
+events and is hidden in print. Everything below the hero sits on plain
+`--paper`. The script at the foot of the page is the 21st.dev
+"Dither Grid" in pixel mode, rebuilt from its parameters: square cells,
+25 across the width whatever the height, with a 7% gap showing
+`--grid-backdrop`; each cell samples the continuous palette ramp (Pine 0,
+Moss .24, Sprout .61, Fern .67) along the 62° diagonal, with a `wave` 12 /
+`distortion` 28 sine bend across it and a Bayer 4×4 ordered-dither offset of
+up to ±8% of the ramp at strength .76, so neighbours jitter instead of banding. Colours come from the tokens via `getComputedStyle`, so the
+`:root` block stays the only place a colour is written.
+
+Motion: a `requestAnimationFrame` loop with an elapsed-seconds clock `t`,
+`ph = t * 0.71`, `amt = 0.60`, `dir = 1`. The ramp slides along the
+diagonal by `sin(ph * 0.9 * dir) * 0.5 * amt` (a sine sweep, not a scroll)
+and the wave's phase drifts by `(cos(ph * 0.4) - 1) * 0.8`; every modulation
+is exactly 0 at `ph = 0`, so the first frame equals the static one and
+nothing snaps when the loop starts. Nothing animated is rounded. Under
+`prefers-reduced-motion: reduce`, or while the tab is hidden, it draws one
+frame at `ph = 0` and stops; it resumes on the media query or visibility
+changing. The canvas re-sizes on `resize` at a device pixel ratio capped
+at 2.
 
 ## Motion
 
-Three primitives and nothing else: the fold, the type-in, and state.
+Three primitives and the ground: the fold, the type-in, state, and the grid.
 
 - Type-in: the transcript in `#agents` types at 7ms per character with a
   140ms pause at line ends (≈5.5s for the block), on first intersection at
@@ -186,30 +224,37 @@ Three primitives and nothing else: the fold, the type-in, and state.
   quotes; a copy change must update the comment.
 - Links to `docs/*.md` point at the GitHub blob URL: the page is served
   from `docs/`, so a relative `docs/…` path is a dead link on Pages.
-- The reduced-motion still (`docs/demo-still.png`) is committed with the
-  page; `og:image` stays `docs/demo.gif`.
+- The reduced-motion still (`docs/demo-still.png`) and the video
+  (`docs/demo.mp4`) are committed with the page; `og:image` uses
+  `docs/brand/logo.png`.
 - The install line appears twice: hero and closing sheet. It is the one
   action; the copy square is the only filled control.
 
 ## The recording
 
-`docs/demo.gif` (1200×720) at 100% of its column, never cropped, on a teal
-backing sheet offset 20px that may run off the right edge; eager, high fetch
-priority, with `docs/demo-still.png` served for `prefers-reduced-motion`. A
-text "pause" chip swaps in the still because the loop runs longer than five
-seconds; under reduced motion it starts as "play". The gif has real vhs
-chrome baked in; nothing on the page imitates it.
+`docs/demo.mp4` (1200×720, encoded from `docs/demo.gif` with the ffmpeg line
+in `docs/demo.tape`) as a muted, looping, inline `<video>` at 100% of its
+column, never cropped, on a green backing sheet offset 20px that may run off
+the right edge; `docs/demo-still.png` is its poster and its CSS background,
+so the first frame is on screen before a byte of video arrives. A text
+"pause" chip pauses the element because the loop runs longer than five
+seconds; under reduced motion JS holds the video on its first frame and the
+chip starts as "play". The gif stays for the README; social previews use the elephant logo. The
+recording has real vhs chrome baked in; nothing on the page imitates it.
+Never a generated clip: the recording is the only footage on the page.
 
 ## Never on this page
 
-- Purple or any multi-stop gradient; the dog-ear fill is the only
-  `linear-gradient`.
+- Purple, or any gradient other than the ground: the dog-ear fill is the only
+  `linear-gradient` and the vignette the only `radial-gradient`.
 - The dog-ear on anything but the five named surfaces; more than one
   animated fold per viewport visit; a fourth bento tile.
 - Icons or emoji (the copy/check glyphs are the exception); drop shadows or
-  glows; paper grain or texture images; fake window chrome around code.
-- `#000`/`#fff` paint; orange, clay or terracotta anywhere — the accent is
-  hue 196 or nothing; serif faces; italic headings; tracked-uppercase labels.
+  glows; texture on anything but the ground; fake window chrome around code.
+- Green as a page or section ground: the grounds are white and `#0d1117`,
+  green is the accent, the folded sheets and the hero grid, nothing else.
+- Orange, clay, terracotta or teal anywhere; serif faces; italic headings;
+  tracked-uppercase labels.
 - Middle-dot chains outside the footer; `→` on links; announcement pills;
   sticky nav; ⌘K or any search; numbered step markers (the join sequence is
   three shell lines).

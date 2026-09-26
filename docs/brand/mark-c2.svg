@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 220" fill="none" role="img" aria-label="orgami mark: a square sheet quartered by a mountain and a valley crease, its lower-right corner lifted to show the teal underside">
+  <!-- Candidate C2 — refinement of C. Same idea (the two diagonals are both fold lines and the graph's
+       edges, meeting at one centre/org node), redrawn so the QUADRANT COLOUR BLOCKS carry the read at
+       20px instead of the crease lines or node dots. The four quarters run edge-to-edge and
+       corner-to-corner (a full pinwheel of triangles), so the silhouette is "a quartered square with
+       one teal corner" even if every stroke disappears into a single pixel row. The creases are drawn
+       SHORT — they stop at a small paper-coloured seam around the teal quarter, rather than running
+       corner-to-corner, so they can't out-compete the quadrants and read as a freestanding "+". The
+       lift is the seam itself: a sliver of bare paper (the paper token) between the teal quarter and its
+       two neighbours, no shadow. Only one node remains: a small ink dot at the crease crossing (the org,
+       not a repo). -->
+  <rect x="1" y="1" width="218" height="218" rx="20" fill="var(--paper-2, #eee7da)" stroke="currentColor" stroke-opacity=".14"/>
+
+  <!-- four full quarters, three paper tones, pinwheeling around the centre -->
+  <path d="M110 18 L202 110 L110 110 Z" fill="currentColor" fill-opacity=".05"/>
+  <path d="M110 18 L18 110 L110 110 Z" fill="currentColor" fill-opacity=".1"/>
+  <path d="M18 110 L110 202 L110 110 Z" fill="currentColor" fill-opacity=".05"/>
+  <!-- lower-right quarter: the flap, teal, inset by a few px on its two inner edges only (the seam / lift) -->
+  <path d="M116 116 L196 116 L196 196 L116 196 Z" fill="var(--fold, #2f7a72)"/>
+
+  <!-- creases: short, stopping at the seam, so they read as the fold lines of the visible quadrant
+       edges rather than as a long free-standing cross. mountain (solid, extracted) / valley (dashed,
+       inferred). -->
+  <path d="M110 60 L110 160" stroke="currentColor" stroke-width="8" stroke-linecap="round"/>
+  <path d="M60 110 L160 110" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-dasharray="1 14"/>
+
+  <!-- one node: the org, at the crease crossing -->
+  <circle cx="110" cy="110" r="8" fill="currentColor"/>
+</svg>
