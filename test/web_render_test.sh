@@ -284,6 +284,8 @@ check "sources: the day's figures come from daily.jq" \
 check "sources: markdown files arrive as text, by path" \
   "$(jq -r '[.decisions[].file, .playbooks[].file, .runbooks[].file, .reports[].file, .daily[].file] | join(" ")' "$sources")" \
   "map/decisions/2026-W33.md map/playbooks/warehouse-jobs--broken-export.md map/runbooks/billing-api.md reports/2026-W33.md reports/daily/2026-08-12.md"
+check "a decisions draft nobody has kept yet is not a source" \
+  "$(jq -r '[.decisions[].file | select(test("draft"))] | length' "$sources")" "0"
 
 # --- the activity view -------------------------------------------------------
 # Every figure it shows is one stats.jq, daily.jq or coupling.sh computed, so

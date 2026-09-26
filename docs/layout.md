@@ -99,4 +99,6 @@ Company state, never in this repo:
                        evidence it was written from printed underneath
   map/repos/<repo>.md  a page per repo
   map/decisions/       one fragment per week, assembled into DECISIONS.md
+  map/decisions/draft/ the week's mined decisions until a person keeps or drops
+                       each one in `orgami drafts` (skipped unless notes_autopublish)
 ```

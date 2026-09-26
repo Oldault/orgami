@@ -90,7 +90,7 @@ doc_decisions() {
     while read -r f; do
       cat "$f"
       echo
-    done < <(find "$dest" -name '*.md' | sort -r)
+    done < <(find "$dest" -maxdepth 1 -name '*.md' | sort -r)
   } >"$out"
   echo "$out" >&2
 }

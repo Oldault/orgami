@@ -102,7 +102,7 @@ Team memory
   orgami notes [--repo R] [--tag T] [q] what the team has recorded
   orgami autonote [publish|drafts]      send notes out as written, or hold them
   orgami note-sweep                     read back sessions that never ended cleanly
-  orgami drafts                         keep or drop notes written for you
+  orgami drafts                         keep or drop notes and decisions written for you
   orgami sync [--pr]                    exchange notes through the docs repo
   orgami sync --pull [--max-age MIN]    take what the team wrote, push nothing
   orgami autosync                       reconcile everything: pull, push, review, merge

@@ -4,10 +4,18 @@
 
 # Durable decisions from this week's PRs, kept as one fragment per week so the
 # record only ever grows. `orgami doc` assembles them into DECISIONS.md.
+#
+# The fragment is model prose about to be published as the team's record, so
+# it waits in map/decisions/draft/ for a person to keep or drop each bullet
+# (`orgami drafts`), the way a note drafted from a session does. The one
+# setting that sends notes out unread, notes_autopublish, sends these out
+# unread too — it is the same decision about the same kind of text.
 report_decisions() {
   local week=$1 digest=$2 model=$3
   local dest="$DIR/map/decisions"
   mkdir -p "$dest"
+  local held=1
+  [[ $(cfg notes_autopublish false) == true ]] && held=0
 
   local body
   body=$( {
@@ -18,17 +26,27 @@ report_decisions() {
   } | claude -p --model "$model" --output-format text 2>/dev/null || true)
 
   if [[ $body == NONE* ]] || ! model_output_ok "$body" '^- '; then
-    rm -f "$dest/$week.md"
+    rm -f "$dest/draft/$week.md"
+    [[ $held == 1 ]] || rm -f "$dest/$week.md"
     [[ -n ${body// /} && $body != NONE* ]] && log "decisions for $week discarded — the model call did not complete"
     return 0
   fi
 
+  local out="$dest/$week.md"
+  if [[ $held == 1 ]]; then
+    mkdir -p "$dest/draft"
+    out="$dest/draft/$week.md"
+  fi
   {
     echo "## $week"
     echo
     linkify_prs "$ORG" "$DIR/map/graph.json" <<<"$body"
-  } >"$dest/$week.md"
-  log "decisions recorded for $week"
+  } >"$out"
+  if [[ $held == 1 ]]; then
+    log "$(grep -c '^- ' "$out") decision(s) drafted for $week — 'orgami drafts' keeps or drops each one"
+  else
+    log "decisions recorded for $week"
+  fi
 }
 
 cmd_report() {

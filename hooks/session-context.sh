@@ -62,13 +62,15 @@ updated=$(orgami_update --report || true)
 
 brief=$("$ORGAMI" brief 2>/dev/null || true)
 
-# Notes drafted from earlier sessions, waiting for a person to keep or drop them.
+# Notes drafted from earlier sessions and decisions mined from the week's pull
+# requests, waiting for a person to keep or drop them.
 drafts=$("$ORGAMI" drafts --count 2>/dev/null || echo 0)
 waiting=""
 if [[ ${drafts:-0} -gt 0 ]]; then
   waiting="
-$drafts note(s) were drafted from earlier sessions and are waiting to be kept or
-thrown away. Mention this once, and offer to run \`orgami drafts\`."
+$drafts draft(s) — notes read out of earlier sessions, decisions mined from
+pull requests — are waiting to be kept or thrown away. Mention this once, and
+offer to run \`orgami drafts\`."
 fi
 # Drafts and an update are worth surfacing even outside a mapped checkout; a
 # brief is not.

@@ -190,6 +190,15 @@ prune() {
   echo "prune: nothing to prune says so and exits 0, a superseded note still moves"
 }
 
+# The decisions mined from a week's pull requests are model prose, so they wait
+# in map/decisions/draft/ for a person to keep or drop each one — unless
+# notes_autopublish already sends model-written text out unread. Runs
+# report_decisions against a stub claude and `orgami drafts` against a stub gum.
+decisions() {
+  ./test/decisions_draft_test.sh >/dev/null
+  echo "decisions: held unless autopublish, kept bullets land, dropped vanish, skipped stay, drafts never assembled"
+}
+
 # The recaps tab labels every recap by its first heading, and a recap with no
 # readable heading gets an empty label instead of taking the list down. Runs
 # the callback fzf's reload runs, against a temp ORGAMI_HOME — no fzf, no tty.
@@ -385,6 +394,7 @@ CHECKS=(
   --publish:publish
   --notes:notes
   --prune:prune
+  --decisions:decisions
   --tui:tui
   --agents:agents
   --playbook:playbook

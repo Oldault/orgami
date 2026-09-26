@@ -347,6 +347,12 @@ go out as they are written — as a pull request when `notes_review` is on, whic
 is the combination worth having: nobody writes the note, and the team can still
 turn one down.
 
+The decisions `orgami report` mines from the week's pull requests follow the
+same switch. They are the one other thing in the map a model writes, so they
+wait in `map/decisions/draft/` and `orgami drafts` walks them one bullet at a
+time; only what you keep reaches `DECISIONS.md`. Set to publish, they go
+straight in, as they did before.
+
 Notes are screened for credentials before they are written and again before
 anything is pushed, they can require a pull request to reach the team, and they
 can be superseded and pruned. See **[docs/notes.md](docs/notes.md)**.
@@ -426,10 +432,11 @@ screened against every org configured on the machine, so nothing crosses.
 
 ## Cost
 
-Two Claude calls a week — the recap and the decision mining — plus one short one
-per weekday morning if the daily digest is on. One more if you use `orgami doc
---narrate`. Everything else — the scan, the map, `orgami live`, every
-`--stats-only` run — is `gh`, `git`, `jq` and `grep`, and costs nothing at all.
+Two scheduled Claude calls a week, the recap and the decision mining, plus one
+short call per weekday morning if the daily digest is on. A few more happen only
+when you ask for them: `orgami doc --narrate`, `orgami playbook`, and the note a
+session drafts on its way out. The scan, the map, `orgami live` and every
+`--stats-only` run are `gh`, `git`, `jq` and `grep`. They cost nothing.
 
 ## Contributing
 

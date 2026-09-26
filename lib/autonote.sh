@@ -257,21 +257,106 @@ autonote_pending() {
   compgen -G "$DIR/notes/draft/*.md" >/dev/null 2>&1
 }
 
+decisions_pending() {
+  [[ -d $DIR/map/decisions/draft ]] || return 1
+  compgen -G "$DIR/map/decisions/draft/*.md" >/dev/null 2>&1
+}
+
+# The bullets of one decisions fragment, one record each, a wrapped bullet's
+# continuation lines kept with it. Records end in \x1e so a caller can
+# `read -d $'\x1e'` them back whole.
+decision_bullets() {
+  awk '
+    /^- / { if (b != "") printf "%s\x1e", b; b = $0; next }
+    /^ /  { if (b != "") b = b "\n" $0; next }
+    END   { if (b != "") printf "%s\x1e", b }
+  ' "$1"
+}
+
+# One bullet, kept: appended to the week's fragment in map/decisions/, which
+# `orgami doc` assembles into DECISIONS.md. The heading is written once.
+decision_keep() {
+  local week=$1 bullet=$2
+  local out="$DIR/map/decisions/$week.md"
+  if [[ ! -f $out ]]; then
+    printf '## %s\n\n' "$week" >"$out"
+  fi
+  printf '%s\n' "$bullet" >>"$out"
+}
+
+# orgami drafts, the decisions half: every held fragment, bullet by bullet.
+# What is skipped stays in the draft; a draft with nothing left is removed.
+drafts_decisions() {
+  local f week bullet choice kept=0 dropped=0 stop=0
+  for f in "$DIR/map/decisions/draft"/*.md; do
+    [[ -f $f ]] || continue
+    [[ $stop == 1 ]] && break
+    week=$(basename "$f" .md)
+    local rest
+    rest=$(mktemp)
+    while IFS= read -r -d $'\x1e' bullet; do
+      if [[ $stop == 1 ]]; then
+        printf '%s\n' "$bullet" >>"$rest"
+        continue
+      fi
+      echo
+      if command -v gum >/dev/null; then
+        gum style --foreground 4 --bold "decision · $week"
+      else
+        echo "--- decision · $week ---"
+      fi
+      printf '%s\n' "$bullet"
+      echo
+      if command -v gum >/dev/null; then
+        choice=$(gum choose --header "" "keep it" "throw it away" "leave it for later" "stop here") || choice="stop here"
+      else
+        read -rp "keep / drop / skip / stop? " choice
+      fi
+      case $choice in
+        keep*) decision_keep "$week" "$bullet" && kept=$((kept + 1)) ;;
+        throw* | drop*) dropped=$((dropped + 1)) ;;
+        stop*) stop=1; printf '%s\n' "$bullet" >>"$rest" ;;
+        *) printf '%s\n' "$bullet" >>"$rest" ;;
+      esac
+    done < <(decision_bullets "$f")
+    if [[ -s $rest ]]; then
+      { printf '## %s\n\n' "$week"; cat "$rest"; } >"$f"
+    else
+      rm -f "$f"
+    fi
+    rm -f "$rest"
+  done
+  echo
+  echo "$kept decision(s) kept, $dropped discarded"
+  [[ $kept -gt 0 ]] &&
+    echo "they land in DECISIONS.md at the next 'orgami doc'"
+  return 0
+}
+
 # orgami drafts — keep or discard what was drafted while you worked.
 cmd_drafts() {
   load_company
 
   if [[ ${1:-} == --count ]]; then
-    local n=0
+    local n=0 f
     autonote_pending && n=$(find "$DIR/notes/draft" -name '*.md' | wc -l)
+    if decisions_pending; then
+      for f in "$DIR/map/decisions/draft"/*.md; do
+        [[ -f $f ]] && n=$((n + $(grep -c '^- ' "$f")))
+      done
+    fi
     echo "$n"
     return 0
   fi
 
-  autonote_pending || {
-    echo "nothing waiting"
+  if ! autonote_pending; then
+    if decisions_pending; then
+      drafts_decisions
+    else
+      echo "nothing waiting"
+    fi
     return 0
-  }
+  fi
 
   local f n=0 kept=0 dropped=0
   for f in "$DIR/notes/draft"/*.md; do
@@ -316,6 +401,7 @@ cmd_drafts() {
   echo "$kept kept, $dropped discarded"
   [[ $kept -gt 0 ]] &&
     echo "they land in the runbooks at the next 'orgami doc', and reach the team at the next 'orgami sync'"
+  decisions_pending && drafts_decisions
   return 0
 }
 
@@ -336,7 +422,8 @@ cmd_autonote() {
     publish)
       tmp=$(mktemp)
       jq '.notes_autopublish = true' "$DIR/config.json" >"$tmp" && mv "$tmp" "$DIR/config.json"
-      echo "notes written at the end of a session now go to the team without review."
+      echo "notes written at the end of a session now go to the team without review,"
+      echo "and so do the decisions 'orgami report' mines from the week's pull requests."
       [[ $(cfg notes_review false) == true ]] &&
         echo "They open as pull requests, because notes_review is on." ||
         echo "They are pushed directly. Turn on notes_review to have them open as pull requests instead."
@@ -344,7 +431,7 @@ cmd_autonote() {
     drafts | review)
       tmp=$(mktemp)
       jq '.notes_autopublish = false' "$DIR/config.json" >"$tmp" && mv "$tmp" "$DIR/config.json"
-      echo "notes now wait in 'orgami drafts' until you keep them."
+      echo "notes and mined decisions now wait in 'orgami drafts' until you keep them."
       ;;
     on)
       echo "on by default — nothing to do. ORGAMI_AUTONOTE=0 in the environment turns it off."
