@@ -1,7 +1,7 @@
 blank_issues_enabled: true
 contact_links:
   - name: Question or setup help
-    url: https://github.com/achevalier-dev/orgami/discussions
+    url: https://github.com/Oldault/orgami/discussions
     about: How to run it, how to point it at an org, whether it can do something — ask here.
   - name: A leak or a screening bypass
     url: mailto:ad@antoinedv.com

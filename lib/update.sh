@@ -157,7 +157,7 @@ update_dev() {
   echo "the CLI and the Claude Code plugin both read $repo now."
   echo "Edits are live in the next session — no commit, no push, no pull."
   echo "Back to the published one: claude plugin marketplace remove orgami &&"
-  echo "  claude plugin marketplace add achevalier-dev/orgami"
+  echo "  claude plugin marketplace add Oldault/orgami"
 }
 
 # orgami update [--check] [--if-stale] [--background] [--quiet] [--dev [path]]

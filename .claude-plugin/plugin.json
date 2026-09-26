@@ -4,9 +4,9 @@
   "version": "1.1.0",
   "author": {
     "name": "Antoine Chevalier",
-    "url": "https://github.com/achevalier-dev"
+    "url": "https://github.com/Oldault"
   },
-  "homepage": "https://github.com/achevalier-dev/orgami",
+  "homepage": "https://github.com/Oldault/orgami",
   "license": "MIT",
   "hooks": {
     "SessionStart": [

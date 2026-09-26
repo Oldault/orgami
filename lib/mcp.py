@@ -216,7 +216,7 @@ def run(args, stdin=None):
             input=stdin,
         )
     except FileNotFoundError:
-        return "orgami is not on PATH. Install it: https://github.com/achevalier-dev/orgami"
+        return "orgami is not on PATH. Install it: https://github.com/Oldault/orgami"
     except subprocess.TimeoutExpired:
         return "orgami timed out."
     out = (p.stdout or "").strip()

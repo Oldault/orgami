@@ -4,7 +4,7 @@
   "description": "Weekly pull request recaps and an evidence-backed map of a GitHub organization, loaded into every session and shared across a team through git.",
   "owner": {
     "name": "Antoine Chevalier",
-    "url": "https://github.com/achevalier-dev"
+    "url": "https://github.com/Oldault"
   },
   "plugins": [
     {

@@ -1,6 +1,6 @@
 # orgami on Windows, in one command.
 #
-#   irm https://raw.githubusercontent.com/achevalier-dev/orgami/main/bootstrap.ps1 | iex
+#   irm https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.ps1 | iex
 #
 # orgami is bash, so this installs Git for Windows (which brings bash and the
 # GNU tools it needs), the four command-line dependencies through winget, and
@@ -22,7 +22,7 @@ try {
 
 if ($wsl) {
   Write-Host "WSL found — installing orgami inside it, which is the better home for it."
-  wsl.exe -e bash -lc "curl -fsSL https://raw.githubusercontent.com/achevalier-dev/orgami/main/bootstrap.sh | bash"
+  wsl.exe -e bash -lc "curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.sh | bash"
   Write-Host "`nDone. Open your WSL shell and run: orgami init" -ForegroundColor Green
   Write-Host "For Windows-native Cursor or Claude Code, point hook commands at: wsl.exe bash -lc `"orgami ...`""
   exit 0
@@ -68,7 +68,7 @@ if (-not $bash) {
 Write-Host "  $bash"
 
 Step "Installing orgami"
-& $bash -lc "curl -fsSL https://raw.githubusercontent.com/achevalier-dev/orgami/main/bootstrap.sh | bash"
+& $bash -lc "curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.sh | bash"
 
 Write-Host "`nDone." -ForegroundColor Green
 Write-Host @"

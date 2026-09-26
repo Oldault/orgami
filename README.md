@@ -1,6 +1,6 @@
 # orgami
 
-[![ci](https://github.com/achevalier-dev/orgami/actions/workflows/ci.yml/badge.svg)](https://github.com/achevalier-dev/orgami/actions/workflows/ci.yml)
+[![ci](https://github.com/Oldault/orgami/actions/workflows/ci.yml/badge.svg)](https://github.com/Oldault/orgami/actions/workflows/ci.yml)
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 [![shell: bash](https://img.shields.io/badge/shell-bash-4EAA25.svg)](https://www.gnu.org/software/bash/)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-d97757.svg)](docs/agents.md)
@@ -47,13 +47,13 @@ up Claude Code and Cursor if they are on the machine.
 **macOS, Linux, WSL:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/achevalier-dev/orgami/main/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.sh | bash
 ```
 
 **Windows** (PowerShell):
 
 ```powershell
-irm https://raw.githubusercontent.com/achevalier-dev/orgami/main/bootstrap.ps1 | iex
+irm https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.ps1 | iex
 ```
 
 Then, once, on one machine:
@@ -434,7 +434,7 @@ per weekday morning if the daily digest is on. One more if you use `orgami doc
 Bug reports and patches welcome — [CONTRIBUTING.md](CONTRIBUTING.md) covers how
 to test orgami with no organization and no token, and what the shape of a good
 change is. Issues labelled
-[good first issue](https://github.com/achevalier-dev/orgami/labels/good%20first%20issue)
+[good first issue](https://github.com/Oldault/orgami/labels/good%20first%20issue)
 are the ones to start with. If the scan got your organization's shape wrong,
 that is the most useful report there is.
 

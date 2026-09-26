@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One command: dependencies, orgami itself, and whichever editors are installed.
 #
-#   curl -fsSL https://raw.githubusercontent.com/achevalier-dev/orgami/main/bootstrap.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.sh | bash
 #
 # Flags (pass with `| bash -s -- --flag`):
 #   --dry-run      print what would happen, change nothing
@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-REPO_URL=${ORGAMI_REPO:-https://github.com/achevalier-dev/orgami}
+REPO_URL=${ORGAMI_REPO:-https://github.com/Oldault/orgami}
 SRC=${ORGAMI_SRC:-$HOME/.local/share/orgami}
 DRY=0
 DEPS=1
@@ -186,7 +186,7 @@ ORGAMI="$SRC/bin/orgami"
 if [[ $EDITORS == 1 ]]; then
   if command -v claude >/dev/null; then
     step "Wiring Claude Code"
-    run claude plugin marketplace add achevalier-dev/orgami
+    run claude plugin marketplace add Oldault/orgami
     run claude plugin install orgami@orgami
   fi
 

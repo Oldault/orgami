@@ -83,7 +83,7 @@ gh auth login
 `/orgami:note` and the session hook:
 
 ```
-/plugin marketplace add achevalier-dev/orgami
+/plugin marketplace add Oldault/orgami
 /plugin install orgami@orgami
 ```
 
@@ -97,7 +97,7 @@ then, once, to put the CLI on your PATH:
 the weekly job:
 
 ```bash
-git clone https://github.com/achevalier-dev/orgami ~/orgami
+git clone https://github.com/Oldault/orgami ~/orgami
 cd ~/orgami && ./install.sh
 ```
 
@@ -147,7 +147,7 @@ GitHub to the local path. To go back:
 
 ```bash
 claude plugin marketplace remove orgami
-claude plugin marketplace add achevalier-dev/orgami
+claude plugin marketplace add Oldault/orgami
 ```
 
 ## 5. Point it at an organization

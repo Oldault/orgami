@@ -8,13 +8,13 @@ wrong**: an edge it drew that is not real, a service it missed, a framework it
 did not recognize, a deploy target it could not see. The scan is pattern
 matching over committed files, so every organization it has never met is a gap
 in it. Those reports need no fix attached to be useful — the
-[wrong map](https://github.com/achevalier-dev/orgami/issues/new?template=wrong-map.yml)
+[wrong map](https://github.com/Oldault/orgami/issues/new?template=wrong-map.yml)
 template asks for the file it should have matched.
 
 ## Getting set up
 
 ```bash
-git clone https://github.com/achevalier-dev/orgami
+git clone https://github.com/Oldault/orgami
 cd orgami
 ./bin/orgami --help          # runs straight out of the checkout, nothing to install
 ```
