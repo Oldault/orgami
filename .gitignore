@@ -1,1 +1,7 @@
 *.bak
+.hallmark/
+.playwright-cli/
+.playwright-mcp/
+.wrangler/
+/s2-*.png
+/v2-*.png
