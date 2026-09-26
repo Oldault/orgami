@@ -259,11 +259,13 @@ button { font: inherit; color: inherit; }
 .rec__sheet { position: absolute; top: 20px; left: 20px; right: -20px; bottom: 0; z-index: 0; background: var(--fold); border-radius: var(--r-2) 0 var(--r-2) var(--r-2); }
 .rec video { position: relative; z-index: 1; display: block; width: 100%; max-width: 1200px; height: auto; aspect-ratio: 1200 / 720;
   border-radius: var(--r-2); border: 1px solid var(--crease); background: var(--term) url(demo-still.png) center / cover no-repeat; }
-.pause { flex: none; min-height: 44px; padding: 0 .8em; background: var(--term); color: var(--on-dark);
+.pause, .zoom { flex: none; min-height: 44px; padding: 0 .8em; background: var(--term); color: var(--on-dark);
   border: 1px solid var(--on-dark-2); border-radius: var(--r-1); font: 500 var(--fs-0) var(--font-mono); cursor: pointer;
   transition: border-color var(--dur-state) var(--ease-out); }
-.pause:hover { border-color: var(--on-dark); }
-.pause:active { color: var(--fold-lit); }
+.pause:hover, .zoom:hover { border-color: var(--on-dark); }
+.pause:active, .zoom:active { color: var(--fold-lit); }
+.rec video[data-zoomable] { cursor: zoom-in; }
+.rec video:fullscreen { border: 0; border-radius: 0; background: #000; cursor: zoom-out; }
 .rec figcaption { font-size: var(--fs-0); color: var(--ink); margin-top: var(--s-3); max-width: none; display: flex; gap: var(--s-3); align-items: flex-start; }
 .rec figcaption p { margin: 0; max-width: none; padding-block: .35rem; }
 .rec figcaption code { font-size: inherit; }
@@ -497,7 +499,7 @@ h2 + p { margin-top: var(--s-5); }
     <span class="sheet sheet--fold rec__sheet" aria-hidden="true"></span>
     <video id="plate" src="demo.mp4" poster="demo-still.png" width="1200" height="720" autoplay muted loop playsinline preload="auto" aria-label="orgami in a terminal: the context an agent is handed, one node and its evidence, the map, and the week’s numbers"></video>
     </div>
-    <figcaption><button type="button" class="pause" data-pause aria-label="Pause the recording" hidden>pause</button><p>Recorded against a public organization (<a href="https://github.com/honojs">honojs</a>) with <code>vhs docs/demo.tape</code>. Every line in it came out of a committed file.</p></figcaption>
+    <figcaption><button type="button" class="pause" data-pause aria-label="Pause the recording" hidden>pause</button><button type="button" class="zoom" data-zoom aria-label="Play the recording full screen" hidden>enlarge</button><p>Recorded against a public organization (<a href="https://github.com/honojs">honojs</a>) with <code>vhs docs/demo.tape</code>. Every line in it came out of a committed file.</p></figcaption>
   </figure>
 </section>
 
@@ -842,6 +844,25 @@ document.querySelectorAll('[role=tablist]').forEach(function (list) {
   };
   b.hidden = false; render();
   b.addEventListener('click', function () { paused = !paused; render(); });
+})();
+
+/* enlarge: the recording is 1200px wide and the column shows it at half that, so its 14px terminal text lands
+   near 7px. Full screen shows it at native size or larger. iOS Safari has no element fullscreen, only the
+   video's own player, hence webkitEnterFullscreen. Where neither exists the chip stays hidden. */
+(function () {
+  var b = document.querySelector('[data-zoom]'), v = document.getElementById('plate');
+  if (!b || !v) return;
+  var open = v.requestFullscreen ? function () { return v.requestFullscreen(); }
+    : v.webkitRequestFullscreen ? function () { v.webkitRequestFullscreen(); }
+    : v.webkitEnterFullscreen ? function () { v.webkitEnterFullscreen(); } : null;
+  if (!open) return;
+  var toggle = function () {
+    if (document.fullscreenElement === v) { document.exitFullscreen(); return; }
+    var p = open(); if (p && p.catch) p.catch(function () {});
+  };
+  b.hidden = false; v.setAttribute('data-zoomable', '');
+  b.addEventListener('click', toggle);
+  v.addEventListener('click', toggle);
 })();
 
 /* motion: the HTML ships every end state. Only when motion is allowed and IntersectionObserver exists does JS
