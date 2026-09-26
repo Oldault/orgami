@@ -450,6 +450,11 @@ check "overview: extracted and inferred edges add up to every edge" \
 check "overview: every reading is a row, present or not, with the command that refreshes it" \
   "$(jq -r '[.views.overview.readings[] | .id + ":" + (.present | tostring) + ":" + .command] | join(" ")' <<<"$data")" \
   "map:true:orgami scan profiles:true:orgami scan live:true:orgami live dns:true:orgami dns advise:true:orgami advise coupling:true:orgami coupling depth:false:orgami depth recap:true:orgami report daily:true:orgami daily"
+check "overview: every reading carries its own age limit, the live and dns ones matching live.sh and dns.sh" \
+  "$(jq -r '[.views.overview.readings[] | .id + ":" + (.stale_after_days | tostring)] | join(" ")' <<<"$data")" \
+  "map:7 profiles:7 live:7 dns:90 advise:7 coupling:7 depth:30 recap:7 daily:7"
+check "overview: the view itself carries the map's limit for the shell's freshness line" \
+  "$(jq -r '.views.overview.stale_after_days' <<<"$data")" "7"
 check "overview: a reading older than the map says stale" \
   "$(jq -r '[.views.overview.readings[] | select(.stale) | .id] | join(" ")' <<<"$data")" "recap daily"
 check "overview: the latest recap is dated by its own footer" \

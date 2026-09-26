@@ -5,7 +5,7 @@
   --muted: #6b7280; --faint: #9aa1ab;
   --repo: #2f6feb; --host: #b45309; --tool: #7c3aed; --service: #0f766e;
   --vendor: #be185d; --lang: #64748b; --accent: #2f6feb; --shadow: rgba(16,24,40,.10);
-  --ok: #15803d; --warn: #b45309;
+  --ok: #15803d; --warn: #b45309; --bad: #b91c1c;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -13,7 +13,7 @@
     --muted: #98a1af; --faint: #6b7482;
     --repo: #6ea8ff; --host: #f0b45c; --tool: #b98cff; --service: #4fd1c5;
     --vendor: #f472b6; --lang: #94a3b8; --accent: #6ea8ff; --shadow: rgba(0,0,0,.5);
-    --ok: #4ade80; --warn: #f0b45c;
+    --ok: #4ade80; --warn: #f0b45c; --bad: #f87171;
   }
 }
 * { box-sizing: border-box; }
@@ -75,6 +75,10 @@ p.empty { color: var(--muted); }
 }
 .fresh.missing { border-style: dashed; }
 .fresh .stale { color: var(--warn); }
+/* past its own age limit, and past two of them */
+.overdue.ok { color: var(--ok); }
+.overdue.over { color: var(--warn); }
+.overdue.twice { color: var(--bad); font-weight: 600; }
 .fresh code { color: var(--ink); }
 
 /* --- evidence: five kinds, each marked the same way everywhere --------- */
@@ -102,10 +106,21 @@ table.t { border-collapse: collapse; width: 100%; font-size: 13px; }
 table.t th, table.t td { text-align: left; padding: 6px 10px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
 table.t th { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600; white-space: nowrap; }
 table.t th button { all: unset; cursor: pointer; }
-table.t th button[aria-sort="ascending"]::after { content: " \2191"; }
-table.t th button[aria-sort="descending"]::after { content: " \2193"; }
+table.t th button:hover, table.t th button:focus-visible { color: var(--ink); }
+table.t th button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; border-radius: 3px; }
+table.t th[aria-sort="ascending"], table.t th[aria-sort="descending"] { color: var(--ink); }
+table.t th .sort-mark { display: inline-block; width: 1em; text-align: center; color: var(--faint); }
+table.t th.num button { display: inline-flex; flex-direction: row-reverse; } /* the mark sits outside the figures */
+table.t th button:hover .sort-mark::before { content: "\2195"; }
+table.t th[aria-sort="ascending"] .sort-mark::before { content: "\2191"; color: var(--ink); }
+table.t th[aria-sort="descending"] .sort-mark::before { content: "\2193"; color: var(--ink); }
 table.t td.num, table.t th.num { text-align: right; font-variant-numeric: tabular-nums; }
 table.t tr:last-child td { border-bottom: 0; }
+
+/* read by assistive tech, drawn nowhere */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+button.link { all: unset; cursor: pointer; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+button.link:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; border-radius: 3px; }
 
 /* --- chips, keys ------------------------------------------------------- */
 .chip {
@@ -115,6 +130,10 @@ table.t tr:last-child td { border-bottom: 0; }
 }
 .chip[aria-pressed="true"] { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 25%, var(--line)); }
 .chip .dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.chip .n { color: var(--faint); font-variant-numeric: tabular-nums; font-size: 11px; }
+.chip:hover { color: var(--ink); }
+.chip:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+.chip[aria-pressed="true"] .n { color: var(--muted); }
 .chip.off { opacity: .45; }
 
 #foot {

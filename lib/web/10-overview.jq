@@ -18,9 +18,17 @@
 # One row of the readings table. A reading older than the map is marked stale
 # (rule 4): the map is the thing the others describe, so a reading taken
 # before the last scan may describe repositories the map no longer has.
-| def reading($id; $label; $file; $gen; $cmd; $present):
+#
+# Each reading also carries its own age limit in days, `stale_after_days`,
+# the same field lib/web/50-live.jq uses: seven for a scan or a provider
+# (lib/live.sh), ninety for DNS (lib/dns.sh), thirty for the tree-sitter pass
+# nobody reruns weekly. The page compares it to the reader's clock, never to a
+# date written here (rule 7), and says "over" past the limit and "twice over"
+# past two of them.
+| def reading($id; $label; $file; $gen; $cmd; $present; $limit):
     {id: $id, label: $label, file: $file, command: $cmd, present: $present,
      generated: (if $present then $gen else null end),
+     stale_after_days: $limit,
      stale: ($present and $gen != null and $mapped != null and $gen < $mapped)};
 
 # A tally over a list of labels: [{name, count}], largest first, name second
@@ -56,6 +64,7 @@
 | {
     generated: $mapped,
     command: "orgami scan",
+    stale_after_days: 7,
 
     org: {name: $company, slug: $org,
           docs_repo: (.config.docs_repo // null),
@@ -66,15 +75,15 @@
     # menu lists the commands. repos.json is written by the same scan that
     # writes graph.json and carries no date of its own, so it takes the map's.
     readings: [
-      reading("map";      "map";          "map/graph.json";    $mapped;                      "orgami scan";     true),
-      reading("profiles"; "profiles";     "map/repos.json";    $mapped;                      "orgami scan";     (.map.repos != null)),
-      reading("live";     "live";         "map/live.json";     ($live.generated // null);    "orgami live";     ($live != null)),
-      reading("dns";      "dns";          "map/dns.json";      (.map.dns.generated // null); "orgami dns";      (.map.dns != null)),
-      reading("advise";   "advise";       "map/advise.json";   ($advise.generated // null);  "orgami advise";   ($advise != null)),
-      reading("coupling"; "coupling";     "map/coupling.json"; (.map.coupling.generated // null); "orgami coupling"; (.map.coupling != null)),
-      reading("depth";    "depth";        "map/depth.json";    (.map.depth.generated // null);    "orgami depth";    (.map.depth != null)),
-      reading("recap";    "latest recap"; ($recap.file // "reports/<week>.md"); $recap_date;  "orgami report";   ($recap != null)),
-      reading("daily";    "latest daily"; ($digest.file // "reports/daily/<date>.md"); $digest_date; "orgami daily"; ($digest != null))
+      reading("map";      "map";          "map/graph.json";    $mapped;                      "orgami scan";     true;                       7),
+      reading("profiles"; "profiles";     "map/repos.json";    $mapped;                      "orgami scan";     (.map.repos != null);       7),
+      reading("live";     "live";         "map/live.json";     ($live.generated // null);    "orgami live";     ($live != null);            7),
+      reading("dns";      "dns";          "map/dns.json";      (.map.dns.generated // null); "orgami dns";      (.map.dns != null);         90),
+      reading("advise";   "advise";       "map/advise.json";   ($advise.generated // null);  "orgami advise";   ($advise != null);          7),
+      reading("coupling"; "coupling";     "map/coupling.json"; (.map.coupling.generated // null); "orgami coupling"; (.map.coupling != null); 7),
+      reading("depth";    "depth";        "map/depth.json";    (.map.depth.generated // null);    "orgami depth";    (.map.depth != null);    30),
+      reading("recap";    "latest recap"; ($recap.file // "reports/<week>.md"); $recap_date;  "orgami report";   ($recap != null);           7),
+      reading("daily";    "latest daily"; ($digest.file // "reports/daily/<date>.md"); $digest_date; "orgami daily"; ($digest != null);     7)
     ],
 
     counts: {

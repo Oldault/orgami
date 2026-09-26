@@ -54,7 +54,12 @@ bead rather than quietly bending it.
    `generated` field, at the top of the view, through `web.freshness()`. A
    source that does not exist yields a panel naming the command that produces
    it (`orgami live`, `orgami dns`, …), never an empty chart. Sections with
-   nothing in them disappear.
+   nothing in them disappear. A reading also has an **age limit**,
+   `stale_after_days` in its payload (seven days for a scan, a recap or a
+   provider reading, ninety for DNS, thirty for depth): past it the line says
+   *over*, past two of them *twice over*, both judged on the reader's clock
+   (rule 7). "Older than the map" is a separate mark: the reading was taken
+   before the last scan, whatever its age.
 5. **Absence is "not found", never "not connected" / "not used".** Wording
    from [map.md](map.md) and [advise.md](advise.md).
 6. **Money appears only when a human typed it**, with who and when: the rows
@@ -211,7 +216,8 @@ prints, so the page and the recap cannot disagree.
 | `web.data` | the payload |
 | `web.route()` | `{id, rest, parts}` of the current hash: `#/repos/web` is `{id: "repos", rest: "web", parts: ["web"]}` |
 | `web.h(tag, attrs, ...children)` | build an element; `class`, `text`, `dataset`, `on<event>` handled |
-| `web.freshness(view)` | the rule-4 line: "read 3 days ago · 2026-08-18", or "not run yet — `orgami live`" from `view.missing`; adds "stale" when `view.stale` |
+| `web.freshness(view)` | the rule-4 line: "read 3 days ago · 2026-08-18", or "not run yet — `orgami live`" from `view.missing`; adds "over · limit 7 d" or "twice over" from `view.stale_after_days`, and "older than the map" when `view.stale` |
+| `web.overdue(view)` | `{state, days, limit}` for a view or reading carrying `generated` and `stale_after_days` — `state` is `fresh`, `over` or `twice`; `null` when it has no limit |
 | `web.evidence({kind, at, repo, url, command, date, author, text})` | one of the five kinds, marked; extracted `file:line` becomes a blob link when the repo has a url |
 | `web.empty()` | nothing — for a section with nothing in it |
 | `web.table(cols, rows)` | a table; `cols` are keys or `{key, label, num, render, sort}`; headers sort what is on the page |
@@ -230,7 +236,8 @@ instead of taking the page down.
 node kind, every edge kind, extracted and inferred, a description that tries
 to close a script tag, a DNS reading, a live reading, six notes (one an
 advise rejection, one superseded, one archived), a week and a day of cache
-with their recaps, a decisions fragment, a playbook with its `PLAYBOOKS.md`
+with their recaps, a decisions fragment and a decisions draft under `map/decisions/draft/`
+that no view may show, a playbook with its `PLAYBOOKS.md`
 index, a runbook, two cost figures in `map/costs.json` (one category fully
 costed, one partial), and a note under `notes/draft/` that no view may show.
 Every file takes its shape from the lib file that writes it. `map/advise.json` was
