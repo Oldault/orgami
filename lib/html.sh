@@ -70,6 +70,7 @@ html_render() {
 <title>
 HTMLHEAD
     printf '%s — the map</title>\n' "$(html_escape "$COMPANY")"
+    orgami_brand_head
     cat <<'HTMLHEAD2'
 <style>
 :root {
@@ -161,6 +162,7 @@ footer svg { display: block; }
 <body>
 <header>
 HTMLHEAD2
+    orgami_brand_image
     printf '  <h1>%s</h1>\n' "$(html_escape "$COMPANY")"
     cat <<'HTMLHEAD3'
   <span class="sub" id="counts"></span>

@@ -180,3 +180,13 @@ model_output_ok() {
   grep -qE "$shape" <<<"$text" || return 1
   return 0
 }
+
+# Embed branding so exported pages remain a single file, including their favicon.
+orgami_brand_head() {
+  printf '<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,%s">\n' "$(base64 <"$(dirname "${BASH_SOURCE[0]}")/../docs/brand/favicon.svg" | tr -d '\r\n')"
+  printf '<style>.orgami-logo{display:inline-block;width:32px;height:32px;vertical-align:middle;flex-shrink:0;background:#f7f5ef;border-radius:4px;object-fit:contain}</style>\n'
+}
+
+orgami_brand_image() {
+  printf '<img class="orgami-logo" width="32" height="32" alt="orgami" src="data:image/png;base64,%s">\n' "$(base64 <"$(dirname "${BASH_SOURCE[0]}")/../docs/brand/logo.png" | tr -d '\r\n')"
+}

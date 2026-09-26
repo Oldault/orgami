@@ -293,9 +293,7 @@ web_render() {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 HTMLHEAD
     printf '<title>%s — orgami</title>\n' "$(html_escape "$COMPANY")"
-    # An empty inline icon, so a browser does not go looking for one: the page
-    # requests nothing, not even a favicon.
-    printf '<link rel="icon" href="data:,">\n'
+    orgami_brand_head
     for f in "$WEB_DIR"/*.css; do
       [[ -f $f ]] || continue
       printf '<style data-file="lib/web/%s">\n' "$(basename "$f")"
@@ -307,6 +305,7 @@ HTMLHEAD
 <body>
 <header id="top">
 HTMLBODY
+    orgami_brand_image
     printf '  <h1><a href="#/">%s</a></h1>\n' "$(html_escape "$COMPANY")"
     cat <<'HTMLBODY2'
   <span class="sub" id="sub"></span>

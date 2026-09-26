@@ -1,3 +1,5 @@
+<p><img src="docs/brand/favicon.svg" width="120" height="120" alt="orgami folded elephant logo"></p>
+
 # orgami
 
 [![ci](https://github.com/Oldault/orgami/actions/workflows/ci.yml/badge.svg)](https://github.com/Oldault/orgami/actions/workflows/ci.yml)
