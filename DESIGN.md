@@ -17,6 +17,13 @@ the coding agents they run. One action: copy the install line. It reads as a
 tool, not a journal, because every section except one carries something a
 machine said, set on the exact ground of the real recording.
 
+A second reader arrives by forwarded link: the founder or CEO a lead sends the
+page to before asking for time. `#who` is written for them. It names the
+problem and what it costs the company (onboarding, departures, agents that
+guess) in words that need no engineering, and states no figure until tester
+interviews supply one. Everything below `#who` stays written for engineers;
+the page does not split by audience.
+
 ## System — Crease
 
 A warm sheet of paper that is verdigris teal on the reverse. Wherever the page
@@ -31,7 +38,8 @@ inferred — is the product's own evidence vocabulary drawn as origami.
 - Nav · N1a: wordmark with the static mark, three text links, not sticky, no
   border, no button
 - Footer · Ft2 inline, under the closing sheet, the only middle-dot line
-- One all-type pause section (`#who`), one full-bleed dark band (`#agents`)
+- One all-type pause section (`#who`: the problem, its costs as a `dl`, then
+  the command index), one full-bleed dark band (`#agents`)
 
 ## Tokens
 

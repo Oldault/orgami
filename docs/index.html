@@ -302,6 +302,10 @@ button { font: inherit; color: inherit; }
 .statement { font-family: var(--font-display); font-weight: 500; font-variation-settings: "opsz" 96; font-size: var(--fs-6); line-height: 1.15;
   letter-spacing: -0.015em; max-width: 32ch; color: var(--ink); margin-top: var(--s-5); text-wrap: pretty; }
 .who__sub { margin-top: var(--s-6); color: var(--ink-2); max-width: 56ch; }
+.costs { margin: var(--s-6) 0 0; display: grid; gap: var(--s-4); max-width: 60ch; }
+.costs > div { display: grid; grid-template-columns: 9.5rem 1fr; gap: var(--s-3); align-items: baseline; }
+.costs dt { color: var(--ink); font-weight: 600; }
+.costs dd { margin: 0; color: var(--ink-2); }
 .cmds { margin: var(--s-6) 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-3) var(--s-7); border-top: 1px solid var(--crease); padding-top: var(--s-5); }
 .cmds > div { display: grid; grid-template-columns: 9.5rem 1fr; gap: var(--s-3); align-items: baseline; font-size: var(--fs-1); }
 .cmds dt code { font-size: inherit; color: var(--ink); }
@@ -418,6 +422,7 @@ h2 + p { margin-top: var(--s-5); }
   .mark--hero { width: 40px; height: 40px; }
   h1 { font-size: 2.5rem; }
   .cmds { grid-template-columns: minmax(0, 1fr); }
+  .costs > div { grid-template-columns: minmax(0, 1fr); gap: 0; }
   .statement { font-size: 1.75rem; }
   .rec__frame { padding: 0 12px 12px 0; }
   .rec__sheet { top: 12px; left: 12px; right: -12px; --ear-size: 32px; }
@@ -496,12 +501,17 @@ h2 + p { margin-top: var(--s-5); }
   </figure>
 </section>
 
-<!-- quotes: README 20–22 -->
+<!-- quotes: README 20–22. The costs list is for the reader a lead forwards the page to: no numbers until testers supply them. -->
 <section id="who" class="wrap">
   <div>
-    <h2>Built for the team where everyone touches everything.</h2>
-    <p class="statement">No architect holding the diagram, no wiki that survived the last three months, and a new hire or a coding agent expected to be useful on day one.</p>
-    <p class="who__sub">orgami installs in under a minute and writes one folder, <code>map/</code>, that you can open, diff and commit. Twelve commands, all of them in <code>orgami help</code>.</p>
+    <h2>How your software fits together lives in two people’s heads.</h2>
+    <p class="statement">No architect holding the diagram, no wiki that survived the last three months, and nothing written down that a new hire or a coding agent could read on day one.</p>
+    <dl class="costs" aria-label="What that costs">
+      <div><dt>A new hire</dt><dd>spends the first weeks asking where things are and how they ship. That is salary paid to relearn what the company already knew.</dd></div>
+      <div><dt>A departure</dt><dd>takes the deploy steps, the workaround and the reason behind them out the door. The next outage runs longer, and nobody can say why.</dd></div>
+      <div><dt>A coding agent</dt><dd>starts every session knowing nothing about the other repos. It guesses, and the guesses reach review.</dd></div>
+    </dl>
+    <p class="who__sub">orgami writes that memory down from the code the team already commits, and a weekly timer keeps it current. It installs in under a minute and writes one folder, <code>map/</code>, that you can open, diff and commit. Twelve commands, all of them in <code>orgami help</code>.</p>
     <dl class="cmds" aria-label="Commands">
       <div><dt><code>init</code></dt><dd>map your organization</dd></div>
       <div><dt><code>scan</code></dt><dd>rebuild the map from every repo</dd></div>
@@ -638,6 +648,7 @@ h2 + p { margin-top: var(--s-5); }
     <p>The weekly recap and the decision mining, plus one short call per weekday morning if the daily digest is on. A few more happen only when you ask for them: <code>orgami doc --narrate</code>, <code>orgami playbook</code>, and the note a session drafts on its way out. The scan, the map, <code>orgami live</code> and every <code>--stats-only</code> run are <code>gh</code>, <code>git</code>, <code>jq</code> and <code>grep</code>. They cost nothing.</p>
   </div>
   <div class="faq">
+    <details><summary>What does it change for the team day to day?</summary><div class="answer"><p>Nothing anyone has to remember to do. A weekly timer rebuilds the map and writes the recap. When someone opens a repo in Claude Code or Cursor, a hook hands the map to the agent. Nobody fills in a page or keeps a wiki current: notes are drafted from the session that found the cause, and by default wait for a person to approve them.</p></div></details>
     <details><summary>Where does it write, and with what?</summary><div class="answer"><p><code>orgami init</code> picks the organization from the ones your <code>gh</code> token can see, then asks where the reports should be committed: an existing repo in the org, a new one it creates for you, a git URL you type, or nowhere at all. <code>orgami publish</code> commits the map and the reports into that repo. Notes are screened for credentials before they are written and again before anything is pushed, and they can require a pull request to reach the team.</p></div></details>
     <details><summary>What does it send to a model?</summary><div class="answer"><p>Numbers, never clones. <code>jq</code> computes every figure first: PR counts, median diff size, median hours to merge, how many merged with no review at all, who reviews whom. Claude gets those figures and the PR titles and writes the prose. The note drafted at session end sends a digest of that session’s transcript, with tokens and keys redacted first.</p></div></details>
     <details><summary>Can I run it against a private organization?</summary><div class="answer"><p>Yes. <code>orgami scan</code> shallow-clones every non-archived, non-fork repo in the org and pattern-matches what is committed. The scan runs with your own <code>gh</code> token and never sends a clone anywhere. <code>map/graph.html</code> is one self-contained file with no CDN and no network, so it opens from a <code>file://</code> URL and inside a private repo.</p></div></details>
