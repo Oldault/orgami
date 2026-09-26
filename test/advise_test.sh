@@ -361,8 +361,78 @@ grep -qF 'Microsoft Azure' <<<"$policy_page" &&
 
 rm -rf "$policy"
 
+# --- the record: what each kind of proposal has cost the team -------------------
+#
+# Every id ever raised is carried from one artifact to the next. Rejected is a
+# note; resolved is a proposal that stopped appearing with none. A kind
+# rejected more often than resolved, three answers or more, ranks below the
+# rest of its confidence — and still prints.
+
+artifact="$DIR/map/advise.json"
+i=0
+assert "every proposal ever raised is in the history, the suppressed one included" true \
+  '([.history[].id] | index("duplicate-category:payments:paddle+stripe")) != null
+   and ([.history[].id] | length) >= (.counts.proposals + .counts.suppressed)'
+assert "the rejected one counts as rejected for its kind" 1 '.record["duplicate-category"].rejected'
+assert "an open one counts as open, not answered" "1 0" \
+  '.record["ghost-env-var"] | "\(.open) \(.answered)"'
+assert "nothing has been answered enough to be called noisy" 0 \
+  '[.record[] | select(.noisy)] | length'
+
+# The twilio env line goes away: the ghost proposal vanishes, and with no
+# rejection behind it the record calls it resolved.
+tmp=$(mktemp)
+jq '.edges |= map(select(.to != "vendor:twilio"))' "$DIR/map/graph.json" >"$tmp" && mv "$tmp" "$DIR/map/graph.json"
+advise_compute "$artifact" 180
+assert "a proposal that stopped appearing stays in the history" true \
+  '([.history[].id] | index("ghost-env-var:twilio@api")) != null'
+assert "and counts as resolved, since nobody rejected it" "0 1 0" \
+  '.record["ghost-env-var"] | "\(.open) \(.resolved) \(.rejected)"'
+
+# Three more ghosts rejected by note, then the twilio line back: it is open
+# again, not resolved — a fate is the id's current state, never a tally of
+# its past — so the kind has three answers, all rejections: noisy, and its
+# proposal ranks last.
+for v in mailgun segment intercom; do
+  cat >"$DIR/notes/20260102-00000$((++i))-ada-$v-ghost-is-fine.md" <<NOTE
+---
+id: 20260102-00000$i-ada-$v-ghost-is-fine
+author: ada
+date: 2026-01-02T00:00:00Z
+tags: [advise-suppressed]
+---
+
+$v is wired through its dashboard; the variable is the finished integration.
+
+<!-- orgami advise: suppressed ghost-env-var:$v@api -->
+NOTE
+done
+jq '.edges += [{"from": "repo:api", "to": "vendor:twilio", "kind": "uses",
+                "evidence": ".env.example:14", "signal": "env", "confidence": "extracted"}]' \
+  "$DIR/map/graph.json" >"$tmp" && mv "$tmp" "$DIR/map/graph.json"
+advise_compute "$artifact" 180
+assert "three rejections and nothing resolved make the kind noisy" "true 3 3 0" \
+  '.record["ghost-env-var"] | "\(.noisy) \(.answered) \(.rejected) \(.resolved)"'
+assert "the ghost proposal is back on the list" 1 \
+  '[.proposals[] | select(.kind == "ghost-env-var")] | length'
+assert "and ranks last among its confidence, below the single-repo vendors" true \
+  '([.proposals[] | select(.kind == "ghost-env-var") | .rank] | max)
+   > ([.proposals[] | select(.kind == "single-repo-vendor") | .rank] | max)'
+assert "the row carries its record, so the reader sees why" true \
+  '[.proposals[] | select(.kind == "ghost-env-var")][0].record.noisy'
+record_page=$(advise_render "$artifact" 0)
+grep -qF 'How proposals of each kind have fared' <<<"$record_page" ||
+  { echo "FAIL: the report does not show the record once something was answered" >&2; fail=1; }
+grep -qF 'rejected more than resolved, ranked lower' <<<"$record_page" ||
+  { echo "FAIL: the noisy kind is not called out in the table" >&2; fail=1; }
+grep -qF 'ghost-env-var:twilio@api' <<<"$record_page" ||
+  { echo "FAIL: a noisy kind must still print its proposal" >&2; fail=1; }
+grep -qF 'rejected 3 times in 3 answered' <<<"$record_page" ||
+  { echo "FAIL: the proposal row does not say why it ranks lower" >&2; fail=1; }
+[[ $fail == 0 ]] && echo "ok   the record carries across runs, resolves, rejects, and moves the rank without hiding a row"
+
 if [[ $fail -eq 0 ]]; then
-  echo "advise: every proposal carries its file:line, ids hold still, and a rejection sticks"
+  echo "advise: every proposal carries its file:line, ids hold still, a rejection sticks, and the record keeps score"
 else
   exit 1
 fi

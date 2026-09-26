@@ -93,11 +93,17 @@ advise_compute() {
   local g="$DIR/map/graph.json" p="$DIR/map/repos.json" d="$DIR/map/dns.json"
   [[ -f $p ]] || p=/dev/null
   [[ -f $d ]] || d=/dev/null
+  # The previous run's artifact is the record of what has been proposed
+  # before: advise.jq carries its `history` forward, so a proposal that went
+  # away, and one the team rejected, are still counted per kind.
+  local prev="$out"
+  [[ -f $prev ]] || prev=/dev/null
   local tmp
   tmp=$(mktemp)
   jq -f "$ROOT/lib/advise.jq" \
     --slurpfile profiles "$p" \
     --slurpfile dns "$d" \
+    --slurpfile prev "$prev" \
     --argjson cat "$(advise_catalog)" \
     --argjson sup "$(advise_suppressions)" \
     --argjson now "$(date -u +%s)" \
@@ -182,6 +188,24 @@ EOF
         + (if .counts.proposals == 1 then "" else "s" end)
         + " — \(.counts.high) high confidence, \(.counts.medium) medium."' "$a"
       echo
+      # How past proposals of each kind fared, once the team has answered any.
+      # Rejected is a note; resolved is a proposal that went away on its own.
+      jq -r '
+        select(([.record[]? | .answered] | add // 0) > 0)
+        | "How proposals of each kind have fared, since the record began "
+          + ((.history | map(.first_seen) | min)[0:10]) + ":",
+          "",
+          "| Kind | raised | still open | resolved | rejected |",
+          "|---|---|---|---|---|",
+          (.record | to_entries[]
+           | "| `\(.key)` | \(.value.raised) | \(.value.open) | \(.value.resolved) | \(.value.rejected)"
+             + (if .value.noisy then " — rejected more than resolved, ranked lower" else "" end) + " |"),
+          "",
+          "A proposal that stopped appearing with no rejection counts as resolved: the"
+          + " situation it named went away, or the map under it changed. A kind answered"
+          + " three times or more and rejected more often than resolved ranks below the"
+          + " others of its confidence; nothing is hidden by it."' "$a"
+      echo
       jq -r '
         (.vendors | map({key: .id, value: .name}) | from_entries) as $name
         | [.proposals[]
@@ -194,7 +218,10 @@ EOF
                        | "\($d) domain" + (if $d == 1 then "" else "s" end)
                   end)
                + (if ((.sources // []) | length) > 1
-                  then " · the code and the DNS agree" else "" end),
+                  then " · the code and the DNS agree" else "" end)
+               + (if (.record.noisy // false)
+                  then " · this kind was rejected \(.record.rejected) times in \(.record.answered) answered — ranked lower"
+                  else "" end),
              "",
              "| Vendor | Source | Where | Found in |",
              "|---|---|---|---|",

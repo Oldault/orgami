@@ -65,3 +65,7 @@
   [data-view="vendors"] .cell .ev { max-width: 220px; }
 }
 [data-view="vendors"] ul.says li .tag, [data-view="vendors"] ul.says li .pid { margin-right: 6px; }
+
+/* a kind the team has rejected more often than it resolved */
+[data-view="vendors"] .noisy { color: var(--warn); font-size: 12px; }
+[data-view="vendors"] .record { margin: 0 0 14px; }

@@ -339,7 +339,15 @@
       ],
       "claim": "2 payments vendors are in the map — Stripe (3 repos), Paddle (1 repo). Paddle is the least wired in of the 2 — fewest places to touch, so it is the cheapest to fold into the others.",
       "suppressed": false,
-      "rank": 1
+      "rank": 1,
+      "record": {
+        "raised": 2,
+        "open": 1,
+        "rejected": 1,
+        "resolved": 0,
+        "answered": 1,
+        "noisy": false
+      }
     },
     {
       "kind": "orphan-vendor",
@@ -368,7 +376,15 @@
       ],
       "claim": "Sentry is wired into legacy, which has not been pushed to since 2025-03-02 — 533 days. The code is idle; the subscription behind it may not be.",
       "suppressed": false,
-      "rank": 2
+      "rank": 2,
+      "record": {
+        "raised": 1,
+        "open": 1,
+        "rejected": 0,
+        "resolved": 0,
+        "answered": 0,
+        "noisy": false
+      }
     },
     {
       "kind": "dns-only-vendor",
@@ -399,7 +415,15 @@
       ],
       "claim": "DocuSign has an account on acme.com — the txt record below says so — and no repository in the map names it. Nothing in the code was ever going to find this one.",
       "suppressed": false,
-      "rank": 3
+      "rank": 3,
+      "record": {
+        "raised": 2,
+        "open": 2,
+        "rejected": 0,
+        "resolved": 0,
+        "answered": 0,
+        "noisy": false
+      }
     },
     {
       "kind": "dns-only-vendor",
@@ -453,7 +477,15 @@
       ],
       "claim": "Google Workspace has an account on acme.com — the mx, spf, txt records below say so — and no repository in the map names it. Nothing in the code was ever going to find this one.",
       "suppressed": false,
-      "rank": 4
+      "rank": 4,
+      "record": {
+        "raised": 2,
+        "open": 2,
+        "rejected": 0,
+        "resolved": 0,
+        "answered": 0,
+        "noisy": false
+      }
     },
     {
       "kind": "single-repo-vendor",
@@ -491,7 +523,15 @@
       ],
       "claim": "SendGrid is wired into one repository only (api). Dropping it, or folding it into a vendor already in the map, changes one repository. Public DNS also carries an account for it on acme.com, so dropping the code is not the same as dropping the bill.",
       "suppressed": false,
-      "rank": 5
+      "rank": 5,
+      "record": {
+        "raised": 8,
+        "open": 8,
+        "rejected": 0,
+        "resolved": 0,
+        "answered": 0,
+        "noisy": false
+      }
     },
     {
       "kind": "single-repo-vendor",
@@ -529,7 +569,15 @@
       ],
       "claim": "Vercel is wired into one repository only (web). Dropping it, or folding it into a vendor already in the map, changes one repository. Public DNS also carries an account for it on acme.com, so dropping the code is not the same as dropping the bill.",
       "suppressed": false,
-      "rank": 6
+      "rank": 6,
+      "record": {
+        "raised": 8,
+        "open": 8,
+        "rejected": 0,
+        "resolved": 0,
+        "answered": 0,
+        "noisy": false
+      }
     },
     {
       "kind": "ghost-env-var",
@@ -556,7 +604,15 @@
       ],
       "claim": "PostHog is matched in web by an environment variable and nothing stronger — no package manifest, terraform provider or workflow action in that repository names it. The variable is declared; the SDK may never have been wired.",
       "suppressed": false,
-      "rank": 7
+      "rank": 7,
+      "record": {
+        "raised": 2,
+        "open": 2,
+        "rejected": 0,
+        "resolved": 0,
+        "answered": 0,
+        "noisy": false
+      }
     },
     {
       "kind": "ghost-env-var",
@@ -583,7 +639,15 @@
       ],
       "claim": "Twilio is matched in api by an environment variable and nothing stronger — no package manifest, terraform provider or workflow action in that repository names it. The variable is declared; the SDK may never have been wired.",
       "suppressed": false,
-      "rank": 8
+      "rank": 8,
+      "record": {
+        "raised": 2,
+        "open": 2,
+        "rejected": 0,
+        "resolved": 0,
+        "answered": 0,
+        "noisy": false
+      }
     },
     {
       "kind": "single-repo-vendor",
@@ -611,7 +675,15 @@
       ],
       "claim": "OpenAI is wired into one repository only (ml-worker). Dropping it, or folding it into a vendor already in the map, changes one repository.",
       "suppressed": false,
-      "rank": 9
+      "rank": 9,
+      "record": {
+        "raised": 8,
+        "open": 8,
+        "rejected": 0,
+        "resolved": 0,
+        "answered": 0,
+        "noisy": false
+      }
     },
     {
       "kind": "single-repo-vendor",
@@ -639,7 +711,15 @@
       ],
       "claim": "Paddle is wired into one repository only (billing-api). Dropping it, or folding it into a vendor already in the map, changes one repository.",
       "suppressed": false,
-      "rank": 10
+      "rank": 10,
+      "record": {
+        "raised": 8,
+        "open": 8,
+        "rejected": 0,
+        "resolved": 0,
+        "answered": 0,
+        "noisy": false
+      }
     },
     {
       "kind": "single-repo-vendor",
@@ -667,7 +747,15 @@
       ],
       "claim": "PostHog is wired into one repository only (web). Dropping it, or folding it into a vendor already in the map, changes one repository.",
       "suppressed": false,
-      "rank": 11
+      "rank": 11,
+      "record": {
+        "raised": 8,
+        "open": 8,
+        "rejected": 0,
+        "resolved": 0,
+        "answered": 0,
+        "noisy": false
+      }
     },
     {
       "kind": "single-repo-vendor",
@@ -695,7 +783,15 @@
       ],
       "claim": "Rollbar is wired into one repository only (mobile). Dropping it, or folding it into a vendor already in the map, changes one repository.",
       "suppressed": false,
-      "rank": 12
+      "rank": 12,
+      "record": {
+        "raised": 8,
+        "open": 8,
+        "rejected": 0,
+        "resolved": 0,
+        "answered": 0,
+        "noisy": false
+      }
     },
     {
       "kind": "single-repo-vendor",
@@ -723,7 +819,15 @@
       ],
       "claim": "Slack is wired into one repository only (ops-scripts). Dropping it, or folding it into a vendor already in the map, changes one repository.",
       "suppressed": false,
-      "rank": 13
+      "rank": 13,
+      "record": {
+        "raised": 8,
+        "open": 8,
+        "rejected": 0,
+        "resolved": 0,
+        "answered": 0,
+        "noisy": false
+      }
     },
     {
       "kind": "single-repo-vendor",
@@ -751,7 +855,15 @@
       ],
       "claim": "Twilio is wired into one repository only (api). Dropping it, or folding it into a vendor already in the map, changes one repository.",
       "suppressed": false,
-      "rank": 14
+      "rank": 14,
+      "record": {
+        "raised": 8,
+        "open": 8,
+        "rejected": 0,
+        "resolved": 0,
+        "answered": 0,
+        "noisy": false
+      }
     }
   ],
   "suppressed": [
@@ -814,7 +926,134 @@
         "author": "dana",
         "date": "2026-06-02",
         "note": "20260602-091500-dana-rollbar-is-deliberate-mobile-only"
+      },
+      "record": {
+        "raised": 2,
+        "open": 1,
+        "rejected": 1,
+        "resolved": 0,
+        "answered": 1,
+        "noisy": false
       }
     }
-  ]
+  ],
+  "history": [
+    {
+      "id": "dns-only-vendor:docusign",
+      "first_seen": "2026-08-18T07:00:00Z",
+      "last_seen": "2026-08-18T07:00:00Z"
+    },
+    {
+      "id": "dns-only-vendor:google-workspace",
+      "first_seen": "2026-08-18T07:00:00Z",
+      "last_seen": "2026-08-18T07:00:00Z"
+    },
+    {
+      "id": "duplicate-category:error-tracking:rollbar+sentry",
+      "first_seen": "2026-06-02T00:00:00Z",
+      "last_seen": "2026-06-02T00:00:00Z"
+    },
+    {
+      "id": "duplicate-category:payments:paddle+stripe",
+      "first_seen": "2026-08-18T07:00:00Z",
+      "last_seen": "2026-08-18T07:00:00Z"
+    },
+    {
+      "id": "ghost-env-var:posthog@web",
+      "first_seen": "2026-08-18T07:00:00Z",
+      "last_seen": "2026-08-18T07:00:00Z"
+    },
+    {
+      "id": "ghost-env-var:twilio@api",
+      "first_seen": "2026-08-18T07:00:00Z",
+      "last_seen": "2026-08-18T07:00:00Z"
+    },
+    {
+      "id": "orphan-vendor:sentry@legacy",
+      "first_seen": "2026-08-18T07:00:00Z",
+      "last_seen": "2026-08-18T07:00:00Z"
+    },
+    {
+      "id": "single-repo-vendor:openai",
+      "first_seen": "2026-08-18T07:00:00Z",
+      "last_seen": "2026-08-18T07:00:00Z"
+    },
+    {
+      "id": "single-repo-vendor:paddle",
+      "first_seen": "2026-08-18T07:00:00Z",
+      "last_seen": "2026-08-18T07:00:00Z"
+    },
+    {
+      "id": "single-repo-vendor:posthog",
+      "first_seen": "2026-08-18T07:00:00Z",
+      "last_seen": "2026-08-18T07:00:00Z"
+    },
+    {
+      "id": "single-repo-vendor:rollbar",
+      "first_seen": "2026-08-18T07:00:00Z",
+      "last_seen": "2026-08-18T07:00:00Z"
+    },
+    {
+      "id": "single-repo-vendor:sendgrid",
+      "first_seen": "2026-08-18T07:00:00Z",
+      "last_seen": "2026-08-18T07:00:00Z"
+    },
+    {
+      "id": "single-repo-vendor:slack",
+      "first_seen": "2026-08-18T07:00:00Z",
+      "last_seen": "2026-08-18T07:00:00Z"
+    },
+    {
+      "id": "single-repo-vendor:twilio",
+      "first_seen": "2026-08-18T07:00:00Z",
+      "last_seen": "2026-08-18T07:00:00Z"
+    },
+    {
+      "id": "single-repo-vendor:vercel",
+      "first_seen": "2026-08-18T07:00:00Z",
+      "last_seen": "2026-08-18T07:00:00Z"
+    }
+  ],
+  "record": {
+    "dns-only-vendor": {
+      "raised": 2,
+      "open": 2,
+      "rejected": 0,
+      "resolved": 0,
+      "answered": 0,
+      "noisy": false
+    },
+    "duplicate-category": {
+      "raised": 2,
+      "open": 1,
+      "rejected": 1,
+      "resolved": 0,
+      "answered": 1,
+      "noisy": false
+    },
+    "ghost-env-var": {
+      "raised": 2,
+      "open": 2,
+      "rejected": 0,
+      "resolved": 0,
+      "answered": 0,
+      "noisy": false
+    },
+    "orphan-vendor": {
+      "raised": 1,
+      "open": 1,
+      "rejected": 0,
+      "resolved": 0,
+      "answered": 0,
+      "noisy": false
+    },
+    "single-repo-vendor": {
+      "raised": 8,
+      "open": 8,
+      "rejected": 0,
+      "resolved": 0,
+      "answered": 0,
+      "noisy": false
+    }
+  }
 }

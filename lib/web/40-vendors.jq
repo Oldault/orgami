@@ -172,6 +172,7 @@ def dns_row: {domain, signal: (.signal // null), at, source: "dns"};
        sources: (.sources // []), signals: (.signals // null),
        last_push: (.last_push // null), days_since_push: (.days_since_push // null),
        claim, suppressed: false,
+       record: (.record // null),
        # The figures people typed for the vendors this proposal touches, shown
        # beside the blast radius. They do not move the rank: money is a
        # human's claim, and the order stays advise's (rule 6).
@@ -227,7 +228,12 @@ def dns_row: {domain, signal: (.signal // null), at, source: "dns"};
    vendors: $vendors,
    advise: (if $adv == null then {missing: "orgami advise"}
             else {generated: ($adv.generated // null), stale_days: ($adv.stale_days // null),
-                  counts: ($adv.counts // null)} end),
+                  counts: ($adv.counts // null),
+                  # How past proposals of each kind fared — advise.json's own
+                  # record, passed through: a count of ids, not a figure the
+                  # page derives.
+                  record: ($adv.record // {}),
+                  record_since: (($adv.history // []) | map(.first_seen) | min // null)} end),
    proposals: $proposals,
    answered: $answered,
    excluded: (if $adv == null then null

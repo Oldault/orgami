@@ -22,6 +22,8 @@
 #   $cat       lib/vendors.tsv, parsed to
 #              [{id,name,category,signals,portal,flags}]
 #   $sup       [{id, reason, author, date, note}] — proposals a human rejected
+#   $prev      --slurpfile of the previous map/advise.json (or /dev/null on the
+#              first run) — its `history` is carried forward
 #   $now       epoch seconds
 #   $stale     a repo quieter than this many days makes its vendors orphans
 #   $dns_stale a DNS reading older than this many days is reported with its age
@@ -379,18 +381,60 @@ def days_since($now):
                + " — and no repository in the map names it. Nothing in the code was "
                + "ever going to find this one.")}]) as $dnsonly
 
+# --- the record: how proposals of each kind have fared --------------------------
+#
+# Every id ever raised, carried forward from the previous artifact, with when
+# it was first and last seen. Against it, each id has one of three fates: it is
+# still `open`; the team `rejected` it with a note; or it is `resolved` — no
+# longer proposed and never rejected, which means the situation it named went
+# away (or the map under it changed; the record cannot tell those apart, and
+# says so). A kind answered three times or more and rejected more often than
+# resolved is `noisy`, and its proposals rank below the others of their
+# confidence. Nothing is hidden by it: the row still prints, and says why it
+# sits where it does.
+| ((($prev // [])[0] // {}) | .history // []) as $old
+| (($dup + $single + $orphan + $ghost + $dnsonly) | map(.id) | unique) as $current_ids
+| (($sup // []) | map(.id) | unique) as $rejected_ids
+| ($now | todate) as $today
+| ([ $old[],
+     ($current_ids[] | {id: ., first_seen: $today, last_seen: $today}),
+     (($sup // [])[] | {id: .id, first_seen: (.date + "T00:00:00Z"), last_seen: (.date + "T00:00:00Z")}) ]
+   | group_by(.id)
+   | map(.[0].id as $i
+         | {id: $i,
+            first_seen: (map(.first_seen) | min),
+            last_seen: (if ($current_ids | index($i)) != null then $today else (map(.last_seen) | max) end)})
+   | sort_by(.id)) as $history
+| ([ $history[] | .id as $i
+     | {id: $i, kind: ($i | split(":")[0]),
+        fate: (if ($rejected_ids | index($i)) != null then "rejected"
+               elif ($current_ids | index($i)) != null then "open"
+               else "resolved" end)} ]) as $fates
+| ($fates | group_by(.kind)
+   | map({key: .[0].kind,
+          value: ({raised: length,
+                   open: ([.[] | select(.fate == "open")] | length),
+                   rejected: ([.[] | select(.fate == "rejected")] | length),
+                   resolved: ([.[] | select(.fate == "resolved")] | length)}
+                  | .answered = .rejected + .resolved
+                  | .noisy = (.answered >= 3 and .rejected > .resolved))})
+   | from_entries) as $record
+
 # --- rank, then subtract what a human already answered ------------------------
 #
-# Confidence first, blast radius second — repositories, then domains, since a
-# vendor on every domain the organization owns is a wider fact than one on a
-# single brand — and id last, so two runs on the same map produce the same order
-# as well as the same ids.
+# Confidence first, then the record — a noisy kind sits below the rest of its
+# confidence — then blast radius: repositories, then domains, since a vendor
+# on every domain the organization owns is a wider fact than one on a single
+# brand — and id last, so two runs on the same map produce the same order as
+# well as the same ids.
 | (($dup + $single + $orphan + $ghost + $dnsonly)
    | map(. as $p
      | (($sup // []) | map(select(.id == $p.id)) | first) as $s
-     | $p + (if $s == null then {suppressed: false}
-             else {suppressed: true, suppression: $s} end))
+     | $p + {record: ($record[$p.kind] // null)}
+         + (if $s == null then {suppressed: false}
+            else {suppressed: true, suppression: $s} end))
    | sort_by((if .confidence == "high" then 0 else 1 end),
+             (if (.record.noisy // false) then 1 else 0 end),
              -(.repo_count), -((.domains // []) | length), .id)) as $all
 
 | ([$all[] | select(.suppressed | not)] | to_entries | map(.value + {rank: (.key + 1)})) as $open
@@ -438,4 +482,6 @@ def days_since($now):
              | map({id, name, category, portal, repos, repo_count, domains, sources})
              | sort_by(.id)),
    proposals: $open,
-   suppressed: $hidden}
+   suppressed: $hidden,
+   history: $history,
+   record: $record}

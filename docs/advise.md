@@ -190,6 +190,29 @@ orgami note --supersede <note-id> --repo legacy "the lawsuit settled; Sentry can
 
 An advisory list that gets shorter every month is the one that is working.
 
+## It keeps score
+
+Every id ever raised stays in `advise.json` under `history`, with the day it
+was first and last seen, carried forward from one run to the next. Against
+that record each id has one of three fates: still **open**; **rejected**,
+which is a note; or **resolved** — no longer proposed and never rejected, so
+the situation it named went away (or the map under it changed; the record
+cannot tell those apart, and the report says so).
+
+Once the team has answered anything, the report opens with the tally per kind:
+
+```
+| Kind                 | raised | still open | resolved | rejected |
+| `duplicate-category` |      4 |          1 |        2 |        1 |
+| `ghost-env-var`      |      9 |          2 |        1 |        6 — rejected more than resolved, ranked lower |
+```
+
+A kind answered three times or more and rejected more often than resolved is
+**noisy**: its proposals rank below the others of their confidence, and each
+one says so on its own row. Nothing is hidden by it — the same rule that keeps
+"not proposed, on purpose" visible keeps a noisy kind on the list. It is the
+one number that says whether a rule in `lib/advise.jq` is earning its place.
+
 ## Telling it what things cost
 
 The report has never seen an invoice and never will. What a person knows, they

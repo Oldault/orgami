@@ -148,6 +148,10 @@ check "vendors: the reject command is there to copy, per proposal" \
 check "vendors: a suppressed proposal is linked to the note that answered it" \
   "$(jq -r '.answered[0] | [.id, .note.id, .author, .date, .proposed] | join(" ")' <<<"$vendors")" \
   "duplicate-category:error-tracking:rollbar+sentry 20260602-091500-dana-rollbar-is-deliberate-mobile-only dana 2026-06-02 true"
+check "vendors: the record of how each kind fared is advise.json's own, passed through" \
+  "$(jq -r '[.advise.record["duplicate-category"] | .raised, .rejected, .noisy] | join(" ")' <<<"$vendors")" "2 1 false"
+check "vendors: every proposal carries its kind's record" \
+  "$(jq -r '[.proposals[] | .record != null] | all' <<<"$vendors")" "true"
 check "vendors: the allow-list is read from advise.json, not copied" \
   "$(jq -c '.substitutable' <<<"$vendors")" \
   "$(jq -c '.excluded.substitutable_categories' test/fixtures/company/map/advise.json)"
