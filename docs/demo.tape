@@ -1,12 +1,10 @@
 # The README demo, recorded with vhs — https://github.com/charmbracelet/vhs
 #
-#   vhs docs/demo.tape        # writes docs/demo.gif, run from the repo root
+#   vhs docs/demo.tape        # writes docs/demo.gif and docs/demo.mp4, from the repo root
 #
-# The landing page plays docs/demo.mp4, encoded from the GIF (vhs is not always
-# installed where the page is edited). Re-encode after every re-record:
-#
-#   ffmpeg -y -i docs/demo.gif -movflags +faststart -pix_fmt yuv420p \
-#     -c:v libx264 -preset slow -crf 24 -tune stillimage -an docs/demo.mp4
+# The landing page plays the mp4 and the README shows the GIF. The mp4 is
+# recorded directly rather than encoded from the GIF, whose 256 colours smear
+# the small text.
 #
 # It records against a mapped copy of a public organization, so nothing in the
 # GIF belongs to a client. Reproduce that first — it takes about a minute:
@@ -22,14 +20,19 @@
 # `orgami pull --last 1` and the matching week is the pair to change.
 
 Output docs/demo.gif
+Output docs/demo.mp4
 
 Set Shell bash
-Set FontSize 14
+# The page shows the recording at about half its width, so 14 lands near 7px.
+# 22 keeps it legible there, at the cost of columns: the terminal is ~90 wide.
+Set FontSize 22
 Set Width 1200
 Set Height 720
 Set Padding 20
 Set Theme "Catppuccin Mocha"
 Set TypingSpeed 40ms
+# The default 50fps drops frames on a slow machine and the take plays short.
+Set Framerate 25
 Set WindowBar Colorful
 Set BorderRadius 8
 
@@ -49,8 +52,9 @@ Type "clear" Enter
 Sleep 400ms
 
 # One node, and both directions of every edge — each with the file:line it was
-# read out of, so nothing here is a model's guess.
-Type "orgami query hono" Sleep 500ms Enter
+# read out of, so nothing here is a model's guess. create-hono because its whole
+# answer fits the ~22 rows the font size leaves; hono's scrolls off the top.
+Type "orgami query create-hono" Sleep 500ms Enter
 Sleep 5500ms
 
 Type "clear" Enter
@@ -78,6 +82,6 @@ Sleep 400ms
 
 # Every number in the weekly recap is computed by jq, never by a model.
 Set TypingSpeed 25ms
-Type "orgami report --stats-only --week 2026-W33 |" Enter
+Type "orgami report --stats-only --week 2026-W38 |" Enter
 Type "  jq '{merged, repos_touched, median_hours_to_merge, merged_without_review}'" Sleep 500ms Enter
 Sleep 4500ms
