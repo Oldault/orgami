@@ -26,8 +26,6 @@ ROOT=$(cd -- "$(dirname -- "$ORGAMI_BIN")/.." && pwd)
 
 source "$ROOT/lib/common.sh"
 
-need jq
-
 usage() {
   cat <<'EOF'
 orgami — your organization's map, digests and memory, in your agent's context
@@ -63,6 +61,9 @@ Setup
   orgami version                        which version is installed
   orgami update [--check]               pull the newest orgami, and the plugin with it
   orgami update --dev [<path>]          point both installs at a working checkout
+  orgami doctor [--json]                what this machine is missing, and the fix
+  orgami uninstall [--dry-run] [--yes] [--purge]
+                                        remove what orgami installed on this machine
 
 The map
   orgami scan [--only <repo>] [--depth N]
@@ -149,6 +150,13 @@ fi
 
 # Bare `orgami init` walks you through it instead of demanding flags.
 if [[ $cmd == init && $# -eq 0 && -t 0 && -t 1 ]]; then cmd=setup; fi
+
+# doctor is the command that says jq is missing, and help is how a new machine
+# finds doctor, so both run without it.
+case $cmd in
+  doctor | help | -h | --help) ;;
+  *) need jq ;;
+esac
 
 case $cmd in
   claude-project)
@@ -254,6 +262,15 @@ case $cmd in
   update)
     source "$ROOT/lib/update.sh"
     cmd_update "$@"
+    ;;
+  doctor | uninstall)
+    # tui.sh for its fzf version test, update.sh for the auto-update switch and
+    # which directory is Claude Code's own plugin clone.
+    source "$ROOT/lib/style.sh"
+    source "$ROOT/lib/tui.sh"
+    source "$ROOT/lib/update.sh"
+    source "$ROOT/lib/doctor.sh"
+    "cmd_$cmd" "$@"
     ;;
   note-sweep)
     source "$ROOT/lib/notes.sh"

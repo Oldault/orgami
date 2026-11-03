@@ -77,11 +77,18 @@ done <<<"$commands"
 
 # The lines usage_all writes awkwardly: a description wrapped onto the next
 # line, one that runs straight into the argument spec, and a hyphenated name.
-for c in scan report context notes prune note-sweep claude-project playbooks; do
+for c in scan report context notes prune note-sweep claude-project playbooks doctor uninstall; do
   grep -qxF "$c" <<<"$commands" || bad "usage_all lists '$c' but the completion does not offer it"
 done
 
 [[ $fail == 0 ]] && echo "ok   $(grep -c . <<<"$commands") commands, every one of them dispatched"
+
+# The two commands an agent runs on its own when something is broken, and the
+# one that deletes things: their flags are offered, read off the same help text.
+got=$(offer orgami doctor -- | tr '\n' ' ')
+[[ $got == "--json " ]] || bad "doctor flags" "want: --json" "got:  $got"
+got=$(offer orgami uninstall -- | tr '\n' ' ')
+[[ $got == "--dry-run --purge --yes " ]] || bad "uninstall flags" "want: --dry-run --purge --yes" "got:  $got"
 
 # --- companies are directories with a config.json in them --------------------
 
