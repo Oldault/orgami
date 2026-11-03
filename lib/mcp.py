@@ -30,7 +30,7 @@ NO_COMPANY = (
 
 class ToolError(Exception):
     """A tool that ran and failed: reported to the client as isError, never fatal."""
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 TOOLS = [
     {
