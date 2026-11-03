@@ -20,7 +20,7 @@ html_payload() {
   local g="$DIR/map/graph.json" d="$DIR/map/depth.json" l="$DIR/map/live.json"
   local depth='null' live='null'
   [[ -f $d ]] && depth=$(jq -c '{generated, totals,
-      repos: [.repos[] | select(.parsed > 0)
+      repos: [.repos[] | select((.parsed | type) == "number" and .parsed > 0)
               | {name, parsed, symbol_count, exported_count, external_modules,
                  languages}]}' "$d" 2>/dev/null || echo null)
   [[ -f $l ]] && live=$(jq -c '{generated,
@@ -29,8 +29,12 @@ html_payload() {
 
   jq -c --argjson depth "$depth" --argjson live "$live" \
     --arg company "$COMPANY" '
-    def conf: (.confidence // (if (.kind | IN("calls", "shares-config", "changes-with"))
-                               then "inferred" else "extracted" end));
+    # Only the two known values leave here: the page puts this in a class
+    # attribute, and a graph.json from a teammate clone is not trusted.
+    def conf: (if .confidence == "extracted" or .confidence == "inferred" then .confidence
+               elif .confidence != null then "inferred"
+               elif (.kind | IN("calls", "shares-config", "changes-with")) then "inferred"
+               else "extracted" end);
     {company: $company, org: .org, generated: .generated,
      nodes: [.nodes[] | {id, kind, name,
                          language: (.meta.language // null),
@@ -423,6 +427,8 @@ function frame() { tick(); draw(); requestAnimationFrame(frame); }
 /* --- the panel ------------------------------------------------------------ */
 const panel = document.getElementById("panel"), body = document.getElementById("body");
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+// Only web links become an href; a javascript: or data: URL from the graph runs on click.
+const safeUrl = u => /^https?:\/\//i.test(String(u ?? "")) ? String(u) : null;
 const bare = id => id.replace(/^[a-z-]+:/, "");
 
 function show(node) {
@@ -443,9 +449,9 @@ function show(node) {
   let h = `<h2>${esc(node.name)}</h2><div class="kind">${esc(node.kind)}${
     node.language ? " · " + esc(node.language) : ""}${node.private ? " · private" : ""}</div>`;
   if (node.description) h += `<p class="desc">${esc(node.description)}</p>`;
-  if (node.url) h += `<p><a href="${esc(node.url)}" target="_blank" rel="noopener">open on GitHub →</a></p>`;
-  if (d) h += `<h3>parsed</h3><div>${d.parsed} files · ${d.symbol_count} definitions · ` +
-    `<strong>${d.exported_count} exported</strong> · ${d.external_modules} external packages</div>`;
+  if (safeUrl(node.url)) h += `<p><a href="${esc(node.url)}" target="_blank" rel="noopener">open on GitHub →</a></p>`;
+  if (d) h += `<h3>parsed</h3><div>${esc(d.parsed)} files · ${esc(d.symbol_count)} definitions · ` +
+    `<strong>${esc(d.exported_count)} exported</strong> · ${esc(d.external_modules)} external packages</div>`;
   if (live && live.length) {
     h += `<h3>running now</h3>` + live.map(x =>
       `<div class="edge"><span class="peer">${esc(x.provider)} ${esc(x.name)}</span>` +
@@ -457,7 +463,7 @@ function show(node) {
     h += `<h3>${esc(kind)}</h3>`;
     for (const e of list) {
       h += `<div class="edge"><span class="peer" data-id="${esc(e.id)}">${esc(e.peer)}</span>` +
-        `<span class="tag ${e.c}">${e.c}</span>` +
+        `<span class="tag ${e.c === "inferred" ? "inferred" : "extracted"}">${e.c === "inferred" ? "inferred" : "extracted"}</span>` +
         (e.ev ? `<span class="ev mono">${esc(e.ev)}</span>` : "") + `</div>`;
     }
   }
