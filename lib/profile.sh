@@ -27,6 +27,46 @@ ENV_NOISE='^(NODE_ENV|ENV|ENVIRONMENT|PORT|HOST|DEBUG|LOG_LEVEL|TZ|HOME|PATH|USE
 # three branches ask the same question and it is written down once.
 RUN_VOCAB='^(dev|run|start|build|test|lint|check|setup|install|migrate)$'
 
+# A checkout is somebody else's tree, and a committed symlink is a file that can
+# name any path on this machine. `AGENTS.md -> ../../../.config/gh/hosts.yml`
+# read as the repo's agent instructions would copy the scanning user's token
+# into CONVENTIONS.md, which publish pushes. So a file read out of a checkout is
+# read only when its real location, every link followed, is still inside it.
+
+# clone_realpath <path> — the physical path, every symlink in every component
+# followed, or failure for a loop or a link that leads nowhere. `cd -P` and
+# `pwd -P` rather than readlink -f, which BSD readlink does not have.
+clone_realpath() {
+  local p=$1 t d n=0
+  while :; do
+    d=$(cd -P "$(dirname "$p")" 2>/dev/null && pwd -P) || return 1
+    p=$d/$(basename "$p")
+    [[ -L $p ]] || break
+    ((++n <= 40)) || return 1
+    t=$(readlink "$p") || return 1
+    [[ $t == /* ]] || t=$d/$t
+    p=$t
+  done
+  [[ -e $p ]] || return 1
+  if [[ -d $p ]]; then (cd -P "$p" 2>/dev/null && pwd -P); else printf '%s\n' "$p"; fi
+}
+
+# clone_inside <checkout> <path> — does <path> exist and resolve to somewhere
+# inside <checkout>, outside its .git? A link into .git is refused with the
+# rest: the remote URL and any credential git kept live there.
+clone_inside() {
+  local root real
+  root=$(cd -P "$1" 2>/dev/null && pwd -P) || return 1
+  real=$(clone_realpath "$2") || return 1
+  [[ $real == "$root" || $real == "$root"/* ]] || return 1
+  [[ $real != "$root/.git" && $real != "$root"/.git/* ]]
+}
+
+# clone_file <checkout> <path> — a regular file that clone_inside allows.
+clone_file() {
+  [[ -f $2 ]] && clone_inside "$1" "$2"
+}
+
 # Phoenix leaves two marks and either one is enough: the dependency in mix.exs,
 # or the `lib/<app>_web/` tree its generator writes. Both the framework list and
 # the command list ask the question, so it is answered in one place.
@@ -327,46 +367,71 @@ profile_env() {
   } 2>/dev/null | sort -u | grep -vE "$ENV_NOISE" | head -60 | jq -Rn '[inputs]'
 }
 
+# `grep -rno` hits made readable: "path:line: VERB rest". $1 is the checkout,
+# taken off the front of each path; $2 a fixed label (CLOUD), or empty to name
+# the verb after the call it matched — `.get(` and `@Get(` both read GET. awk,
+# not sed: uppercasing a capture is GNU sed's \U, which BSD sed lacks, and the
+# checkout path is data a sed program would read as syntax. ENVIRON carries
+# both in untouched, where awk -v would expand backslashes in them.
+profile_route_lines() {
+  P="$1/" L="${2-}" awk '
+    {
+      line = $0
+      if (index(line, ENVIRON["P"]) == 1) line = substr(line, length(ENVIRON["P"]) + 1)
+      if (!match(line, /:[0-9]+:/)) next
+      head = substr(line, 1, RSTART + RLENGTH - 1)
+      rest = substr(line, RSTART + RLENGTH)
+      if (!match(rest, /[A-Za-z_]+\([[:space:]]*/)) next
+      verb = substr(rest, RSTART, RLENGTH)
+      sub(/\(.*/, "", verb)
+      rest = substr(rest, RSTART + RLENGTH + 1)
+      print head " " (ENVIRON["L"] != "" ? ENVIRON["L"] : toupper(verb)) " " rest
+    }'
+}
+
 # Endpoints this repo serves, with the file they were found in.
 profile_routes() {
-  local src=$1
+  local src=$1 f
   {
     # Only the server side: app/router/server verbs. An axios or fetch call
     # uses the same shape and would otherwise look like a route it serves.
-    grep -rnoE "\b(app|router|server|routes)\.(get|post|put|patch|delete)\(\s*['\"\`][^'\"\`]{1,60}" "$src" \
+    # The leading class is the word boundary; `\b` is not in every grep.
+    grep -rnoE "(^|[^A-Za-z0-9_])(app|router|server|routes)\.(get|post|put|patch|delete)\([[:space:]]*['\"\`][^'\"\`]{1,60}" "$src" \
       --include='*.js' --include='*.ts' "${PROFILE_EXCL[@]}" "${PROFILE_TEST_EXCL[@]}" 2>/dev/null |
-      sed -E "s|^$src/||; s/\b(app|router|server|routes)\.(get|post|put|patch|delete)\(\s*['\"\`]/ \U\2\E /" |
+      profile_route_lines "$src" |
       grep -E ' (GET|POST|PUT|PATCH|DELETE) ' || true
 
-    grep -rnoE "@(Get|Post|Put|Patch|Delete|Controller)\(\s*['\"][^'\"]{0,60}" "$src" \
+    grep -rnoE "@(Get|Post|Put|Patch|Delete|Controller)\([[:space:]]*['\"][^'\"]{0,60}" "$src" \
       --include='*.ts' "${PROFILE_EXCL[@]}" "${PROFILE_TEST_EXCL[@]}" 2>/dev/null |
-      sed -E "s|^$src/||; s/@([A-Za-z]+)\(\s*['\"]/ \U\1\E /" || true
+      profile_route_lines "$src" || true
 
-    grep -rnoE "Parse\.Cloud\.(define|job)\(\s*['\"][^'\"]{1,60}" "$src" \
+    grep -rnoE "Parse\.Cloud\.(define|job)\([[:space:]]*['\"][^'\"]{1,60}" "$src" \
       --include='*.js' --include='*.ts' "${PROFILE_EXCL[@]}" "${PROFILE_TEST_EXCL[@]}" 2>/dev/null |
-      sed -E "s|^$src/||; s/Parse\.Cloud\.(define|job)\(\s*['\"]/ CLOUD /" || true
+      profile_route_lines "$src" CLOUD || true
 
-    grep -rnoE "@(app|router|blueprint)\.(route|get|post|put|patch|delete)\(\s*['\"][^'\"]{1,60}" "$src" \
+    grep -rnoE "@(app|router|blueprint)\.(route|get|post|put|patch|delete)\([[:space:]]*['\"][^'\"]{1,60}" "$src" \
       --include='*.py' "${PROFILE_EXCL[@]}" "${PROFILE_TEST_EXCL[@]}" 2>/dev/null |
-      sed -E "s|^$src/||; s/@[a-z_]+\.([a-z]+)\(\s*['\"]/ \U\1\E /" || true
+      profile_route_lines "$src" || true
 
     if [[ -d $src/pages/api ]]; then
       find "$src/pages/api" -type f \( -name '*.ts' -o -name '*.js' -o -name '*.tsx' \) 2>/dev/null |
-        sed -E "s|^$src/||" | while read -r f; do
+        while read -r f; do
+          f=${f#"$src"/}
           echo "$f:1 ROUTE /$(sed -E 's|^pages/||; s|\.[jt]sx?$||; s|/index$||' <<<"$f")"
         done
     fi
     if [[ -d $src/app ]]; then
       find "$src/app" -type f -name 'route.ts' -o -path "$src/app/*" -name 'route.js' 2>/dev/null |
-        sed -E "s|^$src/||" | while read -r f; do
+        while read -r f; do
+          f=${f#"$src"/}
           echo "$f:1 ROUTE /$(sed -E 's|^app/||; s|/route\.[jt]s$||' <<<"$f")"
         done
     fi
 
     [[ -f $src/config/routes.rb ]] &&
-      grep -nE '^\s*(get|post|put|patch|delete|resources)\s' "$src/config/routes.rb" |
+      grep -nE '^[[:space:]]*(get|post|put|patch|delete|resources)[[:space:]]' "$src/config/routes.rb" |
       sed -E "s|^|config/routes.rb:|" || true
-  } 2>/dev/null | sed 's/[[:space:]]\+/ /g' | sort -u | head -40 | jq -Rn '[inputs]'
+  } 2>/dev/null | sed -E 's/[[:space:]]+/ /g' | sort -u | head -40 | jq -Rn '[inputs]'
 }
 
 # Hosts this repo reaches out to, from literal URLs in source.
@@ -394,16 +459,16 @@ profile_workflows() {
   {
     for f in "$dir"/*.yml "$dir"/*.yaml; do
       [[ -f $f ]] || continue
-      name=$(grep -m1 -E '^name:' "$f" | sed -E 's/^name:\s*//; s/^["'"'"']//; s/["'"'"']$//' || true)
+      name=$(grep -m1 -E '^name:' "$f" | sed -E 's/^name:[[:space:]]*//; s/^["'"'"']//; s/["'"'"']$//' || true)
       [[ -n $name ]] || name=$(basename "$f")
 
-      triggers=$(grep -oE '^\s{0,4}(push|pull_request|workflow_dispatch|schedule|release|workflow_call|repository_dispatch):' "$f" |
+      triggers=$(grep -oE '^[[:space:]]{0,4}(push|pull_request|workflow_dispatch|schedule|release|workflow_call|repository_dispatch):' "$f" |
         tr -d ' :' | sort -u | paste -sd, - || true)
 
-      env=$(grep -m1 -oE '^\s+environment:\s*\S+' "$f" | awk '{print $2}' | tr -d '"' || true)
+      env=$(grep -m1 -oE '^[[:space:]]+environment:[[:space:]]*[^[:space:]]+' "$f" | awk '{print $2}' | tr -d '"' || true)
 
-      actions=$(grep -ohE 'uses:\s*[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+' "$f" |
-        sed -E 's/uses:\s*//' | sort -u | head -6 | paste -sd, - || true)
+      actions=$(grep -ohE 'uses:[[:space:]]*[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+' "$f" |
+        sed -E 's/uses:[[:space:]]*//' | sort -u | head -6 | paste -sd, - || true)
 
       # A workflow deploys if it says so in its name, or if it uses an action
       # that only exists to deploy. Merely touching aws-actions is not enough —
@@ -411,7 +476,7 @@ profile_workflows() {
       deploys=false
       if grep -qiE '(^|[-_/])(deploy|release|publish|ship)' <<<"$(basename "$f") $name"; then
         deploys=true
-      elif grep -qE 'uses:\s*(akhileshns/heroku-deploy|superfly/flyctl-actions|amondnet/vercel-action|vercel/action|aws-actions/amazon-ecs-deploy-task-definition|JamesIves/github-pages-deploy-action|peaceiris/actions-gh-pages|appleboy/ssh-action|serverless/github-action)' "$f"; then
+      elif grep -qE 'uses:[[:space:]]*(akhileshns/heroku-deploy|superfly/flyctl-actions|amondnet/vercel-action|vercel/action|aws-actions/amazon-ecs-deploy-task-definition|JamesIves/github-pages-deploy-action|peaceiris/actions-gh-pages|appleboy/ssh-action|serverless/github-action)' "$f"; then
         deploys=true
       fi
 
@@ -436,13 +501,13 @@ profile_serves() {
       jq -r '(.alias // []) | if type == "array" then .[] else . end' "$src/vercel.json" 2>/dev/null
     for f in .env.example .env.sample .env.template; do
       [[ -f $src/$f ]] || continue
-      grep -oE '^[A-Z0-9_]*(SELF|PUBLIC|SITE|APP|BASE|SERVER|FRONTEND|CLIENT)[A-Z0-9_]*_URL=\S+' "$src/$f" |
+      grep -oE '^[A-Z0-9_]*(SELF|PUBLIC|SITE|APP|BASE|SERVER|FRONTEND|CLIENT)[A-Z0-9_]*_URL=[^[:space:]]+' "$src/$f" |
         sed -E 's|^[^=]+=||; s|https?://||; s|[/:].*$||'
     done
     [[ -f $src/app.json ]] &&
       jq -r '.name // empty | if . == "" then empty else . + ".herokuapp.com" end' "$src/app.json" 2>/dev/null
   } 2>/dev/null |
-    tr -d '"\r' | grep -vE '^\s*$' |
+    tr -d '"\r' | grep -vE '^[[:space:]]*$' |
     grep -E '^[a-zA-Z0-9][a-zA-Z0-9.-]+\.[a-z]{2,}$' |
     grep -vE "$NOISE_DOMAINS" | sort -u | head -10 | jq -Rn '[inputs]'
 }
@@ -451,7 +516,7 @@ profile_docs() {
   local src=$1 f out=()
   for f in AGENTS.md CLAUDE.md CONTRIBUTING.md ARCHITECTURE.md docs/ARCHITECTURE.md \
     .cursorrules .github/copilot-instructions.md; do
-    [[ -f $src/$f ]] && out+=("$f")
+    clone_file "$src" "$src/$f" && out+=("$f")
   done
   printf '%s\n' "${out[@]:-}" | grep -v '^$' | jq -Rn '[inputs]'
 }

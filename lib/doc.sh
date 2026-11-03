@@ -21,6 +21,9 @@ doc_conventions() {
   [[ -f $profiles ]] || return 0
   local out="$DIR/map/CONVENTIONS.md"
   local repo doc path lines
+  # clone_file: a committed symlink is read only when it stays in its checkout.
+  # The scan already removed the rest, but a cache from before it may not have.
+  source "$ROOT/lib/profile.sh"
 
   {
     echo "# $COMPANY conventions"
@@ -33,7 +36,7 @@ doc_conventions() {
     if [[ -d $DIR/cache/src/.github ]]; then
       for doc in AGENTS.md CLAUDE.md CONTRIBUTING.md; do
         path="$DIR/cache/src/.github/$doc"
-        [[ -f $path ]] || continue
+        clone_file "$DIR/cache/src/.github" "$path" || continue
         echo "## Organization default — \`.github/$doc\`"
         echo
         echo "Applies to every repository in the org unless a repo overrides it."
@@ -51,7 +54,7 @@ doc_conventions() {
       while read -r doc; do
         [[ -n $doc ]] || continue
         path="$DIR/cache/src/$repo/$doc"
-        [[ -f $path ]] || continue
+        clone_file "$DIR/cache/src/$repo" "$path" || continue
         any=1
         lines=$(wc -l <"$path")
         echo "### \`$repo/$doc\` — $lines lines"
@@ -189,7 +192,8 @@ Decline rather than guess on anything about money, headcount, contracts,
 deadlines, or anything happening outside the code.
 ASKEOF
 
-  sed -i "s|__COMPANY__|$COMPANY|g; s|__ORG__|$ORG|g" "$out"
+  # A value is data: substituted literally, never handed to sed as a program.
+  subst_file "$out" __COMPANY__ "$COMPANY" __ORG__ "$ORG"
 
   if [[ -n $project ]]; then
     local tmp
@@ -263,7 +267,7 @@ PROMPT
         printf '\nGRAPH\n```json\n'
         cat "$g"
         printf '\n```\n'
-      } | claude -p --model "$model" --output-format text || die "claude failed"
+      } | model_call "$model" || die "claude failed"
       echo
     fi
 

@@ -60,8 +60,11 @@ read_jsonc() {
 emit_hosts_from() {
   local repo=$1 file=$2 rel=$3 kind=${4:-deploys-to} tok line
   [[ -f $file ]] || return 0
-  grep -noE '(\b([0-9]{1,3}\.){3}[0-9]{1,3}\b)|([a-z0-9][a-z0-9-]*(\.[a-z0-9-]+)+\.[a-z]{2,})' "$file" 2>/dev/null |
+  # Digit runs of any length, then the octet shape checked here: `\b` is not in
+  # every grep, and without it `1234.5.6.7` would yield `234.5.6.7`.
+  grep -noE '([0-9]+\.){3}[0-9]+|([a-z0-9][a-z0-9-]*(\.[a-z0-9-]+)+\.[a-z]{2,})' "$file" 2>/dev/null |
     while IFS=: read -r line tok; do
+      [[ $tok =~ ^[0-9.]+$ && ! $tok =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] && continue
       [[ $tok =~ ^(0\.0\.0\.0|127\.0\.0\.1|255\.|1\.0\.0|0\.0\.0)  ]] && continue
       echo "$tok" | grep -qE "$NOISE_DOMAINS" && continue
       [[ $tok =~ ^[0-9.]+$ ]] || [[ $tok == *.* ]] || continue
@@ -75,8 +78,8 @@ scan_deploy() {
 
   [[ -d $src/.github/workflows ]] && {
     emit_tool "$repo" github-actions ".github/workflows"
-    grep -rhoE 'uses:\s*[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+' "$src/.github/workflows" 2>/dev/null |
-      sed 's/uses:\s*//' | sort -u | while read -r action; do
+    grep -rhoE 'uses:[[:space:]]*[a-zA-Z0-9_.-]+/[a-zA-Z0-9_.-]+' "$src/.github/workflows" 2>/dev/null |
+      sed -E 's/uses:[[:space:]]*//' | sort -u | while read -r action; do
         case $action in
           superfly/*|*flyctl*) emit_tool "$repo" fly ".github/workflows ($action)" ;;
           amondnet/vercel-action|vercel/*) emit_tool "$repo" vercel ".github/workflows ($action)" ;;
@@ -107,7 +110,7 @@ scan_deploy() {
   if [[ -f $src/fly.toml ]]; then
     emit_tool "$repo" fly fly.toml
     local app
-    app=$(grep -m1 -oE '^app\s*=\s*"?[a-z0-9-]+' "$src/fly.toml" | grep -oE '[a-z0-9-]+$' || true)
+    app=$(grep -m1 -oE '^app[[:space:]]*=[[:space:]]*"?[a-z0-9-]+' "$src/fly.toml" | grep -oE '[a-z0-9-]+$' || true)
     [[ -n $app ]] && {
       emit_node "host:$app.fly.dev" host "$app.fly.dev"
       emit_edge "repo:$repo" "host:$app.fly.dev" deploys-to fly.toml
@@ -123,7 +126,7 @@ scan_deploy() {
     [[ -f $src/$cf ]] || continue
     emit_tool "$repo" cloudflare "$cf"
     if [[ $cf == *.toml ]]; then
-      name=$(grep -m1 -oE '^name\s*=\s*"?[a-z0-9][a-z0-9-]*' "$src/$cf" |
+      name=$(grep -m1 -oE '^name[[:space:]]*=[[:space:]]*"?[a-z0-9][a-z0-9-]*' "$src/$cf" |
         grep -oE '[a-z0-9][a-z0-9-]*$' || true)
     else
       name=$(read_jsonc "$src/$cf" '.name // empty')
@@ -198,7 +201,7 @@ scan_deploy() {
     tf=$(find "$src" -maxdepth 3 -name '*.tf' -not -path '*/.git/*' 2>/dev/null | head -1)
     [[ -n $tf ]] && {
       emit_tool "$repo" terraform "${tf#"$src"/}"
-      grep -rhoE 'provider\s+"[a-z0-9_]+"' "$src" --include='*.tf' 2>/dev/null |
+      grep -rhoE 'provider[[:space:]]+"[a-z0-9_]+"' "$src" --include='*.tf' 2>/dev/null |
         grep -oE '"[a-z0-9_]+"' | tr -d '"' | sort -u | while read -r p; do
           emit_tool "$repo" "$p" "terraform provider"
         done
@@ -206,11 +209,11 @@ scan_deploy() {
   fi
 
   local kf
-  kf=$(grep -rlE '^kind:\s*(Deployment|StatefulSet|Ingress)' "$src" \
+  kf=$(grep -rlE '^kind:[[:space:]]*(Deployment|StatefulSet|Ingress)' "$src" \
     --include='*.yaml' --include='*.yml' 2>/dev/null | head -1 || true)
   [[ -n $kf ]] && {
     emit_tool "$repo" kubernetes "${kf#"$src"/}"
-    grep -rhoE '^\s+host:\s*[a-z0-9.-]+' "$src" --include='*.yaml' --include='*.yml' 2>/dev/null |
+    grep -rhoE '^[[:space:]]+host:[[:space:]]*[a-z0-9.-]+' "$src" --include='*.yaml' --include='*.yml' 2>/dev/null |
       grep -oE '[a-z0-9.-]+$' | sort -u | while read -r h; do
         echo "$h" | grep -qE "$NOISE_DOMAINS" && continue
         [[ $h == *.* ]] || continue
@@ -222,7 +225,7 @@ scan_deploy() {
   for f in docker-compose.yml docker-compose.yaml compose.yml compose.yaml; do
     [[ -f $src/$f ]] || continue
     emit_tool "$repo" docker-compose "$f"
-    grep -oE '^\s+image:\s*\S+' "$src/$f" | awk '{print $2}' | tr -d '"' |
+    grep -oE '^[[:space:]]+image:[[:space:]]*[^[:space:]]+' "$src/$f" | awk '{print $2}' | tr -d '"' |
       sed 's/:.*//' | sort -u | while read -r img; do
         local base=${img##*/}
         case $base in
@@ -251,15 +254,18 @@ scan_deploy() {
 
 # Repo-to-repo edges: explicit references only.
 scan_links() {
-  local repo=$1 src=$2 other rel line
+  local repo=$1 src=$2 other rel line re
   while read -r other; do
     [[ -z $other || $other == "$repo" ]] && continue
     [[ $other == .* ]] && continue
+    # A repo name may hold a dot, which a pattern reads as any character. The
+    # trailing class is the word boundary; `\b` is a GNU extension to BRE.
+    re="$ORG/${other//./\\.}([^A-Za-z0-9_]|\$)"
     local hit
-    hit=$(grep -rn --binary-files=without-match \
-      -e "github\.com[:/]$ORG/$other\b" \
-      -e "ghcr\.io/$ORG/$other\b" \
-      -e "@$ORG/$other\b" \
+    hit=$(grep -rnE --binary-files=without-match \
+      -e "github\.com[:/]$re" \
+      -e "ghcr\.io/$re" \
+      -e "@$re" \
       "$src" \
       --exclude-dir=.git --exclude-dir=node_modules --exclude-dir=vendor \
       --exclude-dir=dist --exclude-dir=build --exclude='*.lock' --exclude='*.sum' \
@@ -284,6 +290,18 @@ scan_links() {
   done <"$REPOLIST"
 }
 
+# Every symlink in a checkout whose target leaves it, leads into its .git, or
+# leads nowhere is removed before anything reads the tree — see clone_inside in
+# profile.sh. Links that stay inside (CLAUDE.md -> AGENTS.md) are kept. This
+# covers every reader at once, the grep -r walks and the jq reads alike, and
+# the next fetch's reset --hard puts the links back, to be removed again.
+scan_defuse_links() {
+  local src=$1 link
+  while IFS= read -r -d '' link; do
+    clone_inside "$src" "$link" || rm -f "$link"
+  done < <(find "$src" -path "$src/.git" -prune -o -type l -print0 2>/dev/null)
+}
+
 # One repo, start to finish, into its own emit file. Safe to run in parallel.
 scan_repo() {
   local repo=$1
@@ -291,9 +309,19 @@ scan_repo() {
   EMIT="$EMITDIR/e-$repo.ndjson"
   : >"$EMIT"
 
+  # A job in the background has no terminal to type a password into; without
+  # this, git would wait on one forever.
+  export GIT_TERMINAL_PROMPT=0
   if [[ -d $src/.git ]]; then
-    git -C "$src" fetch --depth "$DEPTH" --quiet origin 2>/dev/null &&
-      git -C "$src" reset --hard --quiet FETCH_HEAD 2>/dev/null || true
+    # The same credentials `gh repo clone` used for the first checkout. Plain
+    # git has only the user's own helpers, which for a private repo means the
+    # fetch fails and the map is quietly a week old. A failed fetch is still
+    # mapped, from the checkout already here, and reported as stale.
+    git -C "$src" -c 'credential.https://github.com.helper=' \
+      -c 'credential.https://github.com.helper=!gh auth git-credential' \
+      fetch --depth "$DEPTH" --quiet origin 2>/dev/null &&
+      git -C "$src" reset --hard --quiet FETCH_HEAD 2>/dev/null ||
+      echo "$repo" >>"$EMITDIR/stale"
   else
     gh repo clone "$ORG/$repo" "$src" -- --depth "$DEPTH" --single-branch --quiet 2>/dev/null || {
       echo "$repo" >>"$EMITDIR/failed"
@@ -301,6 +329,7 @@ scan_repo() {
       return 0
     }
   fi
+  scan_defuse_links "$src"
 
   local meta lang
   meta=$(jq -c --arg r "$repo" '.[] | select(.name == $r)
@@ -347,6 +376,47 @@ scan_progress() {
   printf '\n' >&2
 }
 
+# Ctrl-C does not reach the clones on its own: a script's background job
+# ignores SIGINT, so xargs and every git under it would keep going after the
+# scan had exited. The job runs in a process group of its own (set -m below),
+# and the whole group is sent TERM, on which git removes a half-made clone —
+# including any child forked after the signal was sent, which a walk of the
+# process tree would miss.
+scan_interrupt() {
+  [[ -z ${SCAN_XPID:-} ]] || kill -TERM -- "-$SCAN_XPID" 2>/dev/null || true
+  exit 130
+}
+
+# scan_merge <previous graph> <new graph> <names to keep, JSON array>
+# The new graph, plus what the previous one held for repos that were not
+# rescanned: their nodes, the edges they declared, and the nodes those edges
+# point at. `calls` and `shares-config` are left behind because
+# scan_infer_links derives them again from every profile.
+scan_merge() {
+  jq -n --slurpfile old "$1" --slurpfile new "$2" --argjson keep "$3" '
+    $old[0] as $o | $new[0] as $n
+    | ($keep | map({("repo:" + .): true}) | add // {}) as $k
+    | [$o.edges[] | select($k[.from])
+       | select(.kind | IN("calls", "shares-config") | not)] as $edges
+    | (($edges | map({(.to): true}) | add // {}) + $k) as $want
+    | [$o.nodes[] | select($want[.id])] as $nodes
+    | $n
+    | .edges = ((.edges + $edges) | unique)
+    | .nodes = (($nodes + .nodes) | group_by(.id) | map(.[0] + {meta: (map(.meta) | add)}))'
+}
+
+# Writes <file> from <tmp> only when jq agrees it is <test>, so a failed run
+# never leaves a file the next one parses. The copy is staged beside <file>
+# because the temp dir may be another file system, where mv is not atomic.
+scan_commit() {
+  local tmp=$1 file=$2 test=$3
+  jq -e "$test" "$tmp" >/dev/null 2>&1 || die "refusing to write $file: the new copy is not valid — the old one is kept"
+  SCAN_STAGE="$file.tmp.$$"
+  cat "$tmp" >"$SCAN_STAGE"
+  mv "$SCAN_STAGE" "$file"
+  SCAN_STAGE=""
+}
+
 cmd_scan() {
   load_company
   need gh
@@ -361,20 +431,34 @@ cmd_scan() {
       *) die "unknown flag: $1" ;;
     esac
   done
+  [[ -z $only ]] || valid_gh_name "$only" repo || die "not a repository name: '$only'"
 
-  local repos="$DIR/cache/repos/list.json"
+  # Everything this run writes outside the map lives here, and goes on any exit.
+  SCAN_TMP=$(mktemp -d)
+  SCAN_XPID="" SCAN_STAGE=""
+  trap 'rm -rf "$SCAN_TMP" ${SCAN_STAGE:+"$SCAN_STAGE"}' EXIT
+  trap scan_interrupt INT TERM
+
+  local repos="$DIR/cache/repos/list.json" err="$SCAN_TMP/gh.err"
   log "listing repos in $ORG"
-  gh api "orgs/$ORG/repos?per_page=100&type=all" --paginate \
+  if ! gh api "orgs/$ORG/repos?per_page=100&type=all" --paginate \
     --jq '[.[] | {name, description, language, archived, private, fork,
                   pushed_at, default_branch, topics, html_url,
-                  size, open_issues_count}]' |
-    jq -s 'add' >"$repos"
+                  size, open_issues_count}]' 2>"$err" |
+    jq -s 'add // []' >"$SCAN_TMP/list.json"; then
+    source "$ROOT/lib/pull.sh"
+    gh_refuse_personal
+    die "could not list the repositories in $ORG ($(head -1 "$err")) — check the org in $DIR/config.json, then: gh auth status"
+  fi
+  scan_commit "$SCAN_TMP/list.json" "$repos" 'type == "array"'
 
   local excl incl
   excl=$(jq -c '.exclude // []' "$DIR/config.json")
   incl=$(jq -c '.include // []' "$DIR/config.json")
 
-  REPOLIST=$(mktemp)
+  # REPOLIST is every active repo, because scan_links looks for references to
+  # all of them even when only one is being read. The scan list is what is read.
+  REPOLIST="$SCAN_TMP/repolist"
   jq -r --argjson excl "$excl" --argjson incl "$incl" \
     '.[] | select(.archived | not) | select(.fork | not)
      | .name
@@ -391,55 +475,107 @@ cmd_scan() {
     mv "$REPOLIST.keep" "$REPOLIST"
   fi
 
-  [[ -n $only ]] && echo "$only" >"$REPOLIST"
+  local scanlist="$SCAN_TMP/scanlist"
+  if [[ -n $only ]]; then
+    grep -qxF -- "$only" "$REPOLIST" ||
+      die "no active repo '$only' in $ORG (archived repos, forks, excluded ones and the docs repo are not mapped) — the list is in $repos"
+    echo "$only" >"$scanlist"
+  else
+    cp "$REPOLIST" "$scanlist"
+  fi
 
   local total
-  total=$(grep -c . "$REPOLIST" || true)
-  [[ $total -gt 0 ]] || die "no repositories to scan in $ORG"
+  total=$(grep -c . "$scanlist" || true)
+  [[ $total -gt 0 ]] || die "no repositories to scan in $ORG — check include and exclude in $DIR/config.json"
   ((jobs > total)) && jobs=$total
   log "$total active repos"
 
-  EMITDIR=$(mktemp -d)
+  EMITDIR="$SCAN_TMP/emit"
   mkdir -p "$EMITDIR/done"
   : >"$EMITDIR/failed"
+  : >"$EMITDIR/stale"
   DEPTH=$depth
   REPOSJSON=$repos
   export EMITDIR DEPTH ORG DIR REPOLIST REPOSJSON ROOT
 
+  set -m
   xargs -P "$jobs" -I{} bash -c '
     source "$ROOT/lib/common.sh"
     source "$ROOT/lib/scan.sh"
     source "$ROOT/lib/profile.sh"
     source "$ROOT/lib/vendors.sh"
-    scan_repo "$1"' _ {} <"$REPOLIST" &
-  local xpid=$!
+    scan_repo "$1"' _ {} <"$scanlist" &
+  SCAN_XPID=$!
+  set +m
   if [[ -t 2 ]]; then
-    scan_progress "$total" "$xpid"
+    scan_progress "$total" "$SCAN_XPID"
   fi
-  wait "$xpid" 2>/dev/null || true
+  wait "$SCAN_XPID" 2>/dev/null || true
+  SCAN_XPID=""
 
   local failed
   failed=$(grep -c . "$EMITDIR/failed" || true)
+  [[ -s $EMITDIR/stale ]] &&
+    log "could not fetch, mapped from the last checkout: $(tr '\n' ' ' <"$EMITDIR/stale")"
   [[ $failed -gt 0 ]] &&
     log "could not clone: $(tr '\n' ' ' <"$EMITDIR/failed")"
 
-  local out="$DIR/map/graph.json"
+  local out="$DIR/map/graph.json" profiles="$DIR/map/repos.json"
+  local new="$SCAN_TMP/graph.json" newp="$SCAN_TMP/repos.json"
   find "$EMITDIR" -name 'e-*.ndjson' -exec cat {} + |
     jq -s --arg company "$COMPANY" --arg org "$ORG" --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
       '{company: $company, org: $org, generated: $at,
         nodes: ([.[] | select(.t == "node") | del(.t)]
                 | group_by(.id) | map(.[0] + {meta: (map(.meta) | add)})),
         edges: ([.[] | select(.t == "edge") | del(.t)] | unique)}' \
-      >"$out"
+      >"$new"
+  find "$EMITDIR" -name 'p-*.json' -exec cat {} + | jq -s '.' >"$newp"
 
-  local profiles="$DIR/map/repos.json"
-  find "$EMITDIR" -name 'p-*.json' -exec cat {} + |
-    jq -s 'sort_by(.name)' >"$profiles"
+  # Nothing read is not an empty organization, it is a broken run — a token
+  # gone stale, the network down. The map from the last good run stays.
+  [[ $(jq '[.nodes[] | select(.kind == "repo")] | length' "$new") -gt 0 ]] ||
+    die "no repository could be read, so $out is unchanged — fix the clones above, then run orgami scan again"
 
-  scan_infer_links "$out" "$profiles"
+  # Repos this run did not read keep what the last map said about them: with
+  # --only, every other repo; otherwise the ones whose clone failed, so one bad
+  # clone does not drop a repo from the map. A repo no longer active in the org
+  # is not carried over.
+  local keep='[]'
+  if [[ -f $out ]] &&
+    jq -e '(.nodes | type) == "array" and (.edges | type) == "array"' "$out" >/dev/null 2>&1; then
+    if [[ -n $only ]]; then
+      keep=$(jq -Rn --arg only "$only" '[inputs | select(. != "" and . != $only)]' <"$REPOLIST")
+    else
+      keep=$(jq -Rn '[inputs | select(. != "")]' <"$EMITDIR/failed")
+    fi
+  fi
+  if [[ $keep != '[]' ]]; then
+    scan_merge "$out" "$new" "$keep" >"$new.merged"
+    # The map as a whole is as old as the oldest part of it, so a single-repo
+    # rescan does not make the rest look fresh.
+    if [[ -n $only ]]; then
+      jq --slurpfile old "$out" '.generated = ($old[0].generated // .generated)' \
+        "$new.merged" >"$new"
+    else
+      mv "$new.merged" "$new"
+    fi
+    if [[ -f $profiles ]] && jq -e 'type == "array"' "$profiles" >/dev/null 2>&1; then
+      jq -s --argjson keep "$keep" \
+        '.[0] + [.[1][] | select(.name | IN($keep[]))]' \
+        "$newp" "$profiles" >"$newp.merged"
+      mv "$newp.merged" "$newp"
+    fi
+  fi
+  jq 'sort_by(.name)' "$newp" >"$newp.sorted"
+  mv "$newp.sorted" "$newp"
 
-  rm -rf "$EMITDIR"
-  rm -f "$REPOLIST"
+  scan_infer_links "$new" "$newp"
+
+  scan_commit "$new" "$out" '(.nodes | type) == "array" and (.edges | type) == "array"'
+  scan_commit "$newp" "$profiles" 'type == "array"'
+
+  rm -rf "$SCAN_TMP"
+  trap - EXIT INT TERM
   echo "$out  ($(jq '.nodes | length' "$out") nodes, $(jq '.edges | length' "$out") edges)"
 }
 
