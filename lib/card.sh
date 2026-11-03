@@ -132,6 +132,11 @@ card_render() {
 }
 
 cmd_card() {
+  case ${1:-} in
+    -h | --help)
+      echo "usage: orgami card <repo> — the repo's page from the map: stack, commands, links, what it talks to"
+      return 0 ;;
+  esac
   load_company
   local repo=${1:-}
   [[ -n $repo ]] || die "usage: orgami card <repo>"
@@ -306,6 +311,11 @@ context_pick_company() {
 }
 
 cmd_context() {
+  case ${1:-} in
+    -h | --help)
+      echo "usage: orgami context [repo] — everything an agent needs before editing: the repo's page from the map and what it usually changes with; with no repo, the checkout here, or an overview of the organization"
+      return 0 ;;
+  esac
   local want=${1:-}
   local guessed=""
 

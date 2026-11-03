@@ -42,9 +42,15 @@ tui_list_cols() {
 # Two lines: who this is, and which tab you are on. The right-hand side of the
 # first line is the state a person actually wonders about — how stale the map is
 # and whether this week has a recap yet.
+#   static  no tab is lit: an fzf without transform-header never redraws the
+#           header, and a lit tab that stops following tab would be wrong.
+#   keys    a third line with the keys, where fzf is too old for a footer.
 tui_header() {
   style_init
-  local g="$DIR/map/graph.json" cols
+  local g="$DIR/map/graph.json" cols a static=0 keys=0
+  for a in "$@"; do
+    case $a in static) static=1 ;; keys) keys=1 ;; esac
+  done
   cols=$(tui_list_cols)
 
   local edges=0 repos=0 mapped='no map yet'
@@ -62,7 +68,11 @@ tui_header() {
 
   tui_line "${S_ACCENT}${S_B}orgami${S_R}${S_MUTED} · ${S_R}${S_B}${COMPANY}${S_R}${S_MUTED} · ${ORG}${S_R}" \
     "${S_MUTED}${mapped}${S_R}" "$cols"
-  tui_line "$(tui_tabbar)" "${S_FAINT}${repos} repos · ${edges} edges · ${recap}${S_R}" "$cols"
+  local cur
+  cur=$(tui_tab)
+  [[ $static == 0 ]] || cur=-1
+  tui_line "$(tui_tabbar "$cur")" "${S_FAINT}${repos} repos · ${edges} edges · ${recap}${S_R}" "$cols"
+  [[ $keys == 0 ]] || tui_footer
 }
 
 # The same first line, for screens that are not the browser.
@@ -97,9 +107,10 @@ tui_line() {
   printf '%s%s%s\n' "$left" "$gap" "$right"
 }
 
+# tui_tabbar [index to light] — the current tab unless told otherwise; -1 lights none.
 tui_tabbar() {
   local cur i line=''
-  cur=$(tui_tab)
+  cur=${1-$(tui_tab)}
   for i in "${!TUI_TAB_LABELS[@]}"; do
     if [[ $i == "$cur" ]]; then
       line+="${S_ACCENT}${S_B} ${TUI_TAB_LABELS[$i]} ${S_R}"
@@ -477,17 +488,105 @@ tui_preview() {
 
 # ---------------------------------------------------------------- the app
 
-# fzf grew borders, footers and transform bindings over several releases. The
-# app degrades to a plain list rather than refusing to start on an older one.
-tui_fzf_modern() {
-  local v major minor
-  v=$(fzf --version 2>/dev/null | awk '{print $1}')
-  major=${v%%.*}
-  minor=${v#*.}
-  minor=${minor%%.*}
-  [[ $major =~ ^[0-9]+$ && $minor =~ ^[0-9]+$ ]] || return 1
-  ((major > 0)) && return 0
-  ((minor >= 60))
+# fzf grew the options this screen uses over many releases, and distribution
+# packages lag far behind: Ubuntu 22.04 ships 0.29, Debian 12 0.38, Ubuntu 24.04
+# 0.44. Each threshold was found by running that release's own binary over each
+# option with --filter, which parses the whole command line without a terminal:
+#   0.29  --header-first, the `first` action, the `query` colour — the floor
+#   0.38  transform-prompt, the `label` colour
+#   0.42  transform-header, --info=inline-right
+#   0.60  --preview-border, --header-border, --input-border
+#   0.63  --footer, --footer-border
+# Below a threshold the option is left out and the screen still works; only
+# below the floor is there nothing left to run.
+TUI_FZF_FLOOR=0.29
+
+# Sets _TUI_FZF_V (as fzf prints it) and _TUI_FZF_N (one comparable number,
+# 0.44.1 → 44001), asking fzf once. Not echoed: a $(...) would cache nothing.
+# A version that does not parse (a source build) is taken as current: a real
+# problem still surfaces as fzf's own exit 2, which cmd_view reports.
+tui_fzf_version() {
+  [[ -z ${_TUI_FZF_N:-} ]] || return 0
+  _TUI_FZF_V=$(fzf --version 2>/dev/null | awk '{print $1; exit}')
+  if [[ $_TUI_FZF_V =~ ^([0-9]+)\.([0-9]+)(\.([0-9]+))? ]]; then
+    _TUI_FZF_N=$((10#${BASH_REMATCH[1]} * 1000000 + 10#${BASH_REMATCH[2]} * 1000 + 10#${BASH_REMATCH[4]:-0}))
+  else
+    _TUI_FZF_N=999999999
+  fi
+}
+
+# tui_fzf_at_least 0.42
+tui_fzf_at_least() {
+  local major minor
+  IFS=. read -r major minor <<<"$1"
+  tui_fzf_version
+  ((_TUI_FZF_N >= major * 1000000 + minor * 1000))
+}
+
+# tui_fzf_args <array name> — the fzf command line for the installed release,
+# into the named array, because a binding holds spaces and quotes.
+tui_fzf_args() {
+  local -n _out=$1
+  local b="\"$ORGAMI_BIN\"" hdr="" tail="" prompt info=--info=inline
+  tui_fzf_at_least 0.42 || hdr+=" static"
+  tui_fzf_at_least 0.63 || hdr+=" keys"
+  if tui_fzf_at_least 0.42; then
+    tail+="+transform-header($b _tui header$hdr)"
+    info=--info=inline-right
+  fi
+  if tui_fzf_at_least 0.38; then
+    tail+="+transform-prompt($b _tui prompt)"
+    prompt=$(tui_prompt)
+  else
+    # Nothing would redraw it, so it names no tab.
+    prompt='› '
+  fi
+
+  # shellcheck disable=SC2086  # $hdr is the header's own words, split on purpose
+  _out=(
+    --ansi --delimiter='\t' --with-nth=2..
+    --no-multi --cycle "$info" --layout=reverse
+    --pointer='▌' --marker='│'
+    --prompt="$prompt"
+    --header="$(tui_header $hdr)" --header-first
+    --preview="$b _tui preview {1}"
+    --preview-window='right:52%:wrap'
+    --bind="tab:execute-silent($b _tui cycle 1)+reload($b _tui rows)$tail+first"
+    --bind="btab:execute-silent($b _tui cycle -1)+reload($b _tui rows)$tail+first"
+    --bind="ctrl-r:reload($b _tui rows)${tail%+transform-prompt*}"
+    --bind="ctrl-o:execute-silent($b _tui open {1})"
+    --bind="ctrl-n:execute($b _tui note {1})+reload($b _tui rows)"
+    --bind='esc:abort'
+    --color='fg:250,bg:-1,hl:39,fg+:255,bg+:236,hl+:81,gutter:-1'
+    --color='info:240,prompt:39,pointer:39,marker:71,spinner:39'
+    --color='header:244,border:238,query:255,preview-fg:250'
+  )
+  if tui_fzf_at_least 0.38; then _out+=(--color='label:245'); fi
+  if tui_fzf_at_least 0.60; then
+    _out+=(--preview-border=left --header-border=bottom --input-border=none)
+  fi
+  if tui_fzf_at_least 0.63; then
+    _out+=(--footer="$(tui_footer)" --footer-border=horizontal)
+  fi
+  return 0
+}
+
+tui_view_usage() {
+  cat <<'USAGE'
+usage: orgami view [map|repos|notes|recaps]
+
+The map, the repos, the team's notes and the recaps in one terminal screen,
+opened on the tab named (map by default).
+  tab / shift-tab  switch tab        enter   print the row and quit
+  type             filter            ctrl-o  open it on GitHub
+  ctrl-r           reload            ctrl-n  write a note
+  esc              quit
+
+It needs a terminal and fzf 0.29 or newer. Scripts and agents read the same
+panes without one:
+  orgami query <repo|host|tool|service|vendor> [--json]
+  orgami card <repo>
+USAGE
 }
 
 tui_open() {
@@ -512,8 +611,24 @@ tui_note() {
 }
 
 cmd_view() {
+  local start=map
+  case ${1:-} in
+    -h | --help) tui_view_usage; return 0 ;;
+    '') ;;
+    map | repos | notes | recaps) start=$1 ;;
+    *) die "unknown tab '$1' — usage: orgami view [map|repos|notes|recaps]" ;;
+  esac
+
+  # fzf draws on /dev/tty, which a coding agent's shell or a cron job does not
+  # have; fzf's own "failed to open /dev/tty" names neither the cause nor the
+  # way round it.
+  { : </dev/tty; } 2>/dev/null ||
+    die "orgami view needs a terminal — scripts and agents: orgami query <node> [--json], orgami card <repo>"
+
   load_company
-  need fzf
+  need fzf "orgami view needs fzf $TUI_FZF_FLOOR or newer — https://github.com/junegunn/fzf#installation"
+  tui_fzf_at_least "$TUI_FZF_FLOOR" ||
+    die "orgami view needs fzf ≥ $TUI_FZF_FLOOR (this is ${_TUI_FZF_V:-unknown}) — upgrade: brew install fzf, or a release binary from https://github.com/junegunn/fzf/releases (distribution packages lag)"
   local g="$DIR/map/graph.json"
   [[ -f $g ]] || die "no map yet — run: orgami scan"
 
@@ -525,40 +640,26 @@ cmd_view() {
   echo 0 >"$ORGAMI_TUI_STATE"
   trap 'rm -f "$ORGAMI_TUI_STATE"' RETURN
 
-  local start=${1:-map} i
+  local i
   for i in "${!TUI_TABS[@]}"; do
     [[ ${TUI_TABS[$i]} == "$start" ]] && echo "$i" >"$ORGAMI_TUI_STATE"
   done
 
-  local b="\"$ORGAMI_BIN\""
-  local args=(
-    --ansi --delimiter='\t' --with-nth=2..
-    --no-multi --cycle --info=inline-right --layout=reverse
-    --pointer='▌' --marker='│'
-    --prompt="$(tui_prompt)"
-    --header="$(tui_header)" --header-first
-    --preview="$b _tui preview {1}"
-    --preview-window='right:52%:wrap'
-    --bind="tab:execute-silent($b _tui cycle 1)+reload($b _tui rows)+transform-header($b _tui header)+transform-prompt($b _tui prompt)+first"
-    --bind="btab:execute-silent($b _tui cycle -1)+reload($b _tui rows)+transform-header($b _tui header)+transform-prompt($b _tui prompt)+first"
-    --bind="ctrl-r:reload($b _tui rows)+transform-header($b _tui header)"
-    --bind="ctrl-o:execute-silent($b _tui open {1})"
-    --bind="ctrl-n:execute($b _tui note {1})+reload($b _tui rows)"
-    --bind='esc:abort'
-    --color='fg:250,bg:-1,hl:39,fg+:255,bg+:236,hl+:81,gutter:-1'
-    --color='info:240,prompt:39,pointer:39,marker:71,spinner:39'
-    --color='header:244,border:238,label:245,query:255,preview-fg:250'
-  )
-  if tui_fzf_modern; then
-    args+=(
-      --footer="$(tui_footer)"
-      --preview-border=left --footer-border=horizontal --header-border=bottom
-      --input-border=none
-    )
-  fi
+  local -a args=()
+  tui_fzf_args args
 
-  local picked
-  picked=$(tui_rows | fzf "${args[@]}" | cut -f1) || return 0
+  # fzf's own status, not the pipeline's: the rows renderer can take a SIGPIPE
+  # when a row is picked before it has finished writing. 1 is no match and 130
+  # is esc or ctrl-c, both a normal way out. Anything else is fzf refusing to
+  # run, which must not come back as success.
+  local line rc=0
+  line=$(set +e; tui_rows | fzf "${args[@]}"; exit "${PIPESTATUS[1]}") || rc=$?
+  case $rc in
+    0) ;;
+    1 | 130) return 0 ;;
+    *) die "fzf ${_TUI_FZF_V:-} stopped with exit $rc (its message is above) — scripts and agents: orgami query <node> [--json]" ;;
+  esac
+  local picked=${line%%$'\t'*}
   [[ -n $picked && $picked != empty:* ]] || return 0
 
   # Whatever was under the cursor, printed into the scrollback so it can be
@@ -574,7 +675,7 @@ cmd__tui() {
   shift || true
   case $action in
     rows) tui_rows ;;
-    header) tui_header ;;
+    header) tui_header "$@" ;;
     prompt) tui_prompt ;;
     footer) tui_footer ;;
     preview) tui_preview "${1-}" ;;

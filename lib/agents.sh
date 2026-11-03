@@ -69,12 +69,32 @@ agents_splice() {
   fi
 }
 
+agents_usage() {
+  cat <<'USAGE'
+usage: orgami agents [--agents-md] [--cursor] [--all] [--repo <repo>]
+       orgami agents --refresh [--workspace <dir>]
+       orgami agents --cursor-hook [--user]
+       orgami agents --git-hook
+
+Writes this repo's organization context into a marked block in AGENTS.md (and
+.cursor/rules/orgami.mdc with --cursor, or when .cursor/ exists), run inside a
+checkout of a mapped repo. Text outside the block is left alone.
+  --repo <repo>        the repo, when the checkout's remote does not say
+  --refresh            rewrite the block in every mapped checkout under the
+                       saved workspaces; --workspace adds one and remembers it
+  --cursor-hook        Cursor injects the context at every session start
+  --git-hook           refresh the block on merge and checkout
+For the context itself, without writing a file: orgami context [repo]
+USAGE
+}
+
 cmd_agents() {
   source "$ROOT/lib/card.sh"
   local targets=() repo="" dir=$PWD action=write workspace="" scope=project
 
   while [[ $# -gt 0 ]]; do
     case $1 in
+      -h | --help) agents_usage; return 0 ;;
       --agents-md) targets+=(agents) ; shift ;;
       --cursor) targets+=(cursor); shift ;;
       --all) targets=(agents cursor); shift ;;
@@ -84,7 +104,7 @@ cmd_agents() {
       --cursor-hook) action=cursor-hook; shift ;;
       --user) scope=user; shift ;;
       --git-hook) action=git-hook; shift ;;
-      *) die "unknown flag: $1" ;;
+      *) die "unknown flag: $1 — see: orgami agents --help" ;;
     esac
   done
 
@@ -136,7 +156,7 @@ cmd_agents() {
   done
   rm -f "$block"
 
-  echo
+  echo >&2
   log "these files live in the repository — commit them only if the team wants them there"
   log "re-run 'orgami agents' after a scan to refresh the block"
 }
