@@ -48,6 +48,149 @@ find_dirs_containing() {
     sed 's|/[^/]*$||'
 }
 
+# file_mtime <path> — epoch seconds of the last change, or 0 when there is no
+# such file. GNU stat spells it -c %Y, BSD stat -f %m; and GNU stat reads -f as
+# "file system", so the order matters and the existence test comes first.
+file_mtime() {
+  [[ -e $1 ]] || { echo 0; return 0; }
+  stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0
+}
+
+# detach <log> <command> [args...] — start it outside this session and return
+# at once; stdout and stderr are appended to <log> (/dev/null for neither).
+# `(setsid cmd &) || (cmd &)` cannot fall back: the subshell succeeds as soon as
+# it has forked, whether or not setsid exists. macOS has no setsid, so there the
+# command runs under nohup, which is enough to outlive the terminal that started
+# it. stdin is /dev/null so a hook's pipe is never held open by the child.
+detach() {
+  local log=$1
+  shift
+  if command -v setsid >/dev/null 2>&1; then
+    (setsid "$@" </dev/null >>"$log" 2>&1 &)
+  else
+    (nohup "$@" </dev/null >>"$log" 2>&1 &)
+  fi
+  return 0
+}
+
+# subst_file <file> <placeholder> <value> [<placeholder> <value>...]
+# Replaces every literal occurrence of each placeholder, in place. No sed: a
+# value is data, and `s|__ORG__|$ORG|g` turns a `|`, `&`, `\` or newline in it
+# into sed syntax. Matching here is quoted bash string matching, so nothing in a
+# placeholder or a value is a pattern. It is one pass, left to right: text that
+# came from a value is never searched again, so a company named `__ORG__` stays
+# `__ORG__`. The file is rewritten through a copy that keeps its mode, then
+# moved into place.
+subst_file() {
+  local file=$1 rest out="" pre tmp i best len
+  local -a ph=() val=()
+  shift
+  [[ -f $file ]] || die "subst_file: no such file $file"
+  (($# % 2 == 0)) || die "subst_file: placeholder without a value"
+  while (($#)); do
+    [[ -n $1 ]] || die "subst_file: empty placeholder"
+    ph+=("$1") val+=("$2")
+    shift 2
+  done
+  # read -d '' keeps trailing newlines, which $(cat) would strip.
+  IFS= read -r -d '' rest <"$file" || true
+  while :; do
+    best=-1 len=0
+    for i in "${!ph[@]}"; do
+      [[ $rest == *"${ph[i]}"* ]] || continue
+      pre=${rest%%"${ph[i]}"*}
+      if ((best < 0 || ${#pre} < len)); then best=$i len=${#pre}; fi
+    done
+    ((best >= 0)) || break
+    out+=${rest:0:len}${val[best]}
+    rest=${rest:len+${#ph[best]}}
+  done
+  out+=$rest
+  tmp=$(mktemp "$file.XXXXXX")
+  cp -p "$file" "$tmp"
+  printf '%s' "$out" >"$tmp"
+  mv "$tmp" "$file"
+}
+
+# valid_gh_name <name> [owner|repo|slug] — does it have the shape GitHub allows?
+# owner: a user or organization login, alphanumeric with single inner hyphens,
+# at most 39 characters. repo: letters, digits, `.`, `_`, `-`, at most 100, and
+# never `.` or `..`. slug: owner/repo. Anything read from config or typed by a
+# person goes through this before it reaches a shell word, a sed program or a URL.
+valid_gh_name() {
+  local name=$1 kind=${2:-owner}
+  case $kind in
+    owner)
+      ((${#name} <= 39)) && [[ $name =~ ^[A-Za-z0-9](-?[A-Za-z0-9])*$ ]]
+      ;;
+    repo)
+      ((${#name} <= 100)) && [[ $name =~ ^[A-Za-z0-9._-]+$ && $name != . && $name != .. ]]
+      ;;
+    slug)
+      [[ $name == */* ]] && valid_gh_name "${name%%/*}" owner && valid_gh_name "${name#*/}" repo
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+# gh_clone_url <owner> <repo> — the clone URL in whichever protocol the person
+# told gh to use. https unless gh says ssh, because an https URL works through
+# gh's credential helper with no key on the machine.
+gh_clone_url() {
+  local owner=$1 repo=$2 proto=""
+  valid_gh_name "$owner" owner || die "not a GitHub owner name: '$owner'"
+  valid_gh_name "$repo" repo || die "not a GitHub repository name: '$repo'"
+  if command -v gh >/dev/null 2>&1; then
+    proto=$(gh config get git_protocol -h github.com 2>/dev/null || true)
+    [[ -n $proto ]] || proto=$(gh config get git_protocol 2>/dev/null || true)
+  fi
+  if [[ $proto == ssh ]]; then
+    echo "git@github.com:$owner/$repo.git"
+  else
+    echo "https://github.com/$owner/$repo.git"
+  fi
+}
+
+# need_tty <headless hint> — for a step that asks questions. A coding agent runs
+# orgami through a Bash tool with no terminal, where a prompt would wait forever
+# for an answer nobody can type; fail at once and name the flag that skips it.
+need_tty() {
+  [[ -t 0 && -t 2 ]] || die "this step asks questions and there is no terminal — $1"
+}
+
+# Every model call orgami makes reads text it did not write: pull request
+# bodies, commit messages, notes, session transcripts. So the model is given
+# nothing to act with, and none of the person's own Claude Code setup.
+#   --tools ""                 no built-in tool at all: it can only write text.
+#   --setting-sources ""       no user, project or local settings, so none of
+#                              their hooks, permissions or enabled plugins.
+#   --strict-mcp-config        no MCP server, since none is passed with it.
+# Added when the installed claude knows them (older ones reject unknown flags):
+#   --safe-mode                hooks, plugins, skills and CLAUDE.md off — the
+#                              plugin's own SessionStart hook would otherwise
+#                              fire inside every call and recurse into
+#                              orgami autosync and update.
+#   --no-session-persistence   the call leaves no transcript, so note-sweep
+#                              never reads orgami's own prompts back as a session.
+# Not --bare: it never reads OAuth or the keychain, which breaks everyone on a
+# Claude subscription rather than an API key.
+ORGAMI_MODEL_FLAGS=(--tools "" --setting-sources "" --strict-mcp-config)
+ORGAMI_MODEL_OPTIONAL_FLAGS=(--safe-mode --no-session-persistence)
+
+# model_call <model> — the prompt on stdin, the reply on stdout. claude's own
+# stderr is left alone; the caller decides whether to keep it.
+model_call() {
+  local model=$1 help f
+  if [[ -z ${_ORGAMI_MODEL_FLAGS_PROBED:-} ]]; then
+    help=$(claude --help 2>/dev/null || true)
+    for f in "${ORGAMI_MODEL_OPTIONAL_FLAGS[@]}"; do
+      [[ $help == *"$f"* ]] && ORGAMI_MODEL_FLAGS+=("$f")
+    done
+    _ORGAMI_MODEL_FLAGS_PROBED=1
+  fi
+  claude -p --model "$model" --output-format text "${ORGAMI_MODEL_FLAGS[@]}"
+}
+
 die() {
   echo "orgami: $*" >&2
   exit 1
@@ -77,7 +220,7 @@ current_company() {
   fi
   local root="$ORGAMI_HOME/config.json"
   [[ -f $root ]] || die "no company selected — run: orgami init <company> --org <github-org>"
-  jq -re '.default' "$root" 2>/dev/null ||
+  jq -re '.default // empty' "$root" 2>/dev/null ||
     die "no default company — run: orgami use <company>"
 }
 
@@ -88,6 +231,10 @@ load_company() {
   DIR=$(company_dir "$COMPANY")
   [[ -f $DIR/config.json ]] || die "unknown company '$COMPANY' — orgami list"
   ORG=$(cfg org)
+  # $ORG goes into gh arguments, URLs and generated pages from here on, so a
+  # config edited by hand or by somebody else's commit is checked once, here.
+  valid_gh_name "$ORG" owner ||
+    die "'$COMPANY' has org '$ORG' in $DIR/config.json, which is not a GitHub organization name — fix it, or run: orgami init $COMPANY --org <github-org>"
   mkdir -p "$DIR"/{cache/prs,cache/repos,cache/src,reports,map}
 }
 
@@ -155,7 +302,14 @@ linkify_prs() {
   # gsub("[.]") keeps a dot in a repository name a dot: `docs.example` may not
   # match `docsXexample`. Every name arrives through it, so an edit here cannot
   # quietly turn a repository name into a wildcard.
-  names=$(jq -r '[.nodes[] | select(.kind == "repo") | .name]
+  # The names become sed program text, and graph.json can arrive from the docs
+  # repo through `orgami join`: a name holding `%` would end the s command and
+  # GNU sed's `e` would run the rest as a shell command. GitHub names are
+  # limited to [A-Za-z0-9._-], so anything else is not a repository and is
+  # dropped before it reaches sed; inside that charset only the dot is special.
+  [[ $org =~ ^[A-Za-z0-9._-]+$ ]] || { cat; return 0; }
+  names=$(jq -r '[.nodes[] | select(.kind == "repo") | .name | strings
+                   | select(test("^[A-Za-z0-9._-]+$"))]
                  | map(gsub("[.]"; "[.]")) | join("|")' "$graph" 2>/dev/null)
   [[ -n $names ]] || { cat; return 0; }
   esc=${org//./[.]}

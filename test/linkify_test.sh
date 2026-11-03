@@ -176,4 +176,19 @@ check "and its dot is not a wildcard either" \
   "$(linkify_prs 'acme.io' "$graph" <<<'Shipped acmeXio/web#5.')" \
   'Shipped acmeXio/web#5.'
 
+# --- a repository name that is sed program text ----------------------------------
+#
+# graph.json can arrive from the docs repo through `orgami join`, and the names
+# are spliced into a sed program. `%` ends the s command and GNU sed's `e` runs
+# what follows as a shell command, so a name outside GitHub's charset never
+# reaches sed at all — and the names beside it still link.
+hostile="$fixture/hostile.json"
+jq --arg n "zz)%%;e touch PWNED #" \
+  '.nodes += [{"id": "repo:x", "kind": "repo", "name": $n}]' "$graph" >"$hostile"
+out=$( (cd "$fixture" && linkify_prs acme "$hostile" <<<'fixed in web#12') )
+[[ ! -e $fixture/PWNED ]] && echo "ok   a hostile repository name runs nothing" ||
+  { echo "FAIL a repository name in graph.json ran a shell command" >&2; fail=1; }
+check "and the real names still link" "$out" \
+  'fixed in [web#12](https://github.com/acme/web/pull/12)'
+
 exit "$fail"
