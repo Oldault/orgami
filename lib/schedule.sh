@@ -14,6 +14,10 @@ schedule_kind() {
 
 # The daily timer's hour lives in the company config, so the unit is rendered
 # rather than copied. Weekly stays a plain copy: it has no knob.
+#
+# Both units set PATH. A user service starts with the manager's PATH, which has
+# no ~/.local/bin — where orgami links itself and where the official installer
+# puts claude — so without it every run fails on `need claude`.
 schedule_daily_unit() {
   local dir=$1 at=$2 hour=${2%%:*} minute=${2##*:}
   cat >"$dir/orgami-daily@.service" <<UNIT
@@ -25,6 +29,7 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 Environment=ORGAMI_COMPANY=%i
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 ExecStart=%h/.local/bin/orgami daily --yesterday
 TimeoutStartSec=15min
 UNIT
@@ -92,6 +97,10 @@ PLIST
 }
 
 cmd_schedule() {
+  # Before load_company, so --help answers on a machine with nothing set up.
+  case ${1:-} in
+    -h | --help) echo "usage: orgami schedule [--daily | --weekly] [--at HH:MM] [--off]"; return 0 ;;
+  esac
   load_company
   local off=0 kind=weekly want_at="" have_at=0
   while [[ $# -gt 0 ]]; do
@@ -176,9 +185,13 @@ cmd_schedule() {
       ;;
 
     cron)
-      local line="0 17 * * 5 ORGAMI_COMPANY=$COMPANY $bin weekly"
+      # cron runs with PATH=/usr/bin:/bin, which has neither claude nor, often,
+      # gh. Set on the command rather than as a crontab line of its own, so it
+      # changes this entry and none of the others already in the crontab.
+      local vars="PATH=$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin ORGAMI_COMPANY=$COMPANY"
+      local line="0 17 * * 5 $vars $bin weekly"
       [[ $kind == daily ]] &&
-        line="$((10#${at##*:})) $((10#${at%%:*})) * * 1-5 ORGAMI_COMPANY=$COMPANY $bin daily --yesterday"
+        line="$((10#${at##*:})) $((10#${at%%:*})) * * 1-5 $vars $bin daily --yesterday"
       cat <<EOF
 No systemd or launchd here. Add this line to your crontab (\`crontab -e\`):
 

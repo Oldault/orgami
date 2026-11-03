@@ -120,7 +120,9 @@ live_vercel() {
   [[ -n $team ]] && url="$url&teamId=$team"
 
   while :; do
-    body=$(curl -sS --max-time 30 -H "Authorization: Bearer $token" "$url" 2>&1) || {
+    # The header is read from stdin (-H @-), never put in argv: an argument is
+    # in `ps` and /proc/<pid>/cmdline for every user on the machine to read.
+    body=$(curl -sS --max-time 30 -H @- "$url" 2>&1 <<<"Authorization: Bearer $token") || {
       live_err vercel "$(head -1 <<<"$body")"
       return 0
     }

@@ -162,36 +162,84 @@ grep -q 'reset --quiet' <<<"$CALLS" || fail "a dry run must unstage what it stag
 committed && fail "a dry run must not commit"
 pushed && fail "a dry run must not push"
 
-# --- the confirmation, declined -----------------------------------------------
+# --- no terminal and no --yes: refused, not asked ------------------------------
+# An agent's Bash tool or a pipe has nobody to answer the prompt. Reading stdin
+# would either hang or take whatever is piped in for an answer, so publish names
+# the flag and stops — before the commit, with what it staged unstaged.
 
-ANSWER=n
+ANSWER=y
 run
-[[ $RC == 1 ]] || fail "a declined push must fail, got $RC"
-grep -q 'orgami: aborted' <<<"$ERR" || fail "a declined push should say it aborted, got '$ERR'"
-grep -q 'reset --quiet' <<<"$CALLS" || fail "a declined push must unstage what it staged, got '$CALLS'"
-committed && fail "a declined push must not commit"
-pushed && fail "a declined push must not push"
+[[ $RC == 1 ]] || fail "no terminal and no --yes must refuse, got $RC"
+grep -q 'no terminal' <<<"$ERR" || fail "the refusal should say there is no terminal, got '$ERR'"
+grep -q 'pass --yes' <<<"$ERR" || fail "the refusal should name --yes, got '$ERR'"
+grep -q 'reset --quiet' <<<"$CALLS" || fail "a refusal must unstage what it staged, got '$CALLS'"
+committed && fail "a piped yes must not commit"
+pushed && fail "a piped yes must not push"
 declined=$CALLS
-
-# --- and declined by saying nothing at all ------------------------------------
-# `[y/N]` means the default is no, so an empty answer has to refuse exactly as
-# `n` does — this is the answer an unattended run gives.
-
-ANSWER=""
-run
-[[ $RC == 1 ]] || fail "an empty answer must refuse, got $RC"
-grep -q 'orgami: aborted' <<<"$ERR" || fail "an empty answer should abort, got '$ERR'"
-committed && fail "an empty answer must not commit"
-pushed && fail "an empty answer must not push"
 
 # --- nothing an environment says can stand in for the flag ---------------------
 
-ANSWER=n
+ANSWER=y
 export CI=1 ORGAMI_YES=1 YES=1 ORGAMI_NONINTERACTIVE=1
 run
 unset CI ORGAMI_YES YES ORGAMI_NONINTERACTIVE
 [[ $RC == 1 ]] || fail "no environment variable may answer the prompt, got $RC"
 pushed && fail "no environment variable may reach the push"
+
+# --- the confirmation, at a terminal ---------------------------------------------
+# A pseudo-terminal from python3's pty module, so the prompt is really asked.
+# `[y/N]` means the default is no: `n` and an empty answer both refuse, and only
+# `y` reaches the push. Skipped where there is no python3.
+
+tty_run() { # tty_run <answer> — sets OUT (stdout and stderr together), RC, CALLS
+  : >"$GIT_LOG"
+  RC=0
+  OUT=$(python3 - "$1" <<'PY'
+import os, pty, sys
+pid, fd = pty.fork()
+if pid == 0:
+    os.execvp("bash", ["bash", "-c", "set -euo pipefail; ROOT=$PWD; source lib/common.sh; source lib/publish.sh; cmd_publish"])
+out = b""
+sent = False
+while True:
+    try:
+        chunk = os.read(fd, 4096)
+    except OSError:
+        break
+    if not chunk:
+        break
+    out += chunk
+    if not sent and b"[y/N]" in out:
+        os.write(fd, sys.argv[1].encode() + b"\n")
+        sent = True
+_, status = os.waitpid(pid, 0)
+sys.stdout.write(out.decode(errors="replace"))
+sys.exit(os.waitstatus_to_exitcode(status))
+PY
+  ) || RC=$?
+  CALLS=$(cat "$GIT_LOG")
+  if [[ $STUB_ALLOW_PUSH != 1 ]] && grep -q 'STUB GIT REFUSED A PUSH' <<<"$OUT"; then
+    fail "$OUT"
+  fi
+  defaults
+}
+
+if command -v python3 >/dev/null; then
+  for answer in n ""; do
+    tty_run "$answer"
+    [[ $RC == 1 ]] || fail "answering '$answer' must refuse, got $RC: $OUT"
+    grep -q 'push to git@github.com:acme/engineering.git? \[y/N\]' <<<"$OUT" ||
+      fail "a terminal should be asked, got '$OUT'"
+    grep -q 'orgami: aborted' <<<"$OUT" || fail "answering '$answer' should abort, got '$OUT'"
+    committed && fail "answering '$answer' must not commit"
+    pushed && fail "answering '$answer' must not push"
+  done
+
+  STUB_ALLOW_PUSH=1
+  tty_run y
+  [[ $RC == 0 ]] || fail "answering y should publish, got $RC: $OUT"
+  grep -q 'push --quiet origin HEAD' <<<"$CALLS" || fail "answering y should push, got '$CALLS'"
+fi
 
 # --- a docs repo that already matches ------------------------------------------
 
@@ -212,6 +260,20 @@ grep -q 'commit --quiet -m docs(orgami): acme ' <<<"$CALLS" ||
 grep -q 'push --quiet origin HEAD' <<<"$CALLS" || fail "--yes should push, got '$CALLS'"
 grep -q '^pushed: docs(orgami): acme ' <<<"$OUT" || fail "the push should be reported, got '$OUT'"
 grep -q 'push to git@github' <<<"$OUT$ERR" && fail "--yes must not have prompted"
+
+# --- the .github repository's card is a card like any other -------------------
+# It is named after its repository, so it starts with a dot, which a `*.md`
+# glob never matches.
+
+mkdir -p "$home/map/repos"
+echo '# api' >"$home/map/repos/api.md"
+echo '# .github' >"$home/map/repos/.github.md"
+STUB_ALLOW_PUSH=1
+run --yes
+[[ $RC == 0 ]] || fail "publishing repo cards should work, got $RC: $ERR"
+[[ -f $home/cache/docs/orgami/repos/api.md ]] || fail "a repo card must be published"
+[[ -f $home/cache/docs/orgami/repos/.github.md ]] || fail "the .github card must be published"
+rm -rf "$home/map/repos" "$home/cache/docs/orgami/repos"
 
 # --- the page leaves without the live reading, unless it may -------------------
 # map/orgami.html inlines map/live.json, and live.json leaves the machine only
@@ -292,4 +354,4 @@ if [[ -n ${ORGAMI_TEST_SHOW_CALLS:-} ]]; then
   printf '%s\n' "$declined" >&2
 fi
 
-echo "publish: refuses without a docs repo, on a dry run, on a declined prompt and on an unknown flag"
+echo "publish: refuses without a docs repo, on a dry run, without a terminal, on a declined prompt and on an unknown flag"

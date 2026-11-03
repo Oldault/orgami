@@ -223,18 +223,15 @@ cmd_publish() {
       WEB_OMIT_LIVE=$omit_live WEB_OMIT_COSTS=$omit_costs web_render "$dest/orgami.html"
     fi
   fi
-  if compgen -G "$DIR/map/repos/*.md" >/dev/null; then
-    mkdir -p "$dest/repos"
-    cp -f "$DIR/map/repos/"*.md "$dest/repos/" 2>/dev/null || true
-  fi
-  if compgen -G "$DIR/map/runbooks/*.md" >/dev/null; then
-    mkdir -p "$dest/runbooks"
-    cp -f "$DIR/map/runbooks/"*.md "$dest/runbooks/" 2>/dev/null || true
-  fi
-  if compgen -G "$DIR/map/playbooks/*.md" >/dev/null; then
-    mkdir -p "$dest/playbooks"
-    cp -f "$DIR/map/playbooks/"*.md "$dest/playbooks/" 2>/dev/null || true
-  fi
+  # One file per repository, named after it — and `.github` is a repository, so
+  # its card is `.github.md`, which a `*.md` glob never matches. find's -name
+  # does match a leading dot, and never yields `.` or `..`.
+  local sub
+  for sub in repos runbooks playbooks; do
+    [[ -n $(find "$DIR/map/$sub" -maxdepth 1 -type f -name '*.md' 2>/dev/null | head -1) ]] || continue
+    mkdir -p "$dest/$sub"
+    find "$DIR/map/$sub" -maxdepth 1 -type f -name '*.md' -exec cp -f {} "$dest/$sub/" \; 2>/dev/null || true
+  done
 
   # How this company wants notes handled, so a teammate who joins inherits it
   # instead of each machine deciding for itself.
@@ -262,6 +259,12 @@ cmd_publish() {
   [[ $dry == 1 ]] && { git -C "$work" reset --quiet; return; }
 
   if [[ $yes == 0 ]]; then
+    # Without a terminal the question has nobody to answer it: an agent's Bash
+    # tool or a pipe would either hang here or have its stdin taken for a yes.
+    if [[ ! -t 0 || ! -t 2 ]]; then
+      git -C "$work" reset --quiet
+      need_tty "pass --yes to push without asking, or --dry-run to only look"
+    fi
     read -rp "push to $repo? [y/N] " ans
     [[ $(printf '%s' "$ans" | tr '[:upper:]' '[:lower:]') == y* ]] || { git -C "$work" reset --quiet; die "aborted"; }
   fi
@@ -273,46 +276,101 @@ cmd_publish() {
   echo "pushed: $msg"
 }
 
-# orgami weekly — the whole loop, for the systemd timer.
+# One step of the weekly run, in a subshell so a step that dies ends only itself.
+# errexit is switched off around the subshell rather than tested with `||`,
+# because bash suspends set -e for everything under a `||` or an `if` — the
+# step would then run past its own failures instead of stopping at them.
+# weekly_step <name> <command> [args...] — records <name> in WEEKLY_FAILED.
+weekly_step() {
+  local name=$1 rc was=$-
+  shift
+  set +e
+  (
+    set -e
+    "$@"
+  )
+  rc=$?
+  [[ $was == *e* ]] && set -e
+  [[ $rc == 0 ]] && return 0
+  log "weekly: $name failed (exit $rc) — carrying on with the rest"
+  WEEKLY_FAILED+=("$name")
+  return 0
+}
+
+# The recap, told apart from its failures. A week with no merged pull requests
+# has nothing to recap, and no recap is the right output for it, not an error.
+# report.sh says so by dying; its message is the only signal, so it is captured
+# and shown either way.
+weekly_report() {
+  local err rc was=$-
+  err=$(mktemp)
+  set +e
+  (
+    set -e
+    cmd_report
+  ) 2>"$err"
+  rc=$?
+  [[ $was == *e* ]] && set -e
+  cat "$err" >&2
+  if [[ $rc != 0 ]]; then
+    if grep -q 'orgami: no merged PRs in' "$err"; then
+      log "weekly: a quiet week — no recap written"
+    else
+      log "weekly: report failed (exit $rc) — carrying on with the rest"
+      WEEKLY_FAILED+=(report)
+    fi
+  fi
+  rm -f "$err"
+  return 0
+}
+
+# orgami weekly — the whole loop, for the systemd timer. One step failing never
+# stops the steps after it: a recap that could not be written is no reason to
+# leave the map a week stale. Every failure is named at the end, and the exit
+# status is non-zero, so the timer shows as failed.
 cmd_weekly() {
   load_company
+  WEEKLY_FAILED=()
   # The timer is the one moment a week nobody is waiting on the terminal, which
   # makes it the right place to take the newest orgami before running the rest.
   # It refuses a checkout with work in it, so a machine that develops orgami is
-  # never pulled from underneath.
+  # never pulled from underneath. --auto: the opt-out applies, nobody typed this.
   source "$ROOT/lib/update.sh"
-  cmd_update --quiet || true
-  cmd_pull --last 0
-  cmd_report
-  cmd_scan
-  cmd_coupling
+  weekly_step update cmd_update --quiet --auto
+  weekly_step pull cmd_pull --last 0
+  weekly_report
+  weekly_step scan cmd_scan
+  weekly_step coupling cmd_coupling
   # Refresh a live reading that already exists. Nobody's first run of the timer
   # starts talking to cloud accounts on its own.
   if [[ -f $DIR/map/live.json ]]; then
     source "$ROOT/lib/live.sh"
-    cmd_live --quiet >/dev/null || true
+    weekly_step live cmd_live --quiet >/dev/null
   fi
   # Same rule for the DNS reading: refresh one that exists, never start one. A
   # timer that begins querying somebody's domains because it was installed is
   # not a timer anyone asked for.
   if [[ -f $DIR/map/dns.json ]]; then
     source "$ROOT/lib/dns.sh"
-    cmd_dns --yes >/dev/null || true
+    weekly_step dns cmd_dns --yes >/dev/null
   fi
-  cmd_doc
+  weekly_step doc cmd_doc
   if [[ $(jq -r '(.workspaces // []) | length' "$DIR/config.json") -gt 0 ]]; then
     source "$ROOT/lib/agents.sh"
-    cmd_agents --refresh || true
+    weekly_step agents cmd_agents --refresh
   fi
   if [[ -n $(cfg docs_repo) ]]; then
-    cmd_sync || true
+    weekly_step sync cmd_sync
     # Read whatever is waiting for review, so notes do not sit for a week.
     if [[ $(cfg notes_review false) == true ]]; then
       source "$ROOT/lib/notes.sh"
-      cmd_review --auto || true
+      weekly_step review cmd_review --auto
     fi
-    cmd_publish --yes
+    weekly_step publish cmd_publish --yes
   else
     log "no docs_repo configured — report left in $DIR/reports"
   fi
+
+  [[ ${#WEEKLY_FAILED[@]} == 0 ]] ||
+    die "weekly: ${WEEKLY_FAILED[*]} failed — the messages above say why; rerun one with: orgami ${WEEKLY_FAILED[0]}"
 }

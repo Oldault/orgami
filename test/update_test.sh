@@ -124,4 +124,79 @@ targets=$(PATH="$fixture/fakebin:$PATH" update_targets)
 [[ $(grep -c . <<<"$targets") == 1 ]] ||
   fail "one clone reached two ways is still one clone, got '$targets'"
 
-echo "update: refuses dirty, diverged, untracked and the plugin clone; announces once"
+# --- ahead of an upstream it already contains -----------------------------------
+# --ff-only calls that "already up to date" and succeeds, so the success alone
+# is not proof the clone moved: install.sh must not run and nothing may be
+# announced.
+
+q git -C "$fixture/install" reset --hard '@{u}'
+echo '{"version": "1.0.1-mine"}' >"$fixture/install/manifest.json"
+# shellcheck disable=SC2016  # expanded by the install.sh it writes, not here
+echo 'touch "$(dirname "$0")/../installed"' >"$fixture/install/install.sh"
+q git -C "$fixture/install" add -A
+q git -C "$fixture/install" commit -m "mine, on top"
+mine=$(git -C "$fixture/install" rev-parse HEAD)
+why_not=$(update_why_not "$fixture/install") && fail "the ahead clone should pass the cheap checks, got: $why_not"
+update_cli "$fixture/install" 1 && fail "a clone ahead of its upstream must not count as updated"
+[[ $(git -C "$fixture/install" rev-parse HEAD) == "$mine" ]] || fail "a clone ahead was moved"
+[[ -e $fixture/installed ]] && fail "install.sh must not run from a clone that did not fast-forward"
+[[ -z $(update_report) ]] || fail "a clone that did not move must not be announced"
+
+# --- the opt-out holds for every run nobody typed ----------------------------------
+# A stub git and claude on PATH record every call. Opted out, an automatic run —
+# the timer's --auto, the session hook's --if-stale, and the detached child
+# either starts — must touch neither; a person's `orgami update` still updates.
+
+mkdir -p "$fixture/stubbin" "$fixture/orgami-home"
+cat >"$fixture/stubbin/git" <<'STUB'
+#!/usr/bin/env bash
+echo "git $*" >>"$STUB_LOG"
+exit 1
+STUB
+cat >"$fixture/stubbin/claude" <<'STUB'
+#!/usr/bin/env bash
+echo "claude $*" >>"$STUB_LOG"
+exit 1
+STUB
+chmod +x "$fixture/stubbin/git" "$fixture/stubbin/claude"
+export STUB_LOG="$fixture/stub.log"
+# Recorded rather than run, so a detached child that should not exist is seen
+# here and not raced.
+detach() { echo "detach $*" >>"$STUB_LOG"; }
+
+auto_run() { # auto_run <flags...> — sets CALLS to what the stubs saw
+  : >"$STUB_LOG"
+  rm -f "$XDG_STATE_HOME/orgami/update-checked"
+  PATH="$fixture/stubbin:$PATH" ORGAMI_HOME="$fixture/orgami-home" \
+    ORGAMI_BIN="$fixture/stubbin/git" cmd_update "$@" >/dev/null 2>&1 || true
+  CALLS=$(cat "$STUB_LOG")
+}
+
+for optout in env config; do
+  if [[ $optout == env ]]; then
+    export ORGAMI_AUTOUPDATE=0
+    rm -f "$fixture/orgami-home/config.json"
+  else
+    unset ORGAMI_AUTOUPDATE
+    echo '{"auto_update": false}' >"$fixture/orgami-home/config.json"
+  fi
+  for flags in "--quiet --auto" "--if-stale" "--if-stale --background" "--quiet --auto --background"; do
+    # shellcheck disable=SC2086  # the flags are meant to split
+    auto_run $flags
+    [[ -z $CALLS ]] || fail "opted out by $optout, 'update $flags' must do nothing, ran: $CALLS"
+  done
+  auto_run --quiet
+  grep -q '^git ' <<<"$CALLS" || fail "opted out by $optout, a typed 'orgami update' must still update"
+done
+unset ORGAMI_AUTOUPDATE
+rm -f "$fixture/orgami-home/config.json"
+
+# Not opted out, the automatic run goes ahead, and the detached child it starts
+# carries --auto so it checks the opt-out for itself.
+auto_run --quiet --auto
+grep -q '^git ' <<<"$CALLS" || fail "without an opt-out, --auto should update"
+auto_run --if-stale --background
+grep -q '^detach /dev/null .* update --quiet --auto$' <<<"$CALLS" ||
+  fail "the session hook's detached update should carry --auto, ran: $CALLS"
+
+echo "update: refuses dirty, diverged, ahead, untracked and the plugin clone; honours the opt-out; announces once"

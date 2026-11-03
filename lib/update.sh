@@ -23,7 +23,9 @@ update_enabled() {
   [[ ${ORGAMI_AUTOUPDATE:-1} != 0 ]] || return 1
   local root="$ORGAMI_HOME/config.json"
   [[ -f $root ]] || return 0
-  [[ $(jq -r '.auto_update // true' "$root" 2>/dev/null) != false ]]
+  # Not `.auto_update // true`: jq's // treats false as missing, so that reads
+  # an explicit false as true and the opt-out never takes.
+  [[ $(jq -r '.auto_update != false' "$root" 2>/dev/null) != false ]]
 }
 
 # A checkout somebody is working in is not a checkout to pull under them. This
@@ -93,12 +95,15 @@ update_cli() {
 
   local from
   from=$(update_version "$dir")
-  git -C "$dir" merge --ff-only --quiet '@{u}' 2>/dev/null || {
-    # A fast-forward that will not fast-forward means the local clone has
-    # commits of its own. That is somebody's work, not a stale install.
+  # A fast-forward that will not fast-forward means the local clone has
+  # commits of its own. That is somebody's work, not a stale install. So is a
+  # clone ahead of an upstream it already contains: --ff-only calls that
+  # "already up to date" and succeeds, and HEAD has not moved to the upstream.
+  if ! git -C "$dir" merge --ff-only --quiet '@{u}' 2>/dev/null ||
+    [[ $(git -C "$dir" rev-parse HEAD 2>/dev/null) != "$after" ]]; then
     [[ $quiet == 1 ]] || log "$dir has diverged from its upstream — left alone"
     return 1
-  }
+  fi
 
   # New files need linking, and the systemd units are copied rather than linked.
   bash "$dir/install.sh" >/dev/null 2>&1 || true
@@ -160,9 +165,14 @@ update_dev() {
   echo "  claude plugin marketplace add Oldault/orgami"
 }
 
-# orgami update [--check] [--if-stale] [--background] [--quiet] [--dev [path]]
+# orgami update [--check] [--if-stale] [--background] [--quiet] [--auto] [--dev [path]]
+#
+# --auto marks a run nobody typed: the session hook, the weekly timer, the
+# detached child either of them starts. Those honour ORGAMI_AUTOUPDATE=0 and
+# "auto_update": false; a person running `orgami update` still gets the update
+# they asked for.
 cmd_update() {
-  local check=0 if_stale=0 background=0 quiet=0
+  local check=0 if_stale=0 background=0 quiet=0 auto=0
   while [[ $# -gt 0 ]]; do
     case $1 in
       --report) update_report; return 0 ;;
@@ -171,19 +181,24 @@ cmd_update() {
       --if-stale) if_stale=1; shift ;;
       --background | --detach) background=1; shift ;;
       --quiet | -q) quiet=1; shift ;;
+      --auto) auto=1; shift ;;
       *) die "unknown flag: $1" ;;
     esac
   done
 
-  if [[ $if_stale == 1 ]]; then
+  [[ $if_stale == 1 ]] && auto=1
+  # --check only looks, so it is never an update anyone has to opt out of.
+  if [[ $auto == 1 && $check == 0 ]]; then
     update_enabled || return 0
+  fi
+
+  if [[ $if_stale == 1 ]]; then
     local state stamp
     state=$(update_state_dir) || return 0
     stamp="$state/update-checked"
     if [[ -f $stamp ]]; then
       local age
-      age=$(((  $(date +%s) - $(stat -c %Y "$stamp" 2>/dev/null ||
-        stat -f %m "$stamp" 2>/dev/null || echo 0) ) / 3600))
+      age=$((($(date +%s) - $(file_mtime "$stamp")) / 3600))
       [[ $age -ge $UPDATE_INTERVAL_HOURS ]] || return 0
     fi
     : >"$stamp"
@@ -191,9 +206,11 @@ cmd_update() {
   fi
 
   if [[ $background == 1 ]]; then
-    # Detached: a session never waits on somebody else's network.
-    (setsid "$ORGAMI_BIN" update --quiet >/dev/null 2>&1 &) 2>/dev/null ||
-      ("$ORGAMI_BIN" update --quiet >/dev/null 2>&1 &)
+    # Detached: a session never waits on somebody else's network. The child
+    # carries --auto when this run did, so it checks the opt-out for itself.
+    local -a child=(update --quiet)
+    [[ $auto == 1 ]] && child+=(--auto)
+    detach /dev/null "$ORGAMI_BIN" "${child[@]}"
     return 0
   fi
 
