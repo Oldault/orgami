@@ -5,3 +5,4 @@
 .wrangler/
 /s2-*.png
 /v2-*.png
+__pycache__/
