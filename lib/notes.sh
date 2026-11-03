@@ -61,19 +61,19 @@ notes_screen() {
   if grep -qE '[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-z]{2,}' <<<"$text"; then
     warnings+=("contains an email address")
   fi
-  if grep -qE '\b([0-9]{1,3}\.){3}[0-9]{1,3}\b' <<<"$text"; then
+  if grep -qE '(^|[^0-9.])([0-9]{1,3}\.){3}[0-9]{1,3}([^0-9]|$)' <<<"$text"; then
     warnings+=("contains an IP address")
   fi
 
   local w
-  for w in "${warnings[@]}"; do
+  for w in ${warnings[@]+"${warnings[@]}"}; do
     [[ -n $w ]] && log "note $w"
   done
 
   [[ ${#problems[@]} -eq 0 ]] && return 0
   {
     echo "refusing to write this note:"
-    printf '  - %s\n' "${problems[@]}"
+    printf '  - %s\n' ${problems[@]+"${problems[@]}"}
     echo
     echo "Notes go to a repository the whole team reads. Rewrite it without that,"
     echo "or point at where the value lives instead of quoting it."
@@ -122,6 +122,7 @@ cmd_note() {
   done
 
   if [[ -z $text ]]; then
+    need_tty "pass the note as an argument: orgami note [--repo <repo>] [--tag <tag>] \"...\""
     if command -v gum >/dev/null; then
       text=$(gum write --placeholder "What did you learn? Write it for whoever hits this next." \
         --width 76 --height 8 --header "note for $COMPANY") || return 1
@@ -136,9 +137,11 @@ cmd_note() {
   [[ -n ${text// /} ]] || die "nothing to record"
 
   # Standing in one client's checkout while the default company is another is
-  # exactly how a note ends up in the wrong repository.
-  local here_url here_org
-  here_url=$(git -C "$PWD" remote get-url origin 2>/dev/null || true)
+  # exactly how a note ends up in the wrong repository. Only when the repo is
+  # inferred from the checkout: --repo names it outright, which is what the
+  # message below asks for.
+  local here_url="" here_org
+  [[ -n $repo ]] || here_url=$(git -C "$PWD" remote get-url origin 2>/dev/null || true)
   if [[ -n $here_url ]]; then
     here_org=$(sed -E 's|.*[:/]([^/]+)/[^/]+$|\1|' <<<"$here_url")
     local here_lc org_lc
@@ -156,7 +159,8 @@ cmd_note() {
 
   # A tag from this vocabulary files the note into a section of the repo's
   # runbook. Anything else is still a perfectly good note.
-  if [[ ${#tags[@]} -eq 0 ]] && command -v gum >/dev/null; then
+  # Optional, so with no terminal to ask on it is skipped rather than refused.
+  if [[ ${#tags[@]} -eq 0 && -t 0 && -t 2 ]] && command -v gum >/dev/null; then
     source "$ROOT/lib/runbook.sh"
     local picked
     picked=$(printf '%s\n' "${RUNBOOK_TAGS[@]}" "$PLAYBOOK_TAG" "none of these" |
@@ -443,23 +447,28 @@ cmd_screen() {
 # branch policy is satisfied, the second by trying once more against the branch
 # as it now is. Anything else is reported rather than swallowed, because a note
 # nobody can see is the same as a note nobody wrote.
+#
+# With a fourth argument, the commit the pull request was read at: gh refuses the
+# merge if the branch has moved since, so what lands is what was judged.
 notes_pr_merge() {
-  local work=$1 n=$2 said=${3:-} out
-  if out=$( (cd "$work" && gh pr merge "$n" --squash --delete-branch) 2>&1); then
+  local work=$1 n=$2 said=${3:-} oid=${4:-} out
+  local -a pin=()
+  [[ -n $oid ]] && pin=(--match-head-commit "$oid")
+  if out=$( (cd "$work" && gh pr merge "$n" --squash --delete-branch ${pin[@]+"${pin[@]}"}) 2>&1); then
     echo "merged #$n${said:+ $said}"
     return 0
   fi
 
   if grep -qi 'base branch was modified' <<<"$out"; then
     git -C "$work" fetch --quiet origin 2>/dev/null || true
-    if out=$( (cd "$work" && gh pr merge "$n" --squash --delete-branch) 2>&1); then
+    if out=$( (cd "$work" && gh pr merge "$n" --squash --delete-branch ${pin[@]+"${pin[@]}"}) 2>&1); then
       echo "merged #$n${said:+ $said}"
       return 0
     fi
   fi
 
   if grep -qiE 'not mergeable|branch policy|protected branch|required status check|review required' <<<"$out"; then
-    if (cd "$work" && gh pr merge "$n" --squash --delete-branch --auto) >/dev/null 2>&1; then
+    if (cd "$work" && gh pr merge "$n" --squash --delete-branch --auto ${pin[@]+"${pin[@]}"}) >/dev/null 2>&1; then
       echo "#$n will merge once its checks and its branch policy allow it"
       return 0
     fi
@@ -476,12 +485,13 @@ cmd_review() {
   load_company
   need gh
 
-  local install=0 auto=0 merge=0
+  local install=0 auto=0 merge=0 yes=0
   while [[ $# -gt 0 ]]; do
     case $1 in
       --install-check) install=1; shift ;;
       --auto) auto=1; shift ;;
       --merge) merge=1; shift ;;
+      --yes | -y) yes=1; shift ;;
       *) die "unknown flag: $1" ;;
     esac
   done
@@ -495,13 +505,16 @@ cmd_review() {
   work="$DIR/cache/docs"
   [[ -d $work/.git ]] || git clone --quiet --depth 1 "$repo" "$work" || die "cannot clone $repo"
 
-  [[ $install == 1 ]] && { review_install_check "$work"; return; }
+  [[ $install == 1 ]] && { review_install_check "$work" "$yes"; return; }
 
   local prs
   prs=$(cd "$work" && gh pr list --state open --json number,title,author,headRefName,createdAt \
     --jq '[.[] | select(.headRefName | startswith("orgami-notes/"))]' 2>/dev/null || echo '[]')
 
   [[ $(jq 'length' <<<"$prs") -gt 0 ]] || { echo "no notes waiting for review"; return 0; }
+  if [[ $auto == 0 ]] && command -v gum >/dev/null; then
+    need_tty "run: orgami review --auto (add --merge to merge what passes)"
+  fi
 
   local n
   while read -r n; do
@@ -544,52 +557,115 @@ cmd_review() {
   done < <(jq -r '.[].number' <<<"$prs")
 }
 
+# A note id is a file name orgami wrote: no slash, no `..`, nothing a path can
+# climb out of notes/ with. The reviewer's verdict names one, and that name is
+# about to become a path that is moved and deleted.
+notes_id_ok() {
+  [[ $1 =~ ^[A-Za-z0-9][A-Za-z0-9\ ._@+-]*$ && $1 != *..* ]]
+}
+
 # A second reader, when there is no second person. Judges the notes waiting for
 # review against everything already recorded, comments on the pull request, and
 # merges only if every note passes.
+#
+# What gets merged is the whole pull request, so what gets judged has to be the
+# whole pull request too: one from this repository, touching nothing but notes,
+# read at the exact commit that will be merged. Anything else is left for a
+# person, because a reviewer that could not see a file has not reviewed it.
 review_auto() {
   local work=$1 n=$2 merge=$3
   need claude
 
-  local files bodies
-  files=$( (cd "$work" && gh pr diff "$n" --name-only 2>/dev/null) | grep '/notes/.*\.md$' || true)
-  [[ -n $files ]] || { log "#$n adds no notes"; return 0; }
+  local notes_dir
+  notes_dir="$(cfg docs_path orgami)"
+  notes_dir="${notes_dir:+$notes_dir/}notes"
 
-  # The notes under review, straight from the branch — fetched once, not per file.
-  local head f
-  head=$(cd "$work" && gh pr view "$n" --json headRefName --jq .headRefName 2>/dev/null)
-  [[ -n $head ]] || { log "could not resolve the branch for #$n"; return 0; }
-  git -C "$work" fetch --quiet origin "$head" 2>/dev/null || true
+  local pr
+  pr=$( (cd "$work" && gh pr view "$n" \
+    --json headRefName,headRefOid,isCrossRepository,changedFiles) 2>/dev/null || true)
+  if ! jq -e 'type == "object" and (.changedFiles | type == "number")' <<<"$pr" >/dev/null 2>&1; then
+    log "could not read #$n — leaving it for a person"
+    return 0
+  fi
 
-  bodies=$(mktemp)
-  while read -r f; do
-    [[ -n $f ]] || continue
-    # A pull request that prunes a note lists a file that is not on the branch.
-    local content
-    content=$(git -C "$work" show "FETCH_HEAD:$f" 2>/dev/null || true)
-    [[ -n $content ]] || continue
-    jq -Rns --arg file "$f" --arg text "$content" '{file: $file, text: $text}'
-  done <<<"$files" | jq -s '.' >"$bodies"
+  # The file list comes from the REST endpoint, not `pr view --json files`: that
+  # one stops at 100 files and has no status or old path, so a 101st file, or a
+  # workflow renamed into notes/, passed the gate unseen and was merged with the
+  # rest. Here a rename names both paths, a deletion says so, and the count has
+  # to match the one GitHub gives for the whole pull request.
+  local files
+  files=$( (cd "$work" && gh api --paginate "repos/{owner}/{repo}/pulls/$n/files") 2>/dev/null |
+    jq -cs 'add // [] | map({path: .filename, status, additions, previous: .previous_filename})' 2>/dev/null || true)
+  if ! jq -e 'type == "array" and all(.path | type == "string")' <<<"$files" >/dev/null 2>&1 ||
+     [[ $(jq length <<<"$files") != "$(jq .changedFiles <<<"$pr")" ]]; then
+    log "could not list every file in #$n — leaving it for a person"
+    return 0
+  fi
+  pr=$(jq -c --argjson f "$files" '.files = $f' <<<"$pr")
 
-  # A pull request that only removes notes has nothing to judge.
-  if [[ $(jq 'length' "$bodies") -eq 0 ]]; then
-    rm -f "$bodies"
+  # A fork's branch is written by someone the docs repo never gave push to.
+  if [[ $(jq -r '.isCrossRepository' <<<"$pr") != false ]]; then
+    log "#$n comes from a fork — leaving it for a person"
+    return 0
+  fi
+
+  local outside
+  outside=$(jq -r --arg d "$notes_dir/" '
+    .files[] | .path, (.previous // empty) | select((startswith($d) and (.[($d | length):] | test("^[^/]+\\.md$"))) | not)' <<<"$pr")
+  if [[ -n $outside ]]; then
+    log "#$n changes more than notes ($(head -1 <<<"$outside")) — leaving it for a person"
+    return 0
+  fi
+  [[ $(jq '.files | length' <<<"$pr") -gt 0 ]] || { log "#$n adds no notes"; return 0; }
+
+  # The notes under review, straight from the branch — fetched once, not per
+  # file, and only trusted if it is the commit gh says the pull request is at.
+  local head oid
+  head=$(jq -r '.headRefName // empty' <<<"$pr")
+  oid=$(jq -r '.headRefOid // empty' <<<"$pr")
+  [[ -n $head && -n $oid ]] || { log "could not resolve the branch for #$n"; return 0; }
+  if ! git -C "$work" fetch --quiet origin "$head" 2>/dev/null; then
+    log "could not fetch $head for #$n — leaving it for the next run"
+    return 0
+  fi
+  if [[ $(git -C "$work" rev-parse FETCH_HEAD 2>/dev/null) != "$oid" ]]; then
+    log "#$n moved while it was being read — leaving it for the next run"
+    return 0
+  fi
+
+  # Removals only means GitHub says every file is a deletion, not that a blob
+  # happened to be missing.
+  if jq -e '.files | all(.status == "removed" and (.additions // 0) == 0)' <<<"$pr" >/dev/null; then
     if [[ $merge == 1 ]]; then
-      notes_pr_merge "$work" "$n" "(removals only, nothing to review)"
+      notes_pr_merge "$work" "$n" "(removals only, nothing to review)" "$oid"
     else
       log "#$n only removes notes — merge it with: orgami review --auto --merge"
     fi
     return 0
   fi
 
+  local bodies f content ids
+  bodies=$(mktemp)
+  while read -r f; do
+    [[ -n $f ]] || continue
+    if ! content=$(git -C "$work" show "$oid:$f" 2>/dev/null) || [[ -z $content ]]; then
+      rm -f "$bodies"
+      log "could not read $f from #$n — leaving it for a person"
+      return 0
+    fi
+    jq -Rns --arg file "$f" --arg text "$content" '{file: $file, text: $text}'
+  done < <(jq -r '.files[] | select(.status != "removed") | .path' <<<"$pr") | jq -s '.' >"$bodies"
+
+  # The notes this pull request adds, by the file name each one lands under.
+  ids=$(jq -c '[.files[] | select(.status != "removed") | .path | sub(".*/"; "") | sub("\\.md$"; "")]' <<<"$pr")
+
   # Everything already known, genuinely minus the notes under review — they are
   # already on this machine, so without this every note looks like its own duplicate.
-  local existing under_review
-  under_review=$(jq -r '[.[] | .text | capture("id: (?<id>[^\n]+)").id] // []' "$bodies" 2>/dev/null || echo '[]')
+  local existing
   existing=$(mktemp)
   {
     notes_index 2>/dev/null |
-      jq -r --argjson under "$under_review" '
+      jq -r --argjson under "$ids" '
         [.[] | select(.id as $i | ($under | index($i)) | not)][]
         | "- [\(.id)] \(.repo // "org"): \(.body | gsub("\\n"; " ") | .[0:240])"'
     if [[ -f $DIR/map/DECISIONS.md ]]; then
@@ -610,11 +686,11 @@ review_auto() {
     printf '\n```\n\nEXISTING\n```\n'
     cat "$existing"
     printf '\n```\n'
-  } | claude -p --model "$model" --output-format text >"$raw" 2>/dev/null || true
+  } | model_call "$model" >"$raw" 2>/dev/null || true
 
   # Everything from the first brace onwards, code fences stripped.
   verdicts=$(sed -e '/^[[:space:]]*```/d' "$raw" |
-    sed -n '/^[[:space:]]*{/,$p' | jq -c '.' 2>/dev/null || true)
+    sed -n '/^[[:space:]]*{/,$p' | jq -c 'select(.verdicts | type == "array")' 2>/dev/null || true)
   [[ -n $verdicts ]] || log "reviewer did not return JSON: $(head -c 100 "$raw")"
   rm -f "$bodies" "$existing" "$raw"
 
@@ -623,12 +699,30 @@ review_auto() {
     return 0
   fi
 
+  # A verdict counts only for a note this pull request actually adds, under a
+  # name orgami could have written. Anything else is the model's invention.
+  local id
+  while read -r id; do
+    if ! notes_id_ok "$id"; then
+      log "ignoring a verdict for '$id' — not a note file name orgami writes"
+    elif ! jq -e --arg i "$id" 'index($i)' <<<"$ids" >/dev/null; then
+      log "ignoring a verdict for '$id' — not a note in #$n"
+    fi
+  done < <(jq -r '.verdicts[] | .id | tostring' <<<"$verdicts")
+  verdicts=$(jq -c --argjson ids "$ids" '
+    .verdicts |= map(select((.id | type) == "string" and (.id as $i | $ids | index($i)))
+                     | .verdict |= tostring)' <<<"$verdicts")
+  while read -r id; do
+    [[ -n $id ]] || continue
+    notes_id_ok "$id" || verdicts=$(jq -c --arg i "$id" '.verdicts |= map(select(.id != $i))' <<<"$verdicts")
+  done < <(jq -r '.verdicts[].id' <<<"$verdicts")
+
   local body
   body=$(jq -r '
     "**orgami reviewed these notes.** " + (.summary // "") + "\n\n"
     + ([.verdicts[]
         | "- " + (if .verdict == "approve" then "✅" elif .verdict == "revise" then "✏️" else "🚫" end)
-          + " `" + .id + "` — " + .reason
+          + " `" + .id + "` — " + (.reason // "")
           + (if (.supersedes // "") != "" then "\n  Supersede instead: `orgami note --supersede " + .supersedes + " \"...\"`" else "" end)]
        | join("\n"))
     + "\n\n<sub>A judgement, not a gate. The credential screening above is the gate.</sub>"' <<<"$verdicts")
@@ -636,18 +730,27 @@ review_auto() {
   (cd "$work" && gh pr comment "$n" --body "$body") >/dev/null &&
     echo "commented on #$n"
 
+  jq -r '.verdicts[] | "  " + .verdict + "  " + .id' <<<"$verdicts"
+
+  # A note with no verdict was not reviewed, whatever the others say.
+  local unread
+  unread=$(jq -r --argjson ids "$ids" '[.verdicts[].id] as $v | $ids[] | select(. as $i | $v | index($i) | not)' <<<"$verdicts")
+  if [[ -n $unread ]]; then
+    log "no verdict for $(head -1 <<<"$unread") — leaving #$n for a person"
+    return 0
+  fi
+
   local bad
   bad=$(jq '[.verdicts[] | select(.verdict != "approve")] | length' <<<"$verdicts")
-  jq -r '.verdicts[] | "  " + (if .verdict == "approve" then "approve" else .verdict end) + "  " + .id' <<<"$verdicts"
 
   if [[ $bad -gt 0 && $merge == 1 ]]; then
     # Nobody is coming to revise these. Take them out of the batch, with the
     # reason kept on the archived copy, so the notes that passed can land.
-    local id reason verdict
+    local reason verdict held=0
     while read -r id; do
       [[ -n $id ]] || continue
       verdict=$(jq -r --arg i "$id" '.verdicts[] | select(.id == $i) | .verdict' <<<"$verdicts")
-      reason=$(jq -r --arg i "$id" '.verdicts[] | select(.id == $i) | .reason' <<<"$verdicts")
+      reason=$(jq -r --arg i "$id" '.verdicts[] | select(.id == $i) | .reason // ""' <<<"$verdicts")
       if [[ -f $DIR/notes/$id.md ]]; then
         mkdir -p "$DIR/notes/archive"
         {
@@ -657,11 +760,9 @@ review_auto() {
         } >"$DIR/notes/archive/$id.md"
         rm -f "$DIR/notes/$id.md"
         echo "  held back: $id ($verdict)"
+        held=$((held + 1))
       fi
     done < <(jq -r '.verdicts[] | select(.verdict != "approve") | .id' <<<"$verdicts")
-
-    # Push the removals so the pull request holds only what passed.
-    cmd_sync --quiet >/dev/null 2>&1 || true
 
     local left
     left=$(jq '[.verdicts[] | select(.verdict == "approve")] | length' <<<"$verdicts")
@@ -670,7 +771,18 @@ review_auto() {
       (cd "$work" && gh pr close "$n" --delete-branch) >/dev/null 2>&1 || true
       return 0
     fi
-    bad=0
+
+    # Push the removals so the pull request holds only what passed. It merges
+    # on a later run, once it is read again at the commit that holds only that:
+    # the commit just read still carries the notes that were held back. A
+    # subshell, because a sync that dies must not take the review with it.
+    if [[ $held -gt 0 ]]; then
+      (cmd_sync --quiet) >/dev/null 2>&1 || true
+      echo "#$n now holds only what passed — it merges on the next review"
+    else
+      echo "$bad note(s) in #$n are not on this machine to hold back — #$n left open"
+    fi
+    return 0
   fi
 
   if [[ $bad -gt 0 ]]; then
@@ -679,18 +791,35 @@ review_auto() {
   fi
 
   if [[ $merge == 1 ]]; then
-    notes_pr_merge "$work" "$n"
+    notes_pr_merge "$work" "$n" "" "$oid"
   else
     echo "#$n is clean — merge it with: orgami review --auto --merge"
   fi
 }
 
 # The check that makes review mean something: it runs on every pull request.
+# It pushes a workflow to the docs repo's default branch and changes that
+# branch's protection, so it asks first unless given --yes.
 review_install_check() {
-  local work=$1
+  local work=$1 yes=${2:-0}
   local wf="$work/.github/workflows/orgami-notes.yml"
-  mkdir -p "$(dirname "$wf")"
-  cat >"$wf" <<'YML'
+
+  # The workflow runs orgami's own code in CI with the docs repo's token, so it
+  # runs exactly the orgami that installed it, never whatever main is today.
+  local ref
+  ref=$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)
+  if [[ -n $ref ]]; then
+    [[ -n $(git -C "$ROOT" branch -r --contains "$ref" 2>/dev/null) ]] ||
+      log "orgami is at $ref, which may not be on GitHub yet — the check fetches it from there"
+  else
+    ref="v$(jq -r '.version // empty' "$ROOT/manifest.json" 2>/dev/null)"
+    [[ $ref != v ]] || die "cannot tell which orgami this is to pin the check to — install it from a git checkout"
+    log "not a git checkout — pinning the check to tag $ref"
+  fi
+
+  local tmp
+  tmp=$(mktemp)
+  cat >"$tmp" <<'YML'
 name: orgami notes
 
 # Screens every note added in a pull request for credentials before it can
@@ -717,7 +846,9 @@ jobs:
 
       - name: Screen them
         run: |
-          git clone --depth 1 https://github.com/Oldault/orgami /tmp/orgami
+          git init --quiet /tmp/orgami
+          git -C /tmp/orgami fetch --quiet --depth 1 https://github.com/Oldault/orgami __ORGAMI_REF__
+          git -C /tmp/orgami checkout --quiet FETCH_HEAD
           status=0
           while read -r f; do
             [ -n "$f" ] || continue
@@ -725,40 +856,81 @@ jobs:
           done < changed.txt
           exit $status
 YML
+  subst_file "$tmp" __ORGAMI_REF__ "$ref"
 
-  git -C "$work" add .github/workflows/orgami-notes.yml
-  if git -C "$work" diff --cached --quiet; then
+  if [[ -f $wf ]] && cmp -s "$tmp" "$wf"; then
+    rm -f "$tmp"
     echo "the check is already installed"
     return 0
   fi
+
+  local slug branch
+  slug=$(git -C "$work" remote get-url origin |
+    sed -E 's|.*[:/]([^/]+/[^/]+?)(\.git)?$|\1|')
+  slug=${slug%.git}
+  valid_gh_name "$slug" slug || { rm -f "$tmp"; die "cannot tell which GitHub repository $(cfg docs_repo) is"; }
+  branch=$(gh api "repos/$slug" --jq .default_branch 2>/dev/null || echo main)
+
+  if [[ $yes != 1 ]]; then
+    need_tty "pass --yes to install it without asking"
+    echo "This pushes .github/workflows/orgami-notes.yml (orgami $ref) to $slug@$branch" >&2
+    echo "and makes its 'screen' check required to merge into $branch." >&2
+    local answer
+    read -rp "go ahead? [y/N] " answer
+    [[ $answer == [yY]* ]] || { rm -f "$tmp"; echo "nothing installed"; return 0; }
+  fi
+
+  mkdir -p "$(dirname "$wf")"
+  mv "$tmp" "$wf"
+  git -C "$work" add .github/workflows/orgami-notes.yml
   git -C "$work" commit --quiet -m "ci(orgami): screen notes on every pull request"
   git -C "$work" push --quiet origin HEAD || die "could not push the workflow"
   echo "installed .github/workflows/orgami-notes.yml in $(cfg docs_repo)"
 
   # A check nobody is required to pass is only advice. Make it required, if the
-  # repository's plan allows branch protection.
-  local slug branch
-  slug=$(git -C "$work" remote get-url origin |
-    sed -E 's|.*[:/]([^/]+/[^/]+?)(\.git)?$|\1|')
-  branch=$(gh api "repos/$slug" --jq .default_branch 2>/dev/null || echo main)
-  if gh api "repos/$slug/branches/$branch/protection" -X PUT \
-    -H "Accept: application/vnd.github+json" \
-    --input - >/dev/null 2>&1 <<PROT
+  # repository's plan allows branch protection — adding to whatever protection
+  # is already there, never replacing it: a PUT of the whole protection would
+  # drop the required reviews and every other rule someone set.
+  local prot
+  if prot=$(gh api "repos/$slug/branches/$branch/protection" 2>&1); then
+    if jq -e '.required_status_checks' <<<"$prot" >/dev/null 2>&1; then
+      if gh api "repos/$slug/branches/$branch/protection/required_status_checks/contexts" \
+        -X POST -f 'contexts[]=screen' >/dev/null 2>&1; then
+        echo "the screen check is now required to merge into $branch, alongside its existing rules"
+        return 0
+      fi
+    fi
+    log "$branch is protected but has no required status checks to add 'screen' to"
+    log "add it by hand: Settings → Branches → $branch → Require status checks → screen"
+    return 0
+  fi
+
+  # No protection at all, so there are no reviews or rules for null to wipe.
+  if grep -q 'Branch not protected' <<<"$prot"; then
+    if gh api "repos/$slug/branches/$branch/protection" -X PUT \
+      -H "Accept: application/vnd.github+json" \
+      --input - >/dev/null 2>&1 <<PROT
 {"required_status_checks": {"strict": false, "contexts": ["screen"]},
  "enforce_admins": false, "required_pull_request_reviews": null, "restrictions": null}
 PROT
-  then
-    echo "the screen check is now required to merge into $branch"
-  else
-    log "could not require the check on $branch — branch protection needs a paid plan on private repos"
-    log "the check still runs and shows on every pull request"
+    then
+      echo "the screen check is now required to merge into $branch"
+      return 0
+    fi
   fi
+  log "could not require the check on $branch — branch protection needs a paid plan on private repos"
+  log "the check still runs and shows on every pull request"
 }
 
 # Everything, reconciled, in one idempotent pass: take what the team merged,
 # publish what this machine wrote, have it reviewed, merge it if it passes.
 # Safe to run constantly — a lock keeps runs from stacking, and every guard
 # still applies.
+#
+# The session-start hook runs this on every session, unasked. So only the half
+# that reads is unconditional; publishing, opening pull requests and merging
+# are the half that writes to someone's repository, and they run only for a
+# person who turned on notes_autosync.
 cmd_autosync() {
   load_company
 
@@ -775,8 +947,8 @@ cmd_autosync() {
 
   if [[ $background == 1 ]]; then
     # Detached, so nothing waits on the network or on a model.
-    (setsid "$ORGAMI_BIN" autosync --quiet >>"$DIR/cache/autosync.log" 2>&1 &) 2>/dev/null ||
-      ("$ORGAMI_BIN" autosync --quiet >>"$DIR/cache/autosync.log" 2>&1 &)
+    mkdir -p "$DIR/cache"
+    detach "$DIR/cache/autosync.log" "$ORGAMI_BIN" autosync --quiet
     return 0
   fi
 
@@ -784,21 +956,27 @@ cmd_autosync() {
   if ! mkdir "$lock" 2>/dev/null; then
     # A run older than ten minutes died holding the lock.
     local held
-    held=$(( ( $(date +%s) - $(stat -c %Y "$lock" 2>/dev/null || echo 0) ) / 60 ))
+    held=$(( ( $(date +%s) - $(file_mtime "$lock") ) / 60 ))
     [[ $held -lt 10 ]] && { [[ $quiet == 1 ]] || echo "another autosync is running"; return 0; }
     rm -rf "$lock"
     mkdir "$lock" 2>/dev/null || return 0
   fi
   trap 'rm -rf "$lock"' EXIT
 
+  # Subshells, so a sync or review that dies still lets the lock go.
   {
     echo "--- $(date -u +%Y-%m-%dT%H:%M:%SZ) autosync $COMPANY"
-    cmd_sync || echo "sync failed"
+    if [[ $(cfg notes_autosync false) != true ]]; then
+      (cmd_sync --pull) || echo "sync failed"
+      echo "notes_autosync is off — took what teammates wrote; publish yours with: orgami sync"
+    else
+      (cmd_sync) || echo "sync failed"
 
-    # Read whatever is waiting and merge it if every note passes. The reviewer
-    # is a judgement; the credential screen and the CI check are the gates.
-    if [[ $(cfg notes_review false) == true ]] && command -v claude >/dev/null; then
-      cmd_review --auto || echo "review failed"
+      # Read whatever is waiting and merge it if every note passes. The reviewer
+      # is a judgement; the credential screen and the CI check are the gates.
+      if [[ $(cfg notes_review false) == true ]] && command -v claude >/dev/null; then
+        (cmd_review --auto) || echo "review failed"
+      fi
     fi
   } >>"$DIR/cache/autosync.log" 2>&1
 
@@ -861,13 +1039,15 @@ cmd_sync() {
   fi
 
   local remote="$work/$path/notes"
+  docs_dir_inside "$work" "$work/$path" && docs_dir_inside "$work" "$remote" ||
+    die "$repo:$path/notes is a link out of the docs repo — refusing to sync through it; ask whoever owns $repo to remove the link"
   mkdir -p "$remote" "$DIR/notes"
   date +%s >"$stamp"
 
   if [[ $pull_only == 1 ]]; then
     local got=0
     for f in "$remote"/*.md; do
-      [[ -f $f ]] || continue
+      [[ -f $f && ! -L $f ]] || continue
       base=$(basename "$f")
       [[ -f $DIR/notes/$base || -f $DIR/notes/archive/$base ]] && continue
       cp "$f" "$DIR/notes/$base"
@@ -879,8 +1059,9 @@ cmd_sync() {
 
   # Take what the team merged, from the default branch, before switching away.
   local pulled=0 f base
+  # A link is skipped, never followed: cp would copy whatever it points at.
   for f in "$remote"/*.md; do
-    [[ -f $f ]] || continue
+    [[ -f $f && ! -L $f ]] || continue
     base=$(basename "$f")
     [[ -f $DIR/notes/$base || -f $DIR/notes/archive/$base ]] && continue
     cp "$f" "$DIR/notes/$base"
@@ -898,6 +1079,11 @@ cmd_sync() {
     else
       git -C "$work" checkout --quiet -B "$branch"
     fi
+    # The author's branch is a different tree, with its own chance of a link.
+    docs_dir_inside "$work" "$work/$path" && docs_dir_inside "$work" "$remote" || {
+      git -C "$work" checkout --quiet - 2>/dev/null || true
+      die "$branch makes $path/notes a link out of the docs repo — refusing to sync through it"
+    }
     mkdir -p "$remote"
   fi
 
@@ -959,7 +1145,7 @@ cmd_sync() {
         while read -r r; do [[ -n $r ]] && reviewers+=(--reviewer "$r"); done \
           < <(jq -r '(.notes_reviewers // [])[]' "$DIR/config.json" 2>/dev/null)
         ( cd "$work" && gh pr create --head "$branch" --base "$base" --title "$msg" \
-            "${reviewers[@]}" \
+            ${reviewers[@]+"${reviewers[@]}"} \
             --body "Notes written with \`orgami note\`. Merging publishes them to everyone on $COMPANY.
 
 Review for: anything that should not be shared, anything already stale, anything better fixed in the code than written down." ) ||
@@ -1003,6 +1189,17 @@ join_discover() {
   done
 }
 
+# docs_dir_inside <clone> <dir> — the directory is missing, or resolves inside
+# the clone and outside its .git. A committed link as notes/ or as the docs
+# path would otherwise have sync write and delete files wherever it points.
+docs_dir_inside() {
+  local root real
+  [[ -e $2 || -L $2 ]] || return 0
+  root=$(cd -P "$1" 2>/dev/null && pwd -P) || return 1
+  real=$(cd -P "$2" 2>/dev/null && pwd -P) || return 1
+  [[ $real == "$root"/* && $real != "$root/.git" && $real != "$root"/.git/* ]]
+}
+
 # Pulls a published map into a new company directory.
 join_from_repo() {
   local company=$1 repo=$2 path=$3
@@ -1014,36 +1211,60 @@ join_from_repo() {
   local work="$dir/cache/docs"
   rm -rf "$work"
   git clone --quiet --depth 1 "$repo" "$work" || die "cannot clone $repo"
+  # Anyone who can push to the docs repo decides what is in this clone, and cp
+  # copies what a link points at: notes/x.md -> ~/.config/gh/hosts.yml would
+  # put this machine's token in a note. orgami never publishes a link, so every
+  # one goes before anything is copied, directories included.
+  find "$work" -path "$work/.git" -prune -o -type l -exec rm -f {} + 2>/dev/null || true
   local src="$work/$path"
   [[ -d $src ]] || die "$repo has no $path/ — is that the right docs repo?"
 
   cp -f "$src"/*.md "$src"/*.json "$dir/map/" 2>/dev/null || true
   [[ -d $src/repos ]] && cp -r "$src/repos" "$dir/map/" 2>/dev/null
-  [[ -d $src/reports ]] && cp -f "$src/reports/"*.md "$dir/reports/" 2>/dev/null
+  # Only a name shaped like a week: the runbook prints it as a heading.
+  local f
+  for f in "$src/reports/"*.md; do
+    [[ -f $f && ${f##*/} =~ ^[0-9]{4}-W[0-9]{2}\.md$ ]] || continue
+    cp -f "$f" "$dir/reports/"
+  done
   [[ -d $src/notes ]] && cp -f "$src/notes/"*.md "$dir/notes/" 2>/dev/null
 
   local org
   org=$(jq -r '.org // empty' "$dir/map/graph.json" 2>/dev/null)
   [[ -n $org ]] || die "no graph.json in $repo:$path — has anyone run 'orgami scan' yet?"
+  valid_gh_name "$org" owner ||
+    die "$repo:$path/graph.json names org '$org', which is not a GitHub organization name — ask whoever publishes it to re-run: orgami publish"
 
-  # Whatever the company decided about notes travels with the map.
+  # Whatever the company decided about notes review travels with the map. Only
+  # that: anyone who can push to the docs repo writes this file, so it never
+  # gets to say which organization this is, where to sync, or that notes go out
+  # unread — those are this machine's to decide.
   local team='{}'
-  [[ -f $src/settings.json ]] && team=$(jq -c '.' "$src/settings.json" 2>/dev/null || echo '{}')
+  [[ -f $src/settings.json ]] && team=$(jq -c '
+    if type != "object" then {} else
+      (with_entries(select((.key == "notes_review" or .key == "notes_auto_merge")
+                           and (.value | type) == "boolean")))
+      + (if (.report_model | type) == "string" and (.report_model | test("^[A-Za-z0-9][A-Za-z0-9._:-]{0,99}$"))
+         then {report_model} else {} end)
+    end' "$src/settings.json" 2>/dev/null || echo '{}')
+  [[ -n $team ]] || team='{}'
 
+  local tmp
+  tmp=$(mktemp)
   jq -n --arg company "$company" --arg org "$org" --arg repo "$repo" --arg path "$path" \
     --argjson team "$team" \
-    '{company: $company, org: $org, docs_repo: $repo, docs_path: $path,
-      exclude: [], include: [], report_model: "claude-sonnet-5"} + $team' >"$dir/config.json"
+    '{exclude: [], include: [], report_model: "claude-sonnet-5"} + $team
+     + {company: $company, org: $org, docs_repo: $repo, docs_path: $path}' >"$tmp"
+  mv "$tmp" "$dir/config.json"
 
   mkdir -p "$ORGAMI_HOME"
   [[ -f $ORGAMI_HOME/config.json ]] || echo '{}' >"$ORGAMI_HOME/config.json"
-  local tmp
   tmp=$(mktemp)
   jq --arg c "$company" '.default = (.default // $c)' "$ORGAMI_HOME/config.json" >"$tmp"
   mv "$tmp" "$ORGAMI_HOME/config.json"
 
   echo "joined $company ($org) — $(find "$dir/map/repos" -name '*.md' 2>/dev/null | wc -l) repo cards, \
-$(find "$dir/reports" -name '*.md' 2>/dev/null | wc -l) reports, \
+$(find "$dir/reports" -maxdepth 1 -name '[0-9][0-9][0-9][0-9]-W[0-9][0-9].md' 2>/dev/null | wc -l) reports, \
 $(find "$dir/notes" -name '*.md' 2>/dev/null | wc -l) notes, no scan needed"
 }
 
@@ -1068,6 +1289,7 @@ cmd_join() {
   # Bare `orgami join`: pick the org, find the map that is already there.
   source "$ROOT/lib/ui.sh"
   ui_need_gum || die "usage: orgami join <company> --repo <docs-repo-url>"
+  need_tty "pass it as flags: orgami join <company> --repo <docs-repo-url> [--path <dir>]"
   need gh
   gh auth status >/dev/null 2>&1 || die "gh is not authenticated — run: gh auth login"
 
@@ -1083,11 +1305,12 @@ cmd_join() {
     org=$(gum input --placeholder "github organization login" --prompt "org: ") || return 1
   fi
   [[ -n $org ]] || return 1
+  valid_gh_name "$org" owner || die "'$org' is not a GitHub organization login"
 
   local found
   found=$(gum spin --show-output --spinner dot \
     --title "looking for a published map in $org…" -- \
-    bash -c "source '$ROOT/lib/common.sh'; source '$ROOT/lib/notes.sh'; join_discover '$org'")
+    bash -c 'source "$1/lib/common.sh"; source "$1/lib/notes.sh"; join_discover "$2"' _ "$ROOT" "$org")
 
   if [[ -z $found ]]; then
     gum style --foreground 3 "No orgami map published in $org yet."
@@ -1118,5 +1341,5 @@ cmd_join() {
   company=${company// /-}
   [[ -n $company ]] || return 1
 
-  join_from_repo "$company" "git@github.com:$org/$repo.git" "$path"
+  join_from_repo "$company" "$(gh_clone_url "$org" "$repo")" "$path"
 }

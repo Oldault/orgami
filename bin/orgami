@@ -117,7 +117,7 @@ Team memory
   orgami sync --pull [--max-age MIN]    take what the team wrote, push nothing
   orgami autosync                       reconcile everything: pull, push, review, merge
   orgami review [--auto [--merge]]      read and merge the notes waiting for review
-  orgami review --install-check         gate the docs repo with a CI screen
+  orgami review --install-check [--yes] gate the docs repo with a CI screen
   orgami screen <file>...               screen note files — what CI runs
   orgami notes --check | --rejected | --pending
   orgami stale [days]                   notes old enough to need a second look
