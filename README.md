@@ -19,6 +19,10 @@ the terminal, and the week's numbers](docs/demo.gif)
 <sub>Recorded against a public organization ([honojs](https://github.com/honojs))
 with `vhs docs/demo.tape` — every line in it came out of a committed file.</sub>
 
+**Trying orgami?** [docs/testing.md](docs/testing.md) is the fifteen-minute
+version: what to install, what to run, what a useful report looks like, and a
+prompt that has Claude Code do it for you.
+
 It is built for the size of team where everyone touches everything: no architect
 holding the diagram, no wiki that survived the last three months, and a new hire
 or a coding agent expected to be useful on day one.
@@ -36,8 +40,9 @@ or a coding agent expected to be useful on day one.
   starts from what the last two learned.
 - **Nothing to run.** Open Claude Code or Cursor in a mapped checkout and the
   repo's stack, commands, linked repos and notes are already in the session.
-- **No daemon, no database, no web app.** Bash, `gh`, `jq`, `fzf`, `gum`, a
-  timer, and plain files that diff cleanly in git.
+- **No daemon, no database, no server to run.** Bash, `gh`, `jq`, `fzf`, `gum`,
+  a timer, and plain files that diff cleanly in git. `orgami web` writes one
+  static HTML file; nothing listens on a port.
 
 *org + origami — folding a flat sheet of repositories into a shape you can see.*
 
@@ -68,6 +73,23 @@ orgami init     # map your organization
 Everyone else on the team runs `orgami join` and picks it up — no scan, no
 clones. `--dry-run` prints every step without touching anything; installing by
 hand is in **[docs/install.md](docs/install.md)**.
+
+When something does not work, `orgami doctor` checks every tool, the `gh`
+sign-in, the timer's `PATH`, the Claude Code plugin and the configured company,
+and prints the fix beside each failure. `--json` is the same for an agent.
+
+### Requirements
+
+| | |
+|---|---|
+| `bash` 4.4 or newer | everything — macOS's `/bin/bash` 3.2 is refused; the bootstrap installs a newer one with Homebrew |
+| `git`, `gh`, `jq` | everything |
+| `fzf` 0.29 or newer | `orgami view` |
+| `gum` | the wizard and the menu — every question has a flag |
+| `python3` | optional: `orgami mcp` and `orgami depth` |
+| `claude` | optional: the recap, the daily digest, session notes, playbooks, `doc --narrate`, `review --auto` |
+
+Linux, macOS and WSL. On Windows, run it inside WSL.
 
 ## Use
 
@@ -100,8 +122,9 @@ orgami publish         # commit both into the docs repo
 `orgami weekly` runs that whole sequence; `orgami schedule` puts it on a systemd
 user timer, a launchd agent, or a cron line you paste anywhere else.
 
-`orgami help` is ten commands — the ones you use. `orgami help --all` is the
-rest: note review, MCP, per-repo runbooks, coupling, symbols, pruning.
+`orgami help` is the menu and eleven commands — the ones you use.
+`orgami help --all` is the rest: note review, MCP, per-repo runbooks, coupling,
+symbols, pruning, `doctor`, `uninstall`.
 
 ## The map
 
@@ -402,9 +425,9 @@ Cursor reaches the same parity through its `sessionStart` hook; anything that
 speaks MCP gets the map as tools; anything that reads `AGENTS.md` can have the
 context written into the repo. See **[docs/agents.md](docs/agents.md)**.
 
-## Staying up to date
+## Auto-update
 
-Two copies end up on a machine — the clone that owns the CLI, and the clone
+On by default. Two copies end up on a machine — the clone that owns the CLI, and the clone
 Claude Code keeps for the plugin — and neither updates itself. `orgami update`
 moves both, whichever one you run it from; it also runs once a day at session
 start and at the top of the weekly timer, and the next session says what
@@ -420,7 +443,19 @@ orgami update --dev    # this checkout becomes what the CLI and the plugin read
 ```
 
 `ORGAMI_AUTOUPDATE=0` or `"auto_update": false` in `~/.orgami/config.json` turns
-the automatic half off.
+the automatic half off — the session hook and the weekly timer both honour it.
+`orgami update` typed by hand still updates.
+
+## Uninstall
+
+```bash
+orgami uninstall --dry-run   # what would be removed
+orgami uninstall             # the PATH link, completions, the skill, the timers,
+                             # Cursor and git hooks, the Claude Code plugin
+orgami uninstall --purge     # also ~/.orgami, and the clone if it has no local changes
+```
+
+It never touches the docs repo or anything already published.
 
 ## More than one organization
 
@@ -429,6 +464,30 @@ acquired org — `orgami init` again gives it its own directory under
 `~/.orgami`, `orgami use <name>` switches the default, and
 `ORGAMI_COMPANY=<name>` runs a single command against the other. Notes are
 screened against every org configured on the machine, so nothing crosses.
+
+## What leaves your machine
+
+**To Claude**, through your own `claude` login, and only from these commands:
+`orgami report` (merged pull requests: titles, the first 600 characters of each
+description, labels, sizes, reviewers, the start of review comments),
+`orgami daily` (the day's pull requests, opening lines included, and commit
+messages), the session-end
+note (that session's transcript, with tokens and keys redacted first),
+`orgami playbook` (the notes and pull requests behind it), `orgami review --auto`
+(the notes in a pull request) and `orgami doc --narrate` (the graph). Each call
+runs with no tools, no MCP servers and none of your Claude Code settings or
+hooks: the model can only write text back. Clones are never sent.
+
+**To GitHub**, only when you ask: `orgami publish`, `orgami sync` and
+`orgami note --push` push to the docs repo, `orgami review` comments and merges, `review --install-check`
+pushes a workflow, `orgami init` creates the docs repo if you choose that, and
+`orgami weekly` — what `orgami schedule` puts on the timer — ends with a publish.
+The session hook's `orgami autosync` only pulls teammates' notes unless
+`"notes_autosync": true` is set, which makes it publish yours too.
+
+**Never, unless you say so:** the `orgami live` reading (`live_publish`), the
+figures typed into `orgami cost` (`publish_costs`). The `gh` token stays with
+`gh`; a provider token goes only to that provider's API.
 
 ## Cost
 
@@ -449,6 +508,7 @@ that is the most useful report there is.
 
 ## Docs
 
+- [Trying orgami](docs/testing.md) — fifteen minutes, what to report, and a prompt for Claude Code
 - [Installing by hand](docs/install.md) — per-distribution dependencies, WSL, the plugin
 - [The map](docs/map.md) — what the scan looks for, and what it refuses to infer
 - [The symbol layer](docs/depth.md) — `orgami depth`, tree-sitter, and what it can answer

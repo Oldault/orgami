@@ -1,0 +1,43 @@
+# orgami
+
+> orgami is a bash CLI that maps every repository in a GitHub organization — what each one is, how to run and test it, what it talks to, where it deploys — writes daily and weekly digests of merged work, keeps a shared team note memory in a git repo, and hands all of it to a coding agent at session start. Every edge in the map carries the file:line, URL or pull request it came from. A missing edge means "not found in committed configuration", never "not connected".
+
+Runs on Linux, macOS (bash 4.4 or newer, from Homebrew) and WSL. Needs git, gh and jq; fzf and gum for the interactive parts; python3 only for `orgami mcp` and `orgami depth`; the claude CLI only for the parts a model writes (recaps, daily digest, session notes, playbooks). It maps organizations only, not personal accounts. State lives in `~/.orgami/<company>/` (or `$ORGAMI_HOME`).
+
+Install: `curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.sh | bash`, then `gh auth login`. With Claude Code: `/plugin marketplace add Oldault/orgami` and `/plugin install orgami@orgami`; the plugin brings the skill, session hooks and the `orgami_*` MCP tools.
+
+Running from an agent: an agent's shell has no terminal. Every command works from flags; a step that would ask a question exits 1 with `orgami: this step asks questions and there is no terminal — <the flag to use instead>`. Rerun with that flag. stdout is the result only; progress goes to stderr.
+
+- `orgami doctor --json` — first-run checks, `{version, root, ok, checks: [{name, ok, blocking, detail, fix}]}`; exit 1 only when a check blocks; writes nothing
+- `orgami init <company> --org <github-org> --no-docs` — configure an org without questions and without a docs repo; or `--docs-repo <url>`
+- `orgami join <company> --repo <docs-repo-url>` — pick up a map a colleague already published
+- `orgami scan [--only <repo>]` — clone and map every active repo; writes `map/graph.json` (`{nodes, edges}`, each edge `{from, to, kind, evidence, confidence}`) and `map/repos.json`
+- `orgami query <repo|host|tool|service|vendor> --json` — one node, `{id, kind, name, meta, edges: {out, in}}`
+- `orgami context [repo]` — the page an agent reads before editing (markdown)
+- `orgami card <repo>` — the repo's stack, commands and links (markdown)
+- `orgami notes [--repo R] [--tag T] [query]` — what the team recorded
+- `orgami note --repo <repo> --tag <tag> "text"` — record a note locally; pushed only by `orgami sync`
+- `orgami advise --json`, `orgami live --json`, `orgami dns --domain <d> --yes --json` — vendors, deployments, DNS-verified accounts
+- `orgami report --stats-only`, `orgami daily --stats-only` — the week's and the day's numbers with no model call
+- `orgami web` — renders `map/orgami.html`, one static file; prints its path
+
+Commands that write where other people see it — run only when the user asks: `publish`, `sync` (except `sync --pull`), `note --push`, `autosync`, `weekly`, `review --auto`, `review --merge`, `review --install-check`, and `init` when it creates the docs repo. `orgami uninstall [--dry-run] [--yes] [--purge]` removes orgami from the machine.
+
+orgami's own claude calls run with `--tools ""`, `--setting-sources ""` and `--strict-mcp-config`: no tools, none of the user's settings or hooks, no MCP servers.
+
+## Docs
+
+- [Trying orgami](https://orgami.dev/testing.md): install, a fifteen-minute script, what to report, a Claude Code prompt
+- [Other agents](https://orgami.dev/agents.md): the plugin, MCP tools, headless rules, Cursor, AGENTS.md
+- [Installing by hand](https://orgami.dev/install.md): dependencies per platform, the plugin, uninstall
+- [The map](https://orgami.dev/map.md): what the scan reads and what it refuses to infer
+- [Team notes](https://orgami.dev/notes.md): screening, review, sync, join
+- [Playbooks](https://orgami.dev/playbooks.md): recurring work and the procedure it writes
+- [The page](https://orgami.dev/web.md): `orgami web`
+- [Layout](https://orgami.dev/layout.md): every file and the state it keeps
+
+## Optional
+
+- [Repository](https://github.com/Oldault/orgami): source, README, issues
+- [Skill](https://github.com/Oldault/orgami/blob/main/skills/orgami/SKILL.md): the rules Claude Code follows with orgami
+- [What is running](https://orgami.dev/live.md), [What is paid for](https://orgami.dev/advise.md), [What the DNS says](https://orgami.dev/dns.md), [Symbols](https://orgami.dev/depth.md)

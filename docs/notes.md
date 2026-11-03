@@ -48,6 +48,22 @@ request instead of committing — one branch per author, reused, so syncing twic
 before review updates the same pull request rather than opening another. Notes
 reach the team only when someone merges.
 
+`orgami review --auto` has Claude read each pending note and comment its
+verdict; `--merge` (or `"notes_auto_merge": true`) merges what passed. It leaves
+a pull request for a person when it comes from a fork, changes anything outside
+`<docs_path>/notes/*.md`, cannot be fetched, moves while it is being read, or
+holds a note the reviewer gave no verdict for. A pull request counts as
+removals-only only when GitHub reports every file in it as deleted. A merge is
+pinned to the commit that was reviewed, and once rejected notes have been held
+back the pull request merges on the next review, when the branch holds only
+what passed.
+
+`orgami review --install-check` puts the same screen in the docs repo's CI. It
+says what it will push and asks first (`--yes` skips the question, and is
+required with no terminal), adds the `screen` check to existing branch
+protection rather than replacing it, and pins the workflow to the orgami commit
+or tag that installed it.
+
 ## It gets pruned
 
 A note that is now wrong is replaced, not contradicted:
@@ -69,6 +85,11 @@ the code. Each note is its own file, named by timestamp and author, so five
 people writing at once never produce a conflict. `orgami sync` runs on its own as
 part of `orgami weekly`.
 
+The session-start hook runs `orgami autosync`, which only takes what teammates
+wrote. Publishing your own notes, opening pull requests and the automatic
+review and merge happen there only with `"notes_autosync": true` in the company
+config. `orgami sync` typed by hand pushes either way.
+
 ## Joining an org someone already mapped
 
 A colleague does not need to scan anything, or know where the map lives:
@@ -83,4 +104,11 @@ cards, the conventions, the decisions and every note out of it. One command
 instead of forty clones. Only whoever runs the weekly timer needs the checkouts.
 
 `orgami join <company> --repo <url> [--path <dir>]` skips the questions, for
-scripts and for a docs repo that lives outside the org.
+scripts and for a docs repo that lives outside the org. With no terminal, bare
+`orgami join` stops and prints that form.
+
+From the docs repo's `settings.json` it takes `notes_review`,
+`notes_auto_merge` and `report_model`, and nothing else: whether your notes
+publish unread or sync on their own stays your decision, and the org, docs repo
+and workspaces come from the command line, not from the repo. A `graph.json`
+whose org is not a valid GitHub name is refused.

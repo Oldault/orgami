@@ -19,8 +19,18 @@ cd orgami
 ./bin/orgami --help          # runs straight out of the checkout, nothing to install
 ```
 
-You need `bash`, `git`, `jq` and `gh`; `fzf` and `gum` for the interactive parts,
-`python3` for the MCP server. `shellcheck` if you want to run the linter locally.
+You need `bash` 4.4 or newer, `git`, `jq` and `gh`; `fzf` and `gum` for the
+interactive parts, `python3` for the MCP server and `orgami depth`.
+`orgami doctor` says which of them this machine is missing.
+
+`shellcheck` is part of `./script/check`, and CI runs it on every pull request.
+Without it the local check skips the lint and says so, which leaves CI to find
+the warning. It installs without root:
+
+```bash
+pipx install shellcheck-py      # or pip install shellcheck-py inside a virtualenv
+                                # or: brew install shellcheck, apt install shellcheck
+```
 
 Never install over your real config while developing. Point `ORGAMI_HOME`
 somewhere disposable:
@@ -52,6 +62,21 @@ the three cannot drift apart.
 
 If your change touches `lib/stats.jq`, add a case to the fixture and an assertion
 to `script/check`.
+
+Everything else that can be tested offline is a `test/<name>_test.sh`: one
+self-contained script per area, with fake `gh`, `gum`, `git` or `claude` put
+first on `PATH`, a temp dir removed in a trap, silence or one summary line on
+success, and a non-zero exit on failure. Run one on its own while you work:
+
+```bash
+./test/notes_review_auto_test.sh
+```
+
+They cover, among others, the headless paths (`init_headless`, `doctor`,
+`uninstall`), note sync and review (`notes_autosync`, `notes_review_auto`,
+`notes_join`, `notes_install_check`), the scan's merge and cache handling
+(`scan_merge`, `pull_cache`), the weekly run (`weekly`), and generated pages
+fed hostile input (`page_hostile`, `doc_safety`).
 
 A new gate is one line in the `CHECKS` registry at the foot of `script/check` —
 the flag that runs it on its own, and the function behind it — plus that

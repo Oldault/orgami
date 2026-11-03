@@ -38,6 +38,17 @@ body:
     validations:
       required: true
 
+  - type: textarea
+    id: doctor
+    attributes:
+      label: orgami doctor
+      description: >
+        Output of `orgami doctor`, redacted. It lists each tool, the gh sign-in,
+        the plugin and the configured company, and writes nothing.
+      render: text
+    validations:
+      required: true
+
   - type: dropdown
     id: platform
     attributes:
@@ -54,8 +65,8 @@ body:
   - type: input
     id: tools
     attributes:
-      label: Tool versions
-      description: "Output of: `bash --version | head -1; jq --version; gh --version | head -1`"
+      label: OS and tool versions
+      description: "Output of: `uname -sr; bash --version | head -1; jq --version; gh --version | head -1`, and the macOS or distribution version"
     validations:
       required: true
 

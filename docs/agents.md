@@ -42,11 +42,20 @@ changes with, its recent merged pull requests, and links to any `AGENTS.md` the
 repo already has. Cards are also written to `map/repos/<repo>.md` and published
 with everything else.
 
-`install.sh` links a skill into `~/.claude/skills/orgami/` that teaches Claude to
+The plugin carries a skill that teaches Claude to
 run `orgami context` first, cite the evidence line for anything it claims, say
 when the map is stale rather than trusting it silently, distinguish "not found in
 committed configuration" from "not connected", and never run `orgami publish` on
-its own.
+its own. Without the plugin, `install.sh` links the same skill into
+`~/.claude/skills/orgami/`; with the plugin it does not, and removes a link it
+made earlier, so the skill is not loaded twice.
+
+The plugin also declares orgami's MCP server (`python3
+${CLAUDE_PLUGIN_ROOT}/lib/mcp.py`), so the `orgami_*` tools below are there in
+Claude Code with no config to edit. It needs `python3`. With no company
+configured every tool answers with an error that says how to set one up. If the
+plugin is installed but the CLI never was, each session gets one line with the
+`bash <plugin>/install.sh` command to run, until it has been.
 
 The skill covers the other direction too, which is the half that decides whether
 any of this accumulates: when a piece of work is finished, what does it leave
@@ -61,11 +70,55 @@ closed, a machine shut — the *next* session sweeps up whatever was left unread
 newest first, detached so nothing waits on it. `orgami drafts` keeps or throws
 away what was written for you; `ORGAMI_AUTONOTE=0` turns the whole thing off.
 
+## Running orgami from an agent
+
+A coding agent's shell has no terminal, and orgami is built for that. Every
+command works from flags alone, and a step that would ask a question stops at
+once instead of waiting:
+
+```
+orgami: this step asks questions and there is no terminal — <the flag to use instead>
+```
+
+The wizard, `orgami setup` and the menu, `orgami init` with flags missing, bare
+`orgami join`, `orgami note` with no text, interactive `orgami review` and
+`orgami drafts`, and `orgami dns`, `orgami publish`, `orgami uninstall` and
+`orgami review --install-check` without `--yes` all do this. `orgami view` says to use
+`orgami query <node> --json` or `orgami card <repo>` instead. An answer piped
+on stdin does not count as confirmation.
+
+When something does not work, `orgami doctor --json` is the first thing to run.
+It prints `{version, root, ok, checks: [{name, ok, blocking, detail, fix}]}`,
+exits 1 only when a check blocks, writes nothing, and its only network call is
+`gh auth status`.
+
+These write where other people see it, so an agent should run them only when
+the user asks in the same turn: `publish`, `sync` (all but `sync --pull`),
+`note --push`, `autosync`, `weekly`, `review --auto`, `review --merge`,
+`review --install-check`, and `init` when it creates the docs repo. The
+machine-readable outputs are `query --json`, `advise --json`, `live --json`,
+`dns --json`, `doctor --json` and the files in `~/.orgami/<company>/map/`.
+The skill carries the same rules, with the flag for each prompt.
+
+### orgami's own model calls
+
+Every `claude` call orgami makes — the recap, decision mining, the daily
+digest, session notes, playbooks, note review, `doc --narrate` — reads text
+somebody else wrote: pull request bodies, commit messages, notes, transcripts.
+So each one runs as `claude -p` with `--tools ""` (no tools: it can only write
+text), `--setting-sources ""` (none of the user's, project's or local settings,
+so none of their hooks, permissions or plugins) and `--strict-mcp-config` (no
+MCP servers). Where the installed `claude` has them, `--safe-mode` and
+`--no-session-persistence` are added too, so orgami's own session hook does not
+fire inside the call and the call leaves no transcript in the user's history.
+`--bare` is not used, because it would break Claude subscription logins.
+
 ## Anything that speaks MCP
 
 Cursor, opencode, Windsurf, Zed, Codex, VS Code and Claude Desktop get the map as
 tools: `orgami_context`, `orgami_search`, `orgami_notes`, `orgami_note`,
-`orgami_query`, `orgami_decisions`, `orgami_conventions`.
+`orgami_query`, `orgami_decisions`, `orgami_conventions`, `orgami_playbook`,
+`orgami_symbol`, `orgami_live`, `orgami_dns`.
 
 ```bash
 orgami mcp --config cursor      # or opencode, codex, claude-code, windsurf, zed, vscode

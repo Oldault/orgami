@@ -11,8 +11,11 @@ Pick the line for your machine. `git` is assumed; everything else is one command
 **macOS** — [Homebrew](https://brew.sh):
 
 ```bash
-brew install gh jq fzf gum
+brew install bash gh jq fzf gum
 ```
+
+orgami needs bash 4.4 or newer and macOS ships 3.2, so the Homebrew `bash` has
+to come before `/bin` on `PATH` — open a new terminal after installing it.
 
 **Arch, Omarchy, Manjaro**:
 
@@ -65,11 +68,15 @@ prints the exact command for *your* package manager if one is missing.
 
 | Tool | Needed for |
 |---|---|
+| `bash` 4.4+ | everything — older versions are refused at start |
 | `gh`, `jq`, `git` | everything |
-| `fzf` | `orgami view`, the terminal map browser |
+| `fzf` 0.29+ | `orgami view`, the terminal map browser |
 | `gum` | `orgami init` and the menu — flags work without it |
-| `python3` | `orgami mcp`, the MCP server for other editors |
-| `claude` | `orgami report` only — the weekly recap and decision mining |
+| `python3` | optional: `orgami mcp` (the MCP server, including the one the Claude Code plugin starts) and `orgami depth` |
+| `claude` | optional: the recap and decision mining, `orgami daily`, session notes, playbooks, `doc --narrate`, `review --auto` |
+
+`orgami doctor` checks all of these, and the `gh` sign-in, and prints the fix
+for whatever is missing.
 
 ## 2. Sign in to GitHub
 
@@ -150,14 +157,28 @@ claude plugin marketplace remove orgami
 claude plugin marketplace add Oldault/orgami
 ```
 
-## 5. Point it at an organization
+## 5. Removing it
+
+```bash
+orgami uninstall --dry-run     # list what it would remove
+orgami uninstall               # remove it, after asking; --yes with no terminal
+orgami uninstall --purge       # also ~/.orgami and the clone in ~/.local/share/orgami
+```
+
+It removes what orgami installed — the PATH link, completions, the skill link,
+the systemd or launchd timers, its crontab line, its Cursor hook and MCP
+entries, git-hook lines, the Claude Code plugin and its marketplace — and never
+the docs repo or anything published. `--purge` leaves the clone if it has
+uncommitted changes.
+
+## 6. Point it at an organization
 
 ```bash
 orgami init     # map one yourself — pick the org, it does the rest
 orgami join     # or pick up one a colleague already mapped, no scan needed
 ```
 
-## 6. Optional, once per organization
+## 7. Optional, once per organization
 
 ```bash
 orgami schedule                # weekly, on systemd or launchd, cron line elsewhere
@@ -171,10 +192,18 @@ orgami mcp --config cursor     # or opencode, codex, windsurf, zed, vscode
   pacman, apt, dnf or winget — adding the GitHub CLI and Charm apt repositories
   when the distribution needs them
 - clones orgami to `~/.local/share/orgami` and links `orgami` into `~/.local/bin`
+- on macOS, installs a newer bash with Homebrew when the one on `PATH` is older
+  than 4.4, and says to open a new terminal
 - **Claude Code**, if present: adds the marketplace and installs the plugin, so
-  the skill, `/orgami:context`, `/orgami:note` and the session hook come with it
-- **Cursor**, if present: installs the `sessionStart` hook for every project and
-  registers the MCP server in `~/.cursor/mcp.json`
+  the skill, `/orgami:context`, `/orgami:note`, the session hooks and the
+  `orgami_*` MCP tools come with it; it then removes any
+  `~/.claude/skills/orgami` link an earlier install made, so the skill is not
+  loaded twice
+- **Cursor**, if present: asks first, then installs the `sessionStart` hook for
+  every project and registers the MCP server in `~/.cursor/mcp.json`. With no
+  terminal to ask on it leaves Cursor alone and prints the command to wire it
+  later; `--cursor` / `--no-cursor` (or `ORGAMI_CURSOR=1` / `0`) decide without
+  asking
 - installs the weekly timer units
 
 `--dry-run` prints every step without touching anything. `--no-deps` and
