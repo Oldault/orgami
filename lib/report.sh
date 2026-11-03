@@ -23,7 +23,7 @@ report_decisions() {
     printf '\n\nPULL_REQUESTS\n```json\n'
     cat "$digest"
     printf '\n```\n'
-  } | claude -p --model "$model" --output-format text 2>/dev/null || true)
+  } | model_call "$model" 2>/dev/null || true)
 
   if [[ $body == NONE* ]] || ! model_output_ok "$body" '^- '; then
     rm -f "$dest/draft/$week.md"
@@ -52,7 +52,6 @@ report_decisions() {
 cmd_report() {
   load_company
   need jq
-  need claude "the report narrative is written by Claude Code in headless mode"
 
   local week="" model=""
   while [[ $# -gt 0 ]]; do
@@ -98,21 +97,30 @@ cmd_report() {
                        | {path, note: (.bodyText // "" | .[0:200])}] | .[0:5]
       }]' "$src" >"$digest"
 
+  # Here and not at the top: --stats-only never calls the model, so it must
+  # work on a machine without claude.
+  need claude "the report narrative is written by Claude Code in headless mode"
   [[ -n $model ]] || model=$(cfg report_model claude-sonnet-5)
   local out="$DIR/reports/$week.md"
 
   log "writing $week recap over $count PRs with $model"
 
-  {
+  # Captured and checked before anything is written: a model that answers
+  # "API Error: ..." with exit 0 must not become the week's recap.
+  local recap
+  recap=$( {
     cat "$ROOT/prompts/recap.md"
     printf '\n\nSTATS\n```json\n'
     cat "$stats"
     printf '\n```\n\nPULL_REQUESTS\n```json\n'
     cat "$digest"
     printf '\n```\n'
-  } | claude -p --model "$model" --output-format text |
-    linkify_prs "$ORG" "$DIR/map/graph.json" >"$out.body" ||
-    die "claude failed — is 'claude' authenticated?"
+  } | model_call "$model" 2>/dev/null || true)
+  if ! model_output_ok "$recap"; then
+    rm -f "$digest"
+    die "the model call did not complete — no recap written. Check that claude is authenticated, then: orgami report --week $week"
+  fi
+  linkify_prs "$ORG" "$DIR/map/graph.json" <<<"$recap" >"$out.body"
 
   report_decisions "$week" "$digest" "$model"
   rm -f "$digest"
@@ -161,7 +169,9 @@ cmd_latest() {
     file="$dir/$week.md"
     [[ -f $file ]] || die "no recap for $week in $dir"
   else
-    file=$(find "$dir" -maxdepth 1 -name '*.md' 2>/dev/null | sort | tail -1)
+    # Only YYYY-Www.md: after a join the directory also holds README.md, which
+    # sorts after every week.
+    file=$(find "$dir" -maxdepth 1 -name '[0-9][0-9][0-9][0-9]-W[0-9][0-9].md' 2>/dev/null | sort | tail -1)
     [[ -n $file ]] || die "no recap yet — run: orgami pull && orgami report"
   fi
 

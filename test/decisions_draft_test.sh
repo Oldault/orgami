@@ -23,6 +23,21 @@ trap 'rm -rf "$fixture"' EXIT
 
 fail() { echo "decisions_draft: $*" >&2; exit 1; }
 
+# `orgami drafts` refuses to prompt without a terminal, so the interactive
+# review runs under a pty. Output and exit status come back like a plain call.
+with_tty() {
+  python3 -c '
+import os, pty, sys
+out = []
+def read(fd):
+    d = os.read(fd, 4096)
+    out.append(d)
+    return d
+status = pty.spawn(sys.argv[1:], read)
+sys.stdout.write(b"".join(out).decode(errors="replace"))
+sys.exit(os.waitstatus_to_exitcode(status))' "$@"
+}
+
 export ORGAMI_HOME="$fixture/home"
 export ORGAMI_COMPANY=acme
 home="$ORGAMI_HOME/acme"
@@ -94,7 +109,10 @@ grep -q 'older, kept decision' "$home/map/DECISIONS.md" ||
   fail "drafts --count should count the two decision bullets, got $(./bin/orgami drafts --count)"
 
 printf 'keep it\nthrow it away\n' >"$GUM_QUEUE"
-out=$(./bin/orgami drafts 2>&1) || fail "orgami drafts exited $?: $out"
+out=$(./bin/orgami drafts </dev/null 2>&1) && fail "orgami drafts should refuse to prompt with no terminal"
+grep -q 'no terminal' <<<"$out" || fail "the refusal should say there is no terminal, got: $out"
+[[ $(./bin/orgami drafts --count) == 2 ]] || fail "a refused review must leave the drafts alone"
+out=$(with_tty ./bin/orgami drafts 2>&1) || fail "orgami drafts exited $?: $out"
 grep -q '1 decision(s) kept, 1 discarded' <<<"$out" ||
   fail "the summary should count one kept and one dropped, got: $out"
 [[ -f $home/map/decisions/2026-W34.md ]] ||
@@ -114,7 +132,7 @@ grep -q 'Retries moved' "$home/map/decisions/2026-W34.md" ||
 
 run_report 2>/dev/null
 printf 'leave it for later\nkeep it\n' >"$GUM_QUEUE"
-./bin/orgami drafts >/dev/null 2>&1 || fail "second review exited $?"
+with_tty ./bin/orgami drafts >/dev/null 2>&1 || fail "second review exited $?"
 [[ -f $home/map/decisions/draft/2026-W34.md ]] ||
   fail "a skipped bullet should keep the draft alive"
 [[ $(grep -c '^- ' "$home/map/decisions/draft/2026-W34.md") == 1 ]] ||

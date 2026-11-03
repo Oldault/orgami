@@ -22,10 +22,22 @@ daily_cache() {
 
   # One REST search for the whole org. Commits are what a weekly recap built on
   # merges cannot see: a branch that has not opened a pull request yet.
+  # An empty result is `[]`; a failure is not, and used to look the same. A
+  # revoked token would otherwise write a cache saying nobody committed.
+  local err
+  err=$(mktemp)
   commits=$(gh search commits --owner "$ORG" --author-date "$date" --limit 100 \
-    --json repository,sha,commit,author 2>/dev/null || echo '[]')
+    --json repository,sha,commit,author 2>"$err") || {
+    local msg
+    msg=$(head -c 400 "$err")
+    rm -f "$err"
+    die "gh search commits failed for $ORG: ${msg:-no message} — check: gh auth status"
+  }
+  rm -f "$err"
   [[ -n ${commits// /} ]] || commits='[]'
 
+  local tmp
+  tmp=$(mktemp)
   jq -n --arg org "$ORG" --arg company "$COMPANY" --arg date "$date" \
     --argjson merged "$merged" --argjson opened "$opened" \
     --argjson open "$open" --argjson commits "$commits" \
@@ -38,7 +50,8 @@ daily_cache() {
         sha: (.sha | .[0:7]),
         at: .commit.author.date,
         pull_request: (.commit.message | capture("\\(#(?<n>[0-9]+)\\)") | .n // null)
-      }]}' >"$out"
+      }]}' >"$tmp"
+  mv "$tmp" "$out"
 
   echo "$out"
 }
@@ -85,6 +98,13 @@ cmd_daily() {
   [[ $date =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || die "--date wants YYYY-MM-DD, got '$date'"
 
   local src="$DIR/cache/daily/$date.json"
+  # Today is still happening, so its cache goes stale; earlier days are final.
+  # An hour is a compromise between a "today so far" that moves and the
+  # search-API calls (four per fetch) a digest run costs.
+  if [[ $refetch == 0 && -f $src && $date == "$(date -u +%Y-%m-%d)" ]] &&
+    (($(date +%s) - $(file_mtime "$src") > ${ORGAMI_DAILY_TTL:-3600})); then
+    refetch=1
+  fi
   if [[ $refetch == 1 || ! -f $src ]]; then
     src=$(daily_cache "$date")
   fi
@@ -116,7 +136,7 @@ cmd_daily() {
     printf '\nACTIVITY\n```json\n'
     daily_digest "$src"
     printf '\n```\n'
-  } | claude -p --model "$model" --output-format text 2>/dev/null || true)
+  } | model_call "$model" 2>/dev/null || true)
 
   model_output_ok "$body" '^## ' ||
     die "the model call did not complete — nothing written. Numbers are still there: orgami daily --date $date --stats-only"

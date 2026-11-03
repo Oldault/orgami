@@ -167,7 +167,7 @@ playbook_write() {
   written=$( {
     cat "$ROOT/prompts/playbook.md"
     printf '\n\nTHE EVIDENCE\n"""\n%s\n"""\n' "$evidence"
-  } | claude -p --model "$model" --output-format text 2>/dev/null || true)
+  } | model_call "$model" 2>/dev/null || true)
 
   model_output_ok "$written" '^## ' || {
     log "$repo/$topic: the model returned nothing usable — playbook not written"
@@ -349,7 +349,7 @@ cmd_playbook() {
     repos=("$repo")
   fi
 
-  for r in "${repos[@]}"; do
+  for r in ${repos[@]+"${repos[@]}"}; do
     [[ -n $r ]] || continue
     if [[ -n $topic ]]; then
       playbook_write "$r" "$topic" "$force" && built=$((built + 1))

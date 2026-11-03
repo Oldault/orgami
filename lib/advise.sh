@@ -329,7 +329,7 @@ advise_reject() {
     | if (.repos | length) == 1 then .repos[0] else "" end' "$a")
   [[ -n $repo ]] && args=(--repo "$repo")
 
-  cmd_note "${args[@]}" --tag advise-suppressed -- \
+  cmd_note ${args[@]+"${args[@]}"} --tag advise-suppressed -- \
     "$reason
 
 $(advise_mark "$id")"

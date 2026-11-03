@@ -391,4 +391,19 @@ page=$(incidents) || fail "the page failed with no recaps at all"
 empty=$(empty_sections <<<"$page")
 [[ -z $empty ]] || fail "the incidents page has an empty section: $(tr '\n' ' ' <<<"$empty")"
 
+# --- a recap whose file name is program text -----------------------------------
+#
+# Reports can arrive from the docs repo through `orgami join`, file names and
+# all. The week once went into a sed program, where `|;e` ran a command; now a
+# name that is not a week is not read, and a week is only ever data.
+cat >"$DIR/reports/2026-W01|;etouch\${IFS}RBPWN;#.md" <<'MD'
+## What got fixed
+
+- the api broke — acme/api#3
+MD
+seen=$(cd "$fixture" && runbook_seen_before api)
+[[ ! -e $fixture/RBPWN ]] || fail "a report's file name ran a shell command"
+grep -q 'RBPWN' <<<"$seen" && fail "a report not named like a week was read: $seen"
+rm -f "$DIR/reports/"*RBPWN*
+
 echo "runbook: quotes traceable, tags placed, absence stated, no empty headings, no model"

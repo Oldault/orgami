@@ -394,7 +394,8 @@ assert "and counts as resolved, since nobody rejected it" "0 1 0" \
 # its past — so the kind has three answers, all rejections: noisy, and its
 # proposal ranks last.
 for v in mailgun segment intercom; do
-  cat >"$DIR/notes/20260102-00000$((++i))-ada-$v-ghost-is-fine.md" <<NOTE
+  i=$((i + 1))
+  cat >"$DIR/notes/20260102-00000$i-ada-$v-ghost-is-fine.md" <<NOTE
 ---
 id: 20260102-00000$i-ada-$v-ghost-is-fine
 author: ada

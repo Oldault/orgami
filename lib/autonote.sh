@@ -20,8 +20,8 @@ autonote_digest() {
     sed -E 's/(sk|ghp|gho|ghs|ghu|xox[abps])-[A-Za-z0-9_-]{8,}/[redacted]/g;
             s/AKIA[0-9A-Z]{12,}/[redacted]/g;
             s/(Bearer|Authorization:)[[:space:]]+[A-Za-z0-9._-]{12,}/\1 [redacted]/g;
-            s/([A-Z0-9_]*(PASSWORD|SECRET|TOKEN|APIKEY|API_KEY|PRIVATE_KEY)[A-Z0-9_]*)[=:][[:space:]]*\S+/\1=[redacted]/g;
-            s|(mongodb\+srv\|postgres\|postgresql\|mysql\|redis)://[^[:space:]]+|\1://[redacted]|g' |
+            s/([A-Z0-9_]*(PASSWORD|SECRET|TOKEN|APIKEY|API_KEY|PRIVATE_KEY)[A-Z0-9_]*)[=:][[:space:]]*[^[:space:]]+/\1=[redacted]/g;
+            s#(mongodb\+srv|postgres|postgresql|mysql|redis)://[^[:space:]]+#\1://[redacted]#g' |
     tail -c 60000
 }
 
@@ -57,13 +57,23 @@ cmd_note_auto() {
   # A session held in a checkout belonging to somebody else's organization must
   # not leave a note in this one. `orgami note` refuses that outright; here,
   # where nobody asked for a note in the first place, it is a silent no.
-  local here_url here_org
+  # A positive match is required: a session with no remote (a scratch dir, a
+  # personal project) used to pass and was drafted into the default company.
+  # It now has to be a checkout of this organization, or sit under a workspace
+  # root the company configured.
+  local here_url here_org ok=0 w
   here_url=$(git -C "$where" remote get-url origin 2>/dev/null || true)
   if [[ -n $here_url ]]; then
     here_org=$(sed -E 's|.*[:/]([^/]+)/[^/]+$|\1|' <<<"$here_url")
     [[ $(printf '%s' "$here_org" | tr '[:upper:]' '[:lower:]') == \
-      $(printf '%s' "$ORG" | tr '[:upper:]' '[:lower:]') ]] || return 0
+      $(printf '%s' "$ORG" | tr '[:upper:]' '[:lower:]') ]] && ok=1
+  else
+    while IFS= read -r w; do
+      w=${w/#\~/$HOME}
+      [[ -n $w && ( $where == "$w" || $where == "$w"/* ) ]] && ok=1
+    done < <(jq -r '(.workspaces // [])[]' "$DIR/config.json" 2>/dev/null)
   fi
+  [[ $ok == 1 ]] || return 0
 
   autonote_worth_reading "$transcript" || return 0
   # 3, not 0: the sweep has to tell "there was nothing in it" from "not today",
@@ -81,7 +91,7 @@ cmd_note_auto() {
   out=$( {
     cat "$ROOT/prompts/autonote.md"
     printf '\n\nTHE SESSION\n"""\n%s\n"""\n' "$digest"
-  } | claude -p --model "$model" --output-format text 2>/dev/null || true)
+  } | model_call "$model" 2>/dev/null || true)
 
   [[ $out == NONE* ]] && return 0
   model_output_ok "$out" '^NOTE:' || return 0
@@ -204,8 +214,7 @@ cmd_note_sweep() {
 
   # Detached, so a session never waits on a model reading the last one.
   if [[ ${1:-} == --background || ${1:-} == --detach ]]; then
-    (setsid "$ORGAMI_BIN" note-sweep >/dev/null 2>&1 &) 2>/dev/null ||
-      ("$ORGAMI_BIN" note-sweep >/dev/null 2>&1 &)
+    detach /dev/null "$ORGAMI_BIN" note-sweep
     return 0
   fi
 
@@ -351,6 +360,7 @@ cmd_drafts() {
 
   if ! autonote_pending; then
     if decisions_pending; then
+      need_tty "see what is waiting with: orgami drafts --count"
       drafts_decisions
     else
       echo "nothing waiting"
@@ -358,6 +368,7 @@ cmd_drafts() {
     return 0
   fi
 
+  need_tty "see what is waiting with: orgami drafts --count"
   local f n=0 kept=0 dropped=0
   for f in "$DIR/notes/draft"/*.md; do
     [[ -f $f ]] || continue

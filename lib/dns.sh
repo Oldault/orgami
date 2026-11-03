@@ -228,7 +228,7 @@ dns_spf_facts() {
   local -a toks
   ev=$(dns_evidence TXT "$name" "$rec")
   read -ra toks <<<"$rec"
-  for tok in "${toks[@]}"; do
+  for tok in ${toks[@]+"${toks[@]}"}; do
     case $tok in
       include:*) target=${tok#include:} ;;
       redirect=*) target=${tok#redirect=} ;;
@@ -413,7 +413,7 @@ cmd_dns() {
   echo "public DNS for ${#keep[@]} domain(s), from $origin:" >&2
   printf '  %s\n' "${keep[@]}" >&2
   if [[ $yes == 0 ]]; then
-    [[ -t 0 ]] || die "nothing to confirm on — pass --yes"
+    need_tty "pass --yes to query without asking"
     local ans
     read -rp "query these? [y/N] " ans
     [[ $(printf '%s' "$ans" | tr '[:upper:]' '[:lower:]') == y* ]] || die "aborted"

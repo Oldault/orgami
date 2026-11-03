@@ -56,17 +56,31 @@ runbook_constraints() {
   } 2>/dev/null | sed 's/^- //' | sort -u | head -12
 }
 
+# The weekly reports, newest first. They can arrive from the docs repo through
+# `orgami join`, so only a name shaped like a week is read: every caller prints
+# the name, and the old `for f in $(find ...)` split one holding a space.
+runbook_report_files() {
+  local f
+  for f in "$DIR"/reports/*.md; do
+    [[ -f $f && ! -L $f ]] || continue
+    [[ ${f##*/} =~ ^[0-9]{4}-W[0-9]{2}\.md$ ]] || continue
+    printf '%s\n' "$f"
+  done | sort -r
+}
+
 # Everything the weekly recaps recorded as broken in this repo, verbatim and
 # newest first. They are already written as symptom, real cause, and the pull
 # request that fixed it — which is what a runbook entry is.
 runbook_seen_before() {
   local repo=$1 f week
-  for f in $(find "$DIR/reports" -maxdepth 1 -name '*.md' 2>/dev/null | sort -r); do
+  while IFS= read -r f; do
     week=$(basename "$f" .md)
+    # The week is a file name from the docs repo, so it is handed to awk as
+    # data: built into a sed program, a name holding `|;e` ran a command.
     sed -n '/^## What got fixed/,/^## [A-Z]/p;/^## Security/,/^## [A-Z]/p' "$f" 2>/dev/null |
       grep '^- ' | grep -- "/$repo#" |
-      sed "s|^- |- |; s|\$| <sub>$week</sub>|"
-  done | head -20
+      awk -v w="$week" '{ print $0 " <sub>" w "</sub>" }'
+  done < <(runbook_report_files) | head -20
 }
 
 runbook_render() {
@@ -542,7 +556,7 @@ runbook_incidents_page() {
     fi
 
     local recorded_weeks=""
-    for f in $(find "$DIR/reports" -maxdepth 1 -name '*.md' 2>/dev/null | sort -r); do
+    while IFS= read -r f; do
       week=$(basename "$f" .md)
       local fixes
       fixes=$(sed -n '/^## What got fixed/,/^## [A-Z]/p' "$f" | grep '^- ' || true)
@@ -563,7 +577,7 @@ runbook_incidents_page() {
         echo "$sec"
         echo
       fi
-    done
+    done < <(runbook_report_files)
 
     echo "## What the team has recorded"
     echo
