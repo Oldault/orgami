@@ -3,6 +3,23 @@
 # established something durable. The hook itself must return in milliseconds,
 # so the reading happens detached — nothing here ever delays a session.
 
+# Before anything else, and in bash 3.2 syntax: plugin.json and Cursor's
+# hooks.json run this as `bash <file>`, which on macOS can be /bin/bash 3.2, and
+# orgami needs 4.4. Find a newer bash and run under it, with its directory first
+# on PATH so the `orgami` this calls (`#!/usr/bin/env bash`) gets it too. With
+# none, say nothing: an error here would land in the agent's session.
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ] ||
+  { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -lt 4 ]; }; then
+  [ -z "${ORGAMI_HOOK_REEXEC:-}" ] || exit 0
+  for b in /opt/homebrew/bin/bash /usr/local/bin/bash /home/linuxbrew/.linuxbrew/bin/bash \
+    "$(command -v bash 2>/dev/null)"; do
+    [ -x "$b" ] || continue
+    "$b" -c '[ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 4 ]; }' 2>/dev/null || continue
+    PATH="$(dirname "$b"):$PATH" ORGAMI_HOOK_REEXEC=1 exec "$b" "$0" "$@"
+  done
+  exit 0
+fi
+
 set -uo pipefail
 
 input=$(cat 2>/dev/null || true)

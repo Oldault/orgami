@@ -12,7 +12,24 @@ import subprocess
 import sys
 import time
 
-ORGAMI = os.environ.get("ORGAMI_BIN") or "orgami"
+# The CLI to shell out to: the one named for us, else the one in this same
+# clone (the plugin launches this file directly, with no orgami on PATH
+# necessarily), else whatever is on PATH.
+_SIBLING = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "bin", "orgami")
+ORGAMI = os.environ.get("ORGAMI_BIN") or (
+    os.path.normpath(_SIBLING) if os.access(_SIBLING, os.X_OK) else "orgami"
+)
+
+NO_COMPANY = (
+    "No orgami company is configured on this machine, so there is no map to read. "
+    "Ask the user to run `orgami init <name> --org <github-org>` to map an "
+    "organization, or `orgami join <name> --repo <docs-repo-url>` to pick up one a "
+    "colleague already mapped. `orgami doctor --json` lists anything else missing."
+)
+
+
+class ToolError(Exception):
+    """A tool that ran and failed: reported to the client as isError, never fatal."""
 VERSION = "1.1.0"
 
 TOOLS = [
@@ -214,13 +231,21 @@ def run(args, stdin=None):
             text=True,
             timeout=120,
             input=stdin,
+            # Never let the CLI wait on a prompt: the server's stdin is the
+            # JSON-RPC stream, and an interactive step dies with its flag instead.
+            stdin=None if stdin is not None else subprocess.DEVNULL,
         )
-    except FileNotFoundError:
-        return "orgami is not on PATH. Install it: https://github.com/Oldault/orgami"
+    except OSError:
+        raise ToolError(
+            f"Could not run {ORGAMI}. Install orgami: "
+            "https://github.com/Oldault/orgami, then run `orgami doctor`."
+        )
     except subprocess.TimeoutExpired:
-        return "orgami timed out."
+        raise ToolError("orgami timed out after 120 seconds.")
     out = (p.stdout or "").strip()
     err = (p.stderr or "").strip()
+    if p.returncode != 0:
+        raise ToolError(err or out or f"orgami exited {p.returncode}")
     if out:
         return out
     return err or "(no output)"
@@ -235,27 +260,28 @@ def company_dir():
                 company = json.load(fh).get("default")
         except Exception:
             return None
-    if not company:
+    if not company or not isinstance(company, str):
         return None
-    return os.path.join(home, company)
+    d = os.path.join(home, company)
+    return d if os.path.isfile(os.path.join(d, "config.json")) else None
 
 
 def read_file(*parts):
     d = company_dir()
     if not d:
-        return "No orgami company configured. Run `orgami init` or `orgami join`."
+        raise ToolError(NO_COMPANY)
     path = os.path.join(d, *parts)
     try:
         with open(path) as fh:
             return fh.read()
     except OSError:
-        return f"{path} does not exist yet."
+        raise ToolError(f"{path} does not exist yet — `orgami scan` and `orgami doc` write it.")
 
 
 def search(query):
     d = company_dir()
     if not d:
-        return "No orgami company configured. Run `orgami init` or `orgami join`."
+        raise ToolError(NO_COMPANY)
     hits = []
     for sub in ("map", "notes", "reports"):
         root = os.path.join(d, sub)
@@ -280,7 +306,7 @@ def search(query):
 def dns(vendor=None):
     d = company_dir()
     if not d:
-        return "No orgami company configured. Run `orgami init` or `orgami join`."
+        raise ToolError(NO_COMPANY)
     path = os.path.join(d, "map", "dns.json")
     try:
         with open(path) as fh:
@@ -345,7 +371,7 @@ def dns(vendor=None):
 def live(repo=None):
     d = company_dir()
     if not d:
-        return "No orgami company configured. Run `orgami init` or `orgami join`."
+        raise ToolError(NO_COMPANY)
     path = os.path.join(d, "map", "live.json")
     try:
         with open(path) as fh:
@@ -402,6 +428,12 @@ def live(repo=None):
 
 
 def call(name, args):
+    if name not in {t["name"] for t in TOOLS}:
+        raise ToolError(f"Unknown tool: {name}")
+    # Every tool reads one company's map; without one, say how to get one
+    # rather than letting each tool fail in its own words.
+    if company_dir() is None:
+        raise ToolError(NO_COMPANY)
     if name == "orgami_context":
         repo = args.get("repo")
         return run(["context", repo] if repo else ["context"])
@@ -419,7 +451,7 @@ def call(name, args):
     if name == "orgami_note":
         text = (args.get("text") or "").strip()
         if not text:
-            return "Refused: an empty note helps nobody."
+            raise ToolError("Refused: an empty note helps nobody.")
         argv = ["note"]
         if args.get("repo"):
             argv += ["--repo", args["repo"]]
@@ -446,13 +478,13 @@ def call(name, args):
     if name == "orgami_symbol":
         want = (args.get("name") or "").strip()
         if not want:
-            return "Refused: name is required."
+            raise ToolError("Refused: name is required.")
         return run(["depth", "--symbol", want])
     if name == "orgami_conventions":
         return read_file("map", "CONVENTIONS.md")
     if name == "orgami_search":
         return search(args.get("query", ""))
-    return f"Unknown tool: {name}"
+    raise ToolError(f"Unknown tool: {name}")
 
 
 def reply(msg_id, result):
@@ -475,6 +507,10 @@ def main():
         try:
             msg = json.loads(line)
         except json.JSONDecodeError:
+            error(None, -32700, "Parse error")
+            continue
+        if not isinstance(msg, dict):
+            error(None, -32600, "Invalid Request: batches are not supported")
             continue
 
         method = msg.get("method")
@@ -484,7 +520,7 @@ def main():
             reply(
                 msg_id,
                 {
-                    "protocolVersion": msg.get("params", {}).get("protocolVersion", "2025-06-18"),
+                    "protocolVersion": (msg.get("params") or {}).get("protocolVersion", "2025-06-18"),
                     "capabilities": {"tools": {}},
                     "serverInfo": {"name": "orgami", "version": VERSION},
                 },
@@ -495,14 +531,27 @@ def main():
             reply(msg_id, {"tools": TOOLS})
         elif method == "tools/call":
             params = msg.get("params") or {}
+            if not isinstance(params, dict):
+                params = {}
             tool = params.get("name", "")
-            text = call(tool, params.get("arguments") or {})
+            args = params.get("arguments") or {}
+            if not isinstance(args, dict):
+                args = {}
+            failed = False
+            try:
+                text = call(tool, args)
+            except ToolError as exc:
+                text, failed = str(exc), True
+            except Exception as exc:  # one bad call must not take the server down
+                text, failed = f"orgami tool {tool!r} failed: {exc}", True
             result = {"content": [{"type": "text", "text": text}]}
+            if failed:
+                result["isError"] = True
             # A tool whose CLI side prints JSON also hands the client the parsed
             # object, so a client that can read structured results does not have
             # to parse the text back. A `die` on the other side arrives as its
             # message rather than JSON, and then the text is all there is.
-            if tool in JSON_TOOLS:
+            if tool in JSON_TOOLS and not failed:
                 try:
                     result["structuredContent"] = json.loads(text)
                 except ValueError:
@@ -510,7 +559,7 @@ def main():
             reply(msg_id, result)
         elif method == "ping":
             reply(msg_id, {})
-        elif msg_id is not None:
+        elif msg_id is not None and method is not None:
             error(msg_id, -32601, f"Method not found: {method}")
 
 

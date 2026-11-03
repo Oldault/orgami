@@ -7,6 +7,14 @@
 #   --dry-run      print what would happen, change nothing
 #   --no-deps      skip package installation
 #   --no-editors   skip the Claude Code and Cursor wiring
+#   --cursor       wire Cursor (its user hooks.json and mcp.json) without asking
+#   --no-cursor    leave Cursor alone
+#
+# Cursor is asked about when there is a terminal, and left alone when there is
+# not. ORGAMI_CURSOR=1 or 0 does the same as the two flags.
+#
+# Written for bash 3.2 too: on macOS `curl | bash` is /bin/bash 3.2, and this
+# script is what installs a newer one.
 
 set -euo pipefail
 
@@ -15,14 +23,17 @@ SRC=${ORGAMI_SRC:-$HOME/.local/share/orgami}
 DRY=0
 DEPS=1
 EDITORS=1
+CURSOR=${ORGAMI_CURSOR:-ask}
 
 for arg in "$@"; do
   case $arg in
     --dry-run) DRY=1 ;;
     --no-deps) DEPS=0 ;;
     --no-editors) EDITORS=0 ;;
+    --cursor) CURSOR=1 ;;
+    --no-cursor) CURSOR=0 ;;
     -h | --help)
-      sed -n '2,12p' "$0" 2>/dev/null || true
+      sed -n '2,20p' "$0" 2>/dev/null || true
       exit 0
       ;;
   esac
@@ -94,6 +105,10 @@ pkg_name() {
   esac
 }
 
+# A terminal to ask on. Under `curl | bash` stdin is the script itself, so the
+# question goes to /dev/tty, and only when stdout is a terminal too.
+have_tty() { [[ -t 1 ]] && { : </dev/tty; } 2>/dev/null; }
+
 install_missing() {
   local pkgs=()
   local t
@@ -145,13 +160,16 @@ install_missing() {
       fi
       run $SUDO apt-get update -qq
       for p in gh gum; do
-        printf '%s\n' "${pkgs[@]}" | grep -qx "$p" && run $SUDO apt-get install -y "$p"
+        if printf '%s\n' "${pkgs[@]}" | grep -qx "$p"; then run $SUDO apt-get install -y "$p"; fi
       done
       ;;
     *)
       warn "no package manager found — install by hand: ${pkgs[*]}"
       ;;
   esac
+  # Not the status of the last `&&` above: under set -e a false test there
+  # would end the whole install with no message.
+  return 0
 }
 
 if [[ ${#missing[@]} -gt 0 && -n ${missing[0]} ]]; then
@@ -163,6 +181,22 @@ if [[ ${#missing[@]} -gt 0 && -n ${missing[0]} ]]; then
   fi
 else
   step "Dependencies already present"
+fi
+
+# orgami and its hooks need bash 4.4. macOS ships 3.2 at /bin/bash and keeps it
+# first on PATH until Homebrew's directory comes before it.
+bash_ok() {
+  "$1" -c '[ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 4 ]; }' 2>/dev/null
+}
+if [[ $PLATFORM == macos ]] && ! bash_ok "$(command -v bash)"; then
+  step "orgami needs bash 4.4 or newer; $(command -v bash) is $(bash -c 'echo $BASH_VERSION')"
+  if [[ $MGR == brew && $DEPS == 1 ]]; then
+    run brew install bash
+    hash -r
+    warn "open a new terminal afterwards, so the new bash comes first on PATH"
+  else
+    warn "install it, then open a new terminal: brew install bash (Homebrew: https://brew.sh)"
+  fi
 fi
 
 command -v claude >/dev/null ||
@@ -186,11 +220,32 @@ ORGAMI="$SRC/bin/orgami"
 if [[ $EDITORS == 1 ]]; then
   if command -v claude >/dev/null; then
     step "Wiring Claude Code"
-    run claude plugin marketplace add Oldault/orgami
-    run claude plugin install orgami@orgami
+    # Both refuse when it is already there, which on a re-run is the normal case.
+    run claude plugin marketplace add Oldault/orgami || dim "the orgami marketplace is already added"
+    run claude plugin install orgami@orgami || warn "could not install the plugin — run: claude plugin install orgami@orgami"
+    # The plugin supplies the skill; the link install.sh made would load it twice.
+    skill="$HOME/.claude/skills/orgami/SKILL.md"
+    if [[ $DRY == 0 && -L $skill && $(readlink "$skill") == "$SRC/skills/orgami/SKILL.md" ]]; then
+      rm -f "$skill"
+      rmdir "$(dirname "$skill")" 2>/dev/null || true
+    fi
   fi
 
   if [[ -d $HOME/.cursor ]] || command -v cursor >/dev/null; then
+    # Cursor's files are the person's own editor config, so this asks first.
+    if [[ $CURSOR == ask ]]; then
+      if have_tty; then
+        printf 'Wire Cursor too (a sessionStart hook and the orgami MCP server in ~/.cursor)? [Y/n] ' >/dev/tty
+        read -r answer </dev/tty || answer=n
+        case $answer in [nN]*) CURSOR=0 ;; *) CURSOR=1 ;; esac
+      else
+        CURSOR=0
+        dim "Cursor found, left alone with no terminal to ask on. To wire it: bash \"$SRC/bootstrap.sh\" --no-deps --cursor"
+      fi
+    fi
+  fi
+
+  if [[ $CURSOR == 1 ]]; then
     step "Wiring Cursor"
     if [[ $DRY == 0 ]]; then
       "$ORGAMI" agents --cursor-hook --user || warn "could not install the Cursor hook"

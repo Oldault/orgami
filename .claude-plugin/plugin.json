@@ -32,5 +32,17 @@
         ]
       }
     ]
+  },
+  "icon": "./logo.png",
+  "mcpServers": {
+    "orgami": {
+      "command": "python3",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/lib/mcp.py"
+      ],
+      "env": {
+        "ORGAMI_BIN": "${CLAUDE_PLUGIN_ROOT}/bin/orgami"
+      }
+    }
   }
 }

@@ -39,11 +39,16 @@ check jq jq jq
 check git git git
 check fzf fzf fzf
 check gum gum gum
-check python3 python python3
 case $MGR in
   apt | dnf) check gh gh "gh   # https://github.com/cli/cli/blob/trunk/docs/install_linux.md" ;;
   *) check gh gh github-cli ;;
 esac
+
+# python3 runs only `orgami mcp` and `orgami depth`; the rest of orgami is bash.
+if ! command -v python3 >/dev/null; then
+  echo "missing: python3 — $(pkg_hint "$MGR" python python3)" >&2
+  echo "         (only 'orgami mcp' and 'orgami depth' need it)" >&2
+fi
 
 if ! command -v claude >/dev/null; then
   echo "missing: claude — curl -fsSL https://claude.ai/install.sh | bash" >&2
@@ -84,9 +89,22 @@ for d in "${ZSH_COMP_DIRS[@]}"; do
 done
 
 # Installed as a Claude Code plugin? Then the plugin already supplies the skill,
-# the slash commands and the session hook — linking it again would duplicate it.
+# the slash commands and the session hook — linking it again would load the
+# skill twice in every session. That holds whichever clone this is, so a link
+# an earlier run made is taken back once the plugin is there.
+plugin_installed() {
+  command -v jq >/dev/null &&
+    jq -e '(.plugins["orgami@orgami"] // []) | length > 0' \
+      "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/installed_plugins.json" >/dev/null 2>&1
+}
 if [[ $REPO == *"/.claude/plugins/"* ]]; then
   echo "running inside a Claude Code plugin — skill and hooks come from the plugin"
+elif plugin_installed; then
+  if [[ -L $SKILL_DIR/SKILL.md && $(readlink "$SKILL_DIR/SKILL.md") == "$REPO/skills/orgami/SKILL.md" ]]; then
+    rm -f "$SKILL_DIR/SKILL.md"
+    rmdir "$SKILL_DIR" 2>/dev/null || true
+    echo "removed $SKILL_DIR/SKILL.md — the Claude Code plugin supplies the skill"
+  fi
 else
   mkdir -p "$SKILL_DIR"
   ln -sf "$REPO/skills/orgami/SKILL.md" "$SKILL_DIR/SKILL.md"

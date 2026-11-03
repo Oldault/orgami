@@ -28,7 +28,8 @@ Steps:
 3. Never record secrets, credentials, anything already obvious in the code, or
    anything specific to this one session.
 4. Run it from inside the checkout so it attaches to the right repo, or pass
-   `--repo`:
+   `--repo`. Always pass the text as an argument: with no text `orgami note`
+   asks for it, and with no terminal it stops and says so instead.
 
    ```bash
    orgami note "..." --tag gotcha
@@ -44,4 +45,6 @@ Steps:
    Two instances under one topic write that job's playbook on their own.
 5. Show the user the file it wrote, and the playbook if one was written or
    rewritten. Mention that `orgami sync` shares it with the team, and only run
-   that if they ask.
+   that if they ask — it pushes to the docs repository under their name.
+6. If `orgami` fails — not found, no company, gh not signed in — run
+   `orgami doctor --json` and tell the user the `fix` of each failing check.

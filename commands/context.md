@@ -10,6 +10,10 @@ run and test it, what it talks to and what talks to it, endpoints, environment,
 deployment, which repos it usually changes with, recent merged pull requests and
 team notes. Anywhere else it prints the organization overview.
 
+If it fails — `orgami` not found, no company configured, gh not signed in —
+run `orgami doctor --json` and tell the user the `fix` of each failing check
+instead of guessing at the cause.
+
 Then answer whatever the user asked, citing the evidence line for any claim
 taken from the map. If the map's date is more than a week old, say so rather
 than presenting it as current.

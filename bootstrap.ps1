@@ -7,11 +7,33 @@
 # then hands over to bootstrap.sh running inside that bash.
 #
 # Prefer WSL if you have it — this script uses it when it is already installed.
+#
+# Cursor (its user hooks.json and mcp.json) is asked about when there is a
+# console, and left alone when there is not. `irm | iex` takes no arguments, so
+# the flags of bootstrap.sh are set through the environment instead:
+#   $env:ORGAMI_CURSOR = '1'   wire Cursor without asking (--cursor)
+#   $env:ORGAMI_CURSOR = '0'   leave Cursor alone (--no-cursor)
 
 $ErrorActionPreference = 'Stop'
 
 function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Warn($msg) { Write-Host $msg -ForegroundColor Yellow }
+
+# The same decision bootstrap.sh makes, made here: under `bash -lc "curl | bash"`
+# started from PowerShell, bash has no terminal of its own to ask on.
+function CursorFlag {
+  if ($env:ORGAMI_CURSOR -eq '1') { return '--cursor' }
+  if ($env:ORGAMI_CURSOR -eq '0') { return '--no-cursor' }
+  $found = (Test-Path "$env:USERPROFILE\.cursor") -or (Get-Command cursor -ErrorAction SilentlyContinue)
+  if (-not $found) { return '--no-cursor' }
+  if ([Environment]::UserInteractive -and -not [Console]::IsInputRedirected) {
+    $answer = Read-Host "Wire Cursor too (a sessionStart hook and the orgami MCP server in ~/.cursor)? [Y/n]"
+    if ($answer -match '^[nN]') { return '--no-cursor' }
+    return '--cursor'
+  }
+  Write-Host "Cursor found, left alone with no console to ask on. To wire it, run this again with: `$env:ORGAMI_CURSOR = '1'"
+  return '--no-cursor'
+}
 
 Step "Checking for WSL"
 $wsl = $null
@@ -22,7 +44,8 @@ try {
 
 if ($wsl) {
   Write-Host "WSL found — installing orgami inside it, which is the better home for it."
-  wsl.exe -e bash -lc "curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.sh | bash"
+  $cursor = CursorFlag
+  wsl.exe -e bash -lc "curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.sh | bash -s -- $cursor"
   Write-Host "`nDone. Open your WSL shell and run: orgami init" -ForegroundColor Green
   Write-Host "For Windows-native Cursor or Claude Code, point hook commands at: wsl.exe bash -lc `"orgami ...`""
   exit 0
@@ -68,7 +91,8 @@ if (-not $bash) {
 Write-Host "  $bash"
 
 Step "Installing orgami"
-& $bash -lc "curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.sh | bash"
+$cursor = CursorFlag
+& $bash -lc "curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.sh | bash -s -- $cursor"
 
 Write-Host "`nDone." -ForegroundColor Green
 Write-Host @"

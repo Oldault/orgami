@@ -32,6 +32,49 @@ and test it, what it talks to and what talks to it, the endpoints it serves,
 the environment it reads, where it deploys, which repos it usually changes with,
 its recent merged pull requests, and links to any `AGENTS.md` it already has.
 
+## Running orgami as an agent
+
+Your Bash tool has no terminal, and orgami is built for that: every command
+works from flags alone, and a step that would ask a question dies at once with
+the flag that skips it, rather than waiting for an answer nobody can type. Read
+that message and rerun with the flag; do not try to answer a prompt.
+
+| Instead of the prompt | Pass |
+|---|---|
+| `orgami note` asking for the text | the text: `orgami note --repo <repo> --tag gotcha "..."` |
+| the setup wizard | `orgami init <name> --org <github-org> [--docs-repo <url>]` |
+| `orgami join` asking which org | `orgami join <name> --repo <docs-repo-url>` |
+| `orgami dns` asking which domains | `--domain <d>` and `--yes`, only when the user asked for the reading |
+| `orgami publish` confirming | `--dry-run` to look; `--yes` only when the user asked to publish |
+| `orgami view`, the menu | `orgami query <name> --json`, `orgami card <repo>` |
+| `orgami drafts` (one question per draft) | `orgami drafts --count`, then tell the user to run `orgami drafts` in a terminal |
+
+**When anything fails** — a command not found, a die about gh, an empty map, a
+hook that injected nothing — run `orgami doctor --json` before guessing. It
+lists every check (`name`, `ok`, `blocking`, `detail`, `fix`), exits 1 when
+something blocks, reads nothing but local files and `gh auth status`, and
+writes nothing. Report the `fix` of each failing check to the user; most of
+them install something or sign in, which is theirs to run.
+
+Read-only and safe to run whenever it helps: `context`, `card`, `query`,
+`notes`, `playbook(s)`, `runbook`, `latest`, `list`, `doctor`, `drafts --count`,
+`depth --symbol`, `update --check`, and every `--dry-run`.
+
+These write somewhere other people see, so run them **only when the user asks
+for that in the same turn**: `publish`, `sync` (all but `sync --pull`),
+`note --push`, `autosync`, `weekly`, `review --auto` (comments on pull
+requests), `review --merge`, `review --install-check`, and the setup wizard or
+`init` when it creates the docs repository. `orgami uninstall` removes orgami
+from the machine — only on request, and `--dry-run` first.
+
+Machine-readable output, for when you would otherwise parse prose:
+`orgami query <name> --json`, `orgami advise --json`, `orgami live --json`,
+`orgami dns --json`, `orgami doctor --json`, and the files under
+`~/.orgami/<c>/map/` (`graph.json`, `repos.json`, `live.json`, `dns.json`).
+With the plugin, the same map is also served as MCP tools (`orgami_context`,
+`orgami_query`, `orgami_search`, `orgami_notes`, …); with no company
+configured they answer with an error saying how to set one up.
+
 ## When you need more
 
 | Question | Where |
