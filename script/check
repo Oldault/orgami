@@ -155,7 +155,7 @@ coupling() {
 # against real git repositories in a temp directory — no network, no remote.
 update() {
   ./test/update_test.sh >/dev/null
-  echo "update: refuses dirty, diverged, untracked and the plugin clone"
+  echo "update: refuses dirty, diverged, ahead, untracked and the plugin clone; auto-update off holds"
 }
 
 # `orgami publish` holds the only `git push` in the tool, and the weekly timer
@@ -164,7 +164,7 @@ update() {
 # nobody asked for — no network, no repository, no push.
 publish() {
   ./test/publish_test.sh >/dev/null
-  echo "publish: refuses without a docs repo, on a dry run, on a declined prompt and on an unknown flag"
+  echo "publish: refuses without a docs repo, on a dry run, on a declined prompt, with no terminal and on an unknown flag"
 }
 
 # `agents_splice` rewrites a file in somebody else's repository, unattended,
@@ -371,6 +371,145 @@ completions() {
   echo "completions: commands, companies and repos offered from what is on disk"
 }
 
+# The helpers in lib/common.sh are what every command leans on to stay portable
+# and safe: detach without setsid, a file's mtime on GNU and BSD stat, a
+# substitution that takes a hostile value literally, a GitHub name check, the
+# clone URL gh's own protocol setting asks for, a prompt that refuses without a
+# terminal, and the one place the model is called. Stub gh and claude.
+helpers() {
+  ./test/common_helpers_test.sh </dev/null >/dev/null
+  echo "helpers: detach, file_mtime, subst_file, valid_gh_name, gh_clone_url, need_tty, model_call"
+}
+
+# `review --auto --merge` merges into the docs repo with nobody watching, so
+# what is pinned is everything it must refuse: a fork, a moved head, a file
+# that is not a note, a verdict id that escapes the notes directory. Stub gh,
+# git and claude — no network, no push.
+review_auto() {
+  ./test/notes_review_auto_test.sh </dev/null >/dev/null
+  echo "review-auto: forks, moved heads, non-note files and stray verdict ids never merge"
+}
+
+# autosync runs from the session hook, and pushing is opt-in. Against a local
+# bare docs repo: off, it only pulls; on, it pushes the local note.
+autosync() {
+  ./test/notes_autosync_test.sh </dev/null >/dev/null
+  echo "autosync: off only pulls, on pushes"
+}
+
+# `orgami join` reads settings.json out of somebody else's repository, so it
+# may only take the review policy from it — never the org, the docs repo, or a
+# switch that makes the tool push. Against a local git docs repo.
+join_check() {
+  ./test/notes_join_test.sh </dev/null >/dev/null
+  echo "join: settings.json carries only the review policy, the org is checked, links are not followed"
+}
+
+# The wrong-org guard in `orgami note` stops a repo being inferred from another
+# organization's checkout; its message says to pass --repo, so --repo passes.
+note_org() {
+  ./test/note_wrong_org_test.sh </dev/null >/dev/null
+  echo "note: another org's checkout is refused unless --repo names the repo"
+}
+
+# `review --install-check` pushes a workflow and edits branch protection on the
+# docs repo, so it asks unless --yes, and adds to protection rather than
+# replacing it. Against a local bare repo and a stub gh.
+install_check() {
+  ./test/notes_install_check_test.sh </dev/null >/dev/null
+  echo "install-check: asks unless --yes, adds to existing protection, pins orgami"
+}
+
+# A scan rebuilds the map from forty clones, and one of them failing must not
+# take the others' edges with it. Stub gh and local origin repos: --only
+# merges, a failed clone keeps its entry, an escaping symlink is removed, and
+# TERM mid-clone leaves no process behind.
+scan_merge() {
+  ./test/scan_merge_test.sh </dev/null >/dev/null
+  echo "scan: --only merges, a failed clone keeps its entry, escaping links removed, TERM cleans up"
+}
+
+# A clone is somebody else's tree, and a symlink in it can point anywhere on
+# this machine. Fixture clones with links that escape: nothing outside the
+# checkout is ever quoted into the map.
+doc_safety() {
+  ./test/doc_safety_test.sh </dev/null >/dev/null
+  echo "doc-safety: escaping symlinks never quoted, the company name taken literally"
+}
+
+# The pull request cache is what every weekly figure is computed from, so a
+# failed search must leave the previous week rather than an empty one. Stub gh.
+pull_cache() {
+  ./test/pull_cache_test.sh </dev/null >/dev/null
+  echo "pull: every page cached, a failed search keeps the previous cache"
+}
+
+# The weekly run is unattended, so one failed step must be named and must not
+# stop the rest, and a quiet week is not a failure. Stub steps.
+weekly() {
+  ./test/weekly_test.sh </dev/null >/dev/null
+  echo "weekly: carries on past a failed step, names it, a quiet week is no recap"
+}
+
+# A timer runs with the init system's PATH, which has no ~/.local/bin — where
+# orgami and claude both live. Every unit, plist and cron line has to set it.
+schedule_path() {
+  ./test/schedule_path_test.sh </dev/null >/dev/null
+  echo "schedule-path: every timer form sets a PATH with ~/.local/bin"
+}
+
+# An error reply from the model is still text on stdout with exit 0, and must
+# not be written as the recap. Stub claude and gh.
+report_hardening() {
+  ./test/report_hardening_test.sh </dev/null >/dev/null
+  echo "report: stats-only without claude, error replies refused, daily refetches a stale day"
+}
+
+# An agent or a script runs init with no terminal. With flags it must write the
+# config without a prompt, bare it must die naming the flags, and every GitHub
+# failure must say which one it is. Fake gh and gum, no network.
+init_headless() {
+  ./test/init_headless_test.sh </dev/null >/dev/null
+  echo "init: flags without a prompt, bare dies naming them, each gh failure told apart"
+}
+
+# fzf has changed its options across versions, and an option an old fzf does
+# not know is a view that never opens. A fake fzf --version pins what each one
+# is handed.
+fzf_compat() {
+  ./test/tui_fzf_compat_test.sh </dev/null >/dev/null
+  echo "fzf: each version handed only options it knows, below the floor refused"
+}
+
+# graph.json is built from names and descriptions anybody with a repository
+# can write. Rendered from a hostile one, nothing may survive as markup or a
+# live URL.
+page_hostile() {
+  ./test/page_hostile_test.sh </dev/null >/dev/null
+  echo "page-hostile: no injected markup or javascript: URL survives in either page"
+}
+
+# `orgami doctor --json` is what an agent reads to find out what is missing,
+# and the session hooks run in every session, mapped or not. Stub gh, temp HOME.
+doctor() {
+  ./test/doctor_test.sh </dev/null >/dev/null
+  echo "doctor: JSON pinned, exit 1 only on a blocker; hooks silent or one line"
+}
+
+# uninstall edits files other tools own — crontab, Cursor's hooks.json and
+# mcp.json — so what it must keep matters as much as what it removes. Temp HOME
+# and stub systemctl, claude, crontab and gh.
+uninstall() {
+  ./test/uninstall_test.sh </dev/null >/dev/null
+  echo "uninstall: everything installed removed, every shared file keeps its other entries"
+}
+
+# The MCP server is how any client other than Claude Code reads the map. Prints
+# its own line, and skips itself where python3 is missing.
+mcp() {
+  ./test/mcp_server_test.sh </dev/null
+}
+
 # The check registry. One line per check: the flag that runs it on its own, and
 # the function behind it. Bare `script/check` walks this list in order, so a new
 # check is one self-contained line here plus its function above — nothing else
@@ -409,6 +548,24 @@ CHECKS=(
   --views-test:views_test
   --doc:doc
   --completions:completions
+  --helpers:helpers
+  --review-auto:review_auto
+  --autosync:autosync
+  --join:join_check
+  --note-org:note_org
+  --install-check:install_check
+  --scan:scan_merge
+  --doc-safety:doc_safety
+  --pull:pull_cache
+  --weekly:weekly
+  --schedule-path:schedule_path
+  --report:report_hardening
+  --init:init_headless
+  --fzf:fzf_compat
+  --page-hostile:page_hostile
+  --doctor:doctor
+  --uninstall:uninstall
+  --mcp:mcp
 )
 
 # Generated from the registry, four flags to a line, so the usage block cannot
