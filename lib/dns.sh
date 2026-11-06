@@ -61,7 +61,15 @@ DNS_SUBDOMAINS=(www app mail status help support docs blog careers pay billing)
 # `vercel.app` describes Vercel's zone and says nothing at all about this org,
 # and asking looks like diligence while producing noise — so an apex that lands
 # here is dropped and reported as dropped.
-DNS_PROVIDER_DOMAINS='^(vercel\.app|vercel-dns\.com|fly\.dev|fly\.io|herokuapp\.com|herokudns\.com|netlify\.app|netlify\.com|github\.io|githubusercontent\.com|amazonaws\.com|elasticbeanstalk\.com|cloudfront\.net|windows\.net|azurewebsites\.net|azure-dns\.com|pages\.dev|workers\.dev|onrender\.com|render\.com|railway\.app|ondigitalocean\.app|digitaloceanspaces\.com|run\.app|appspot\.com|firebaseapp\.com|firebaseio\.com|web\.app|supabase\.co|neon\.tech|planetscale\.com|psdb\.cloud|upstash\.io|now\.sh|surge\.sh|gitbook\.io|readthedocs\.io|zendesk\.com|statuspage\.io|myshopify\.com|wixsite\.com|squarespace\.com|webflow\.io|ngrok\.io|ngrok\.app|trycloudflare\.com|cloudflarestorage\.com|googleapis\.com|gstatic\.com|akamaized\.net|fastly\.net|jsdelivr\.net|unpkg\.com|cdn\.sh)$'
+#
+# It is matched against the name and every parent of it, so
+# `cognitiveservices.azure.com` handed to `--domain` is caught by `azure.com`.
+# The cloud umbrellas are here because a vendor endpoint reduces to them —
+# azure.com carries Microsoft's own Microsoft 365 and Meta tokens, which are
+# Microsoft's accounts and nobody else's. The blog hosts and free mail domains
+# are here because the website and the contact address on a GitHub profile are
+# read as ownership, and `medium.com/acme` or `acme@gmail.com` is not.
+DNS_PROVIDER_DOMAINS='(^|\.)(azure\.com|azure\.net|azureedge\.net|azurefd\.net|microsoft\.com|microsoftonline\.com|office\.com|office365\.com|outlook\.com|live\.com|windows\.com|sharepoint\.com|google\.com|googleusercontent\.com|googlemail\.com|gmail\.com|cloudfunctions\.net|amazon\.com|heroku\.com|vercel\.com|cloudflare\.com|digitalocean\.com|ovh\.net|ovh\.com|scw\.cloud|scaleway\.com|medium\.com|substack\.com|linkedin\.com|twitter\.com|x\.com|facebook\.com|instagram\.com|youtube\.com|notion\.site|notion\.so|wordpress\.com|blogspot\.com|tumblr\.com|hashnode\.dev|gitlab\.io|gitlab\.com|framer\.website|framer\.app|hotmail\.com|yahoo\.com|icloud\.com|me\.com|proton\.me|protonmail\.com|gmx\.com|gmx\.de|gmx\.net|aol\.com|zoho\.com|yandex\.com|yandex\.ru|mail\.ru|laposte\.net|orange\.fr|free\.fr|wanadoo\.fr|sfr\.fr|vercel\.app|vercel-dns\.com|fly\.dev|fly\.io|herokuapp\.com|herokudns\.com|netlify\.app|netlify\.com|github\.io|githubusercontent\.com|amazonaws\.com|elasticbeanstalk\.com|cloudfront\.net|windows\.net|azurewebsites\.net|azure-dns\.com|pages\.dev|workers\.dev|onrender\.com|render\.com|railway\.app|ondigitalocean\.app|digitaloceanspaces\.com|run\.app|appspot\.com|firebaseapp\.com|firebaseio\.com|web\.app|supabase\.co|neon\.tech|planetscale\.com|psdb\.cloud|upstash\.io|now\.sh|surge\.sh|gitbook\.io|readthedocs\.io|zendesk\.com|statuspage\.io|myshopify\.com|wixsite\.com|squarespace\.com|webflow\.io|ngrok\.io|ngrok\.app|trycloudflare\.com|cloudflarestorage\.com|googleapis\.com|gstatic\.com|akamaized\.net|fastly\.net|jsdelivr\.net|unpkg\.com|cdn\.sh)$'
 
 # Public suffixes of more than one label, so `acme.co.uk` is not read as
 # `co.uk`. This is a hand-kept list and not the Public Suffix List: orgami has
@@ -185,26 +193,136 @@ dns_is_provider() {
 # wrote down what this organization owns, and that beats anything derived.
 dns_domains_configured() { cfg 'domains[]?'; }
 
-# Otherwise, the apexes of the hosts the map already found, most-referenced
-# first — the domain the organization's own services answer on is the one the
-# most repositories point at, and that is the one worth the query budget.
-dns_domains_from_graph() {
-  local g="$DIR/map/graph.json" h a tmp undecided=0
+# A bare hostname out of whatever a profile field holds: `acme.com`,
+# `https://www.acme.com/blog` and `http://me@acme.com:8080/` all give one.
+dns_host_of() {
+  local h
+  h=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')
+  h=${h#*://}
+  h=${h%%[/?#]*}
+  h=${h##*@}
+  h=${h%%:*}
+  printf '%s\n' "${h%.}"
+}
+
+# The organization's own word on where it lives: the website and the public
+# contact address on its GitHub profile, as `<field>\t<value>`. One read-only
+# GET, asked of `users/` when the owner is a personal account. A failure is
+# said and survived — it costs this one source, never the run.
+dns_github_profile() {
+  local raw
+  command -v gh >/dev/null 2>&1 || {
+    log "gh is not on PATH, so the website on the $ORG GitHub profile was not read"
+    return 0
+  }
+  raw=$(gh api "orgs/$ORG" 2>/dev/null) || raw=$(gh api "users/$ORG" 2>/dev/null) || {
+    log "could not read the $ORG GitHub profile (offline, or gh is signed out), so its website was not used"
+    return 0
+  }
+  printf '%s' "$raw" | jq -r '
+    select(type == "object")
+    | [["website", (.blog // "")],
+       ["contact address",
+        ((.email // "") | split("@") | if length == 2 then .[1] else "" end)]]
+    | .[] | select(.[1] != "") | @tsv' 2>/dev/null || true
+}
+
+# The names this organization goes by, squashed to letters and digits — the
+# login and the company name, each again without the affix a GitHub login so
+# often carries (`acmeteam` is also `acme`). Under four characters a
+# name matches too many domains to mean anything, so it is not used.
+dns_name_tokens() {
+  local n t a
+  for n in "$ORG" "${COMPANY:-}"; do
+    t=$(printf '%s' "$n" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9')
+    printf '%s\n' "$t"
+    for a in team hq inc labs app dev io org official group tech corp; do
+      if [[ $t == *"$a" ]]; then printf '%s\n' "${t%"$a"}"; fi
+    done
+    for a in get try use the; do
+      if [[ $t == "$a"* ]]; then printf '%s\n' "${t#"$a"}"; fi
+    done
+  done | awk 'length >= 4' | sort -u
+}
+
+# With nothing written down, the domains the evidence says are the
+# organization's own. One line per apex, `<state>\t<domain>\t<why>`, the most
+# reliable first:
+#
+#   owned   the website or contact address on the GitHub profile, or a host in
+#           the map whose registrable name is the organization's own name
+#   called  a host the code calls that nothing says the organization owns
+#   drop    a provider's domain, or one the catalogue knows as a vendor's
+#           endpoint
+#
+# Being called is not being owned, and that is the whole reason for the split.
+# A host node is any URL found in code, so the most-referenced one is as often a
+# partner's API or a vendor's endpoint as the organization's own service — and
+# `cognitiveservices.azure.com` reduces to azure.com, whose records are
+# Microsoft's own accounts. Read as this organization's, they become a
+# Microsoft 365 subscription nobody here pays for.
+dns_domains_default() {
+  local g="$DIR/map/graph.json" kind val a h n n2 label why hosts facts ends apexes seen=" " undecided
+  local -a toks=()
+  while IFS=$'\t' read -r kind val; do
+    a=$(dns_apex "$(dns_host_of "$val")")
+    [[ -n $a ]] || continue
+    case $seen in *" $a "*) continue ;; esac
+    seen+="$a "
+    if dns_is_provider "$a"; then
+      printf 'drop\t%s\t%s\n' "$a" "the $kind on the $ORG GitHub profile, but owned by a provider, not by this organization"
+    else
+      printf 'owned\t%s\t%s\n' "$a" "the $kind on the $ORG GitHub profile"
+    fi
+  done < <(dns_github_profile)
+
   [[ -f $g ]] || return 0
-  tmp=$(mktemp)
+  while IFS= read -r n; do
+    if [[ -n $n ]]; then toks+=("$n"); fi
+  done < <(dns_name_tokens)
+  hosts=$(mktemp)
+  facts=$(mktemp)
+  ends=$(mktemp)
+  apexes=$(mktemp)
+  jq -r '.nodes[]? | select(.kind == "host") | .name' "$g" 2>/dev/null >"$hosts" || :
+  # The same matcher a repository scan uses, on the hostnames alone: a host one
+  # of the catalogue's `host:` signals recognises is that vendor's endpoint.
+  awk 'NF { printf "host\t%s\t%s\n", $0, $0 }' "$hosts" >"$facts"
+  vendors_match "$facts" all 2>/dev/null | awk -F'\t' '{ print $6 "\t" $2 }' >"$ends" || :
   while IFS= read -r h; do
     [[ -n $h ]] || continue
     a=$(dns_apex "$h")
-    if [[ -z $a ]]; then
-      undecided=$((undecided + 1))
-      continue
-    fi
-    echo "$a" >>"$tmp"
-  done < <(jq -r '.nodes[]? | select(.kind == "host") | .name' "$g" 2>/dev/null)
-  [[ $undecided -eq 0 ]] ||
+    printf '%s\t%s\n' "${a:--}" "$h" >>"$apexes"
+  done <"$hosts"
+  undecided=$(awk -F'\t' '$1 == "-"' "$apexes" | grep -c '' || true)
+  [[ ${undecided:-0} -eq 0 ]] ||
     log "$undecided host(s) in the map gave no registrable domain — an address, a single label, or a public suffix orgami will not split"
-  sort "$tmp" | uniq -c | sort -k1,1nr -k2,2 | awk '{print $2}'
-  rm -f "$tmp"
+
+  # Most-referenced first, as `<apex>\t<first host>\t<vendor or empty>`.
+  while IFS=$'\t' read -r a h n; do
+    case $seen in *" $a "*) continue ;; esac
+    seen+="$a "
+    label=$(printf '%s' "${a%%.*}" | tr -cd 'a-z0-9')
+    why=""
+    for n2 in ${toks[@]+"${toks[@]}"}; do
+      if [[ $label == "$n2" ]]; then why="a host in map/graph.json named after $ORG ($h)"; fi
+    done
+    if [[ -n $why ]]; then
+      printf 'owned\t%s\t%s\n' "$a" "$why"
+    elif dns_is_provider "$a"; then
+      printf 'drop\t%s\t%s\n' "$a" "owned by a provider, not by this organization"
+    elif [[ -n $n ]]; then
+      printf 'drop\t%s\t%s\n' "$a" "the endpoint of $n ($h, lib/vendors.tsv), not this organization's"
+    else
+      printf 'called\t%s\t%s\n' "$a" "$h"
+    fi
+  done < <(awk -F'\t' 'FILENAME == ARGV[1] { vendor[$1] = $2; next }
+                       $1 == "-" { next }
+                       { n[$1]++; if (!($1 in first)) first[$1] = $2
+                         if (($2 in vendor) && !($1 in v)) v[$1] = vendor[$2] }
+                       END { for (a in n) printf "%d\t%s\t%s\t%s\n", n[a], a, first[a], v[a] }' \
+             "$ends" "$apexes" | sort -t "$(printf '\t')" -k1,1nr -k2,2 | cut -f2-)
+  rm -f "$hosts" "$facts" "$ends" "$apexes"
 }
 
 # --- what the records say ------------------------------------------------------
@@ -359,8 +477,8 @@ cmd_dns() {
   # Where the list comes from, in the order that puts the most reliable source
   # first. `--domain` is a one-off and stands alone: somebody asking about one
   # domain does not want four others queried alongside it.
-  local origin
-  local -a domains=()
+  local origin="" unverified=0 state why
+  local -a domains=() called=() keep=() dropped=()
   if [[ ${#want[@]} -gt 0 ]]; then
     domains=("${want[@]}")
     origin="--domain"
@@ -370,13 +488,34 @@ cmd_dns() {
     if [[ ${#domains[@]} -gt 0 ]]; then
       origin="the domains list in $DIR/config.json"
     else
-      while IFS= read -r d; do [[ -n $d ]] && domains+=("$d"); done \
-        < <(dns_domains_from_graph)
-      origin="the host nodes in map/graph.json"
+      while IFS=$'\t' read -r state d why; do
+        case $state in
+          owned)
+            domains+=("$d")
+            case "; $origin; " in *"; $why; "*) ;; *) origin+="${origin:+; }$why" ;; esac
+            ;;
+          called) called+=("$d") ;;
+          drop) dropped+=("$d — $why") ;;
+        esac
+      done < <(dns_domains_default)
+      if [[ ${#domains[@]} -gt 0 ]]; then
+        for d in ${called[@]+"${called[@]}"}; do
+          dropped+=("$d — the code calls it, but nothing says this organization owns it (orgami dns --domain $d if it does)")
+        done
+      elif [[ ${#called[@]} -gt 0 ]]; then
+        # Said rather than refused: on an organization whose own domain is
+        # nowhere in its code, the hosts it calls are all there is to go on.
+        # The reading is still taken, and kept apart from the accounts.
+        domains=("${called[@]}")
+        unverified=1
+        origin="the host nodes in map/graph.json, none of them known to be the organization's"
+        log "nothing says which domains $ORG owns: no domains list in $DIR/config.json, no website read off its GitHub profile, no host in the map named after it"
+        log "falling back to the hosts the code calls, which are as often a partner's or a vendor's — map/dns.json keeps what they carry apart from the accounts, and orgami advise leaves it out"
+        log "name the organization's own with --domain, or a \"domains\" array in $DIR/config.json"
+      fi
     fi
   fi
 
-  local -a keep=() dropped=()
   for d in ${domains[@]+"${domains[@]}"}; do
     d=$(printf '%s' "$d" | tr '[:upper:]' '[:lower:]')
     d=${d%.}
@@ -446,35 +585,50 @@ cmd_dns() {
     --slurpfile rows "$DNS_ROWS" \
     --slurpfile seen "$DNS_SEEN" \
     --slurpfile errors "$DNS_ERRORS" \
-    '($rows | group_by(.id)
-      | map(([group_by(.domain + " " + .signal)[] | sort_by(.at)[0:3][]]) as $kept
-            | {id: .[0].id, name: .[0].name, category: .[0].category,
-               portal: .[0].portal, flags: (.[0].flags // []),
-               domains: (map(.domain) | unique),
-               signals: (map(.signal) | unique | sort),
-               # A domain carrying five google-site-verification tokens is
-               # carrying five copies of one finding. Three of each domain and
-               # record kind is enough for anyone to check it; the rest are
-               # counted, which is also what keeps this off being a zone dump.
-               evidence: ($kept | map({domain, signal, at})
-                          | sort_by(.domain, .signal, .at)),
-               evidence_omitted: (length - ($kept | length))})
-      | sort_by(.id)) as $vendors
+    --argjson unverified "$(if [[ $unverified == 1 ]]; then printf '%s\n' "${keep[@]}"; fi |
+      jq -Rsc 'split("\n") | map(select(. != ""))')" \
+    '# One vendor per id, out of whichever rows it is handed.
+     def by_vendor:
+       group_by(.id)
+       | map(([group_by(.domain + " " + .signal)[] | sort_by(.at)[0:3][]]) as $kept
+             | {id: .[0].id, name: .[0].name, category: .[0].category,
+                portal: .[0].portal, flags: (.[0].flags // []),
+                domains: (map(.domain) | unique),
+                signals: (map(.signal) | unique | sort),
+                # A domain carrying five google-site-verification tokens is
+                # carrying five copies of one finding. Three of each domain and
+                # record kind is enough for anyone to check it; the rest are
+                # counted, which is also what keeps this off being a zone dump.
+                evidence: ($kept | map({domain, signal, at})
+                           | sort_by(.domain, .signal, .at)),
+                evidence_omitted: (length - ($kept | length))})
+       | sort_by(.id);
+     # A record on a domain nothing says the organization owns is an account of
+     # whoever does own it, so it never joins `vendors`, which every reader of
+     # this file takes as the organization itself. It is kept, apart, for
+     # whoever wants to check what the fallback found.
+     ($rows | map(select(.domain as $d | ($unverified | index($d)) == null))
+      | by_vendor) as $vendors
+     | ($rows | map(select(.domain as $d | ($unverified | index($d)) != null))
+        | by_vendor) as $uvendors
      | {company: $company, org: $org,
         generated: $at, generated_epoch: $epoch,
         origin: $origin,
         domains: $domains,
+        unverified: $unverified,
         skipped: $skipped,
         counts: {domains: ($domains | length),
                  skipped: ($skipped | length),
                  queries: $queries,
                  vendors: ($vendors | length),
+                 unverified_vendors: ($uvendors | length),
                  records: ([$seen[].records] | add // 0),
                  records_matched: ([$seen[].matched] | add // 0),
                  records_unmatched: (([$seen[].records] | add // 0)
                                      - ([$seen[].matched] | add // 0))},
         read: $seen,
         vendors: $vendors,
+        unverified_vendors: $uvendors,
         errors: $errors}' >"$tmp" || {
     rm -f "$tmp"
     die "could not write $out"
@@ -500,7 +654,11 @@ cmd_dns() {
   log "$page"
   jq -r '"\(.counts.vendors) vendor(s) across \(.counts.domains) domain(s), from "
          + "\(.counts.queries) quer\(if .counts.queries == 1 then "y" else "ies" end) — "
-         + "\(.counts.records_matched) of \(.counts.records) records matched the catalogue"' "$out"
+         + "\(.counts.records_matched) of \(.counts.records) records matched the catalogue"
+         + (if (.counts.unverified_vendors // 0) > 0
+            then "\n\(.counts.unverified_vendors) more on domains not known to be the "
+                 + "organization'"'"'s, kept apart in unverified_vendors and left out of the count"
+            else "" end)' "$out"
   [[ $(jq '.errors | length' "$out") -eq 0 ]] ||
     jq -r '.errors[] | "  " + .domain + ": " + .message' "$out"
   return 0
@@ -532,6 +690,27 @@ dns_age_phrase() {
 
 # --- the page ------------------------------------------------------------------
 
+# One `### vendor` block per vendor in the list named by $2, with the records
+# behind it.
+dns_render_vendors() {
+  jq -r --arg list "$2" '
+    [(.[$list] // [])[]
+     | "### \(.name)",
+       "",
+       "`vendor:\(.id)` · \(.category) · \(.domains | join(", "))"
+         + (if .portal == "" then "" else " · [what it costs](\(.portal))" end),
+       "",
+       "| Record | Evidence |",
+       "|---|---|",
+       (.evidence[] | "| `\(.signal)` | `\(.at)` |"),
+       (if (.evidence_omitted // 0) > 0
+        then "", "<sub>\(.evidence_omitted) further record(s) of the same kind matched"
+             + " the same signals and are not repeated here.</sub>"
+        else empty end),
+       ""]
+    | .[]' "$1"
+}
+
 dns_render() {
   local f=$1 age
   age=$(dns_age_days 2>/dev/null || echo "?")
@@ -557,27 +736,34 @@ public DNS**, which is not the same fact as not being in use.
 EOF
   echo
 
-  if [[ $(jq -r '.counts.vendors' "$f") == 0 ]]; then
+  if [[ $(jq -r '(.domains - (.unverified // [])) | length' "$f") == 0 ]]; then
+    echo "None of the domains read is known to be this organization's — see the"
+    echo "section below — so nothing here is counted as an account of its own."
+    echo
+  elif [[ $(jq -r '.counts.vendors' "$f") == 0 ]]; then
     jq -r '"Nothing in the \(.counts.records) record(s) read across "
            + "\(.counts.domains) domain(s) matched the catalogue."' "$f"
     echo
   else
-    jq -r '
-      [.vendors[]
-       | "### \(.name)",
-         "",
-         "`vendor:\(.id)` · \(.category) · \(.domains | join(", "))"
-           + (if .portal == "" then "" else " · [what it costs](\(.portal))" end),
-         "",
-         "| Record | Evidence |",
-         "|---|---|",
-         (.evidence[] | "| `\(.signal)` | `\(.at)` |"),
-         (if (.evidence_omitted // 0) > 0
-          then "", "<sub>\(.evidence_omitted) further record(s) of the same kind matched"
-               + " the same signals and are not repeated here.</sub>"
-          else empty end),
-         ""]
-      | .[]' "$f"
+    dns_render_vendors "$f" vendors
+  fi
+
+  if [[ $(jq -r '(.unverified_vendors // []) | length' "$f") -gt 0 ]]; then
+    echo "## On domains not known to be the organization's"
+    echo
+    jq -r '"Read from " + ((.unverified // []) | join(", ")) + "."' "$f"
+    cat <<'EOF'
+Nothing said these are the organization's own: no domains list in its
+config, no website read off its GitHub profile, no host in the map named
+after it.
+They were taken from hosts the code calls, which are as often a partner's API
+or a vendor's endpoint, so a record here is an account of whoever owns the
+domain. They are not counted above and `orgami advise` leaves them out. Name
+the organization's own domains with `orgami dns --domain`, or a `domains`
+array in its config.
+EOF
+    echo
+    dns_render_vendors "$f" unverified_vendors
   fi
 
   jq -r '"Read \(.counts.records) record(s) across \(.counts.domains) domain(s) in "

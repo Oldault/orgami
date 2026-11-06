@@ -56,6 +56,19 @@ live_err() {
   jq -cn --arg p "$1" --arg m "$2" '{provider:$p, message:$m}' >>"$LIVE_ERRORS"
 }
 
+# The first line with something on it: aws CLI v2 opens its errors with a blank
+# line, so `head -1` kept nothing and the reader saw "aws: " and no reason.
+live_first_line() { awk 'NF {sub(/^[ \t]+/, ""); print; exit}' <<<"$1"; }
+
+# live_reason <output> <fallback> — that first line, or, from a CLI that failed
+# and said nothing at all, the fallback: which command exited how, and what to
+# run to see why. An empty reason left the report reading "aws: ".
+live_reason() {
+  local line
+  line=$(live_first_line "$1")
+  printf '%s\n' "${line:-$2}"
+}
+
 live_row() { cat >>"$LIVE_ROWS"; }
 
 # Fly. `flyctl apps list --json` is the whole inventory in one call. Field
@@ -65,9 +78,10 @@ live_fly() {
   bin=$(command -v flyctl || command -v fly || true)
   [[ -n $bin ]] || { live_err fly "flyctl is not on PATH"; return 0; }
 
-  local out
+  local out rc
   out=$("$bin" apps list --json 2>&1) || {
-    live_err fly "$(head -1 <<<"$out")"
+    rc=$?
+    live_err fly "$(live_reason "$out" "$(basename "$bin") exited $rc with no message — run: $(basename "$bin") apps list")"
     return 0
   }
   jq -e 'type == "array"' <<<"$out" >/dev/null 2>&1 || {
@@ -115,7 +129,7 @@ live_vercel() {
   }
   need curl
 
-  local team=${VERCEL_TEAM_ID:-} url next body page=0
+  local team=${VERCEL_TEAM_ID:-} url next body page=0 rc
   url="https://api.vercel.com/v9/projects?limit=100"
   [[ -n $team ]] && url="$url&teamId=$team"
 
@@ -123,7 +137,8 @@ live_vercel() {
     # The header is read from stdin (-H @-), never put in argv: an argument is
     # in `ps` and /proc/<pid>/cmdline for every user on the machine to read.
     body=$(curl -sS --max-time 30 -H @- "$url" 2>&1 <<<"Authorization: Bearer $token") || {
-      live_err vercel "$(head -1 <<<"$body")"
+      rc=$?
+      live_err vercel "$(live_reason "$body" "curl exited $rc reaching api.vercel.com — check the network")"
       return 0
     }
     if jq -e '.error' <<<"$body" >/dev/null 2>&1; then
@@ -200,9 +215,10 @@ live_aws() {
     return 0
   }
 
-  local ident account
+  local ident account rc
   ident=$(aws sts get-caller-identity --output json --region "$region" 2>&1) || {
-    live_err aws "$(head -1 <<<"$ident")"
+    rc=$?
+    live_err aws "$(live_reason "$ident" "aws exited $rc with no message — run: aws sts get-caller-identity --region $region")"
     return 0
   }
   account="$(jq -r '.Account // "unknown"' <<<"$ident") ($region)"
@@ -256,20 +272,24 @@ live_aws() {
 
   # Lambda: name, last modified, and the state the list call already carries.
   local fns
-  if fns=$(aws lambda list-functions --region "$region" --output json 2>&1); then
+  rc=0
+  fns=$(aws lambda list-functions --region "$region" --output json 2>&1) || rc=$?
+  if ((rc == 0)); then
     read_any=1
     while IFS=$'\t' read -r n u arn; do
       [[ -n $n ]] || continue
       live_aws_row "$n" lambda "$arn" "" "$u"
     done < <(jq -r '.Functions[]? | [.FunctionName, (.LastModified // ""), .FunctionArn] | @tsv' <<<"$fns")
   else
-    live_err aws "lambda: $(head -1 <<<"$fns")"
+    live_err aws "lambda: $(live_reason "$fns" "aws exited $rc with no message — run: aws lambda list-functions --region $region")"
   fi
 
   # ECS: the services, not the clusters. A cluster with no service is a batch
   # queue, not something answering requests.
   local clusters svcs desc
-  if clusters=$(aws ecs list-clusters --region "$region" --output json 2>&1); then
+  rc=0
+  clusters=$(aws ecs list-clusters --region "$region" --output json 2>&1) || rc=$?
+  if ((rc == 0)); then
     read_any=1
     while read -r cluster; do
       [[ -n $cluster ]] || continue
@@ -295,7 +315,7 @@ live_aws() {
       done
     done < <(jq -r '.clusterArns[]?' <<<"$clusters")
   else
-    live_err aws "ecs: $(head -1 <<<"$clusters")"
+    live_err aws "ecs: $(live_reason "$clusters" "aws exited $rc with no message — run: aws ecs list-clusters --region $region")"
   fi
 
   # Elastic Beanstalk: the one AWS service that hands back a hostname, which
