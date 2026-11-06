@@ -6,6 +6,22 @@
 # Tags that place a note into a runbook section. Anything else stays a plain note.
 RUNBOOK_TAGS=(setup deploy rollback incident alert gotcha oncall)
 
+# What counts as a health endpoint, and as an uptime monitor. A route is
+# "file:line: METHOD path"; only the path is judged, and only its last segment,
+# so `bills/:billId/status` (a billing route) and `/liveStream` do not count
+# while `/health`, `/api/healthz` and a bare `/status` do. gatus and its kin
+# are repositories whose configuration probes other apps' hosts: they report
+# on the rest, so they are not themselves "silent".
+# shellcheck disable=SC2034  # prepended to jq programs below
+RUNBOOK_JQ_HEALTH='
+def health_path: sub("^.*:[0-9]+: *"; "") | sub("^[A-Za-z]+ +"; "")
+  | split(" ")[0] | gsub("[\u0027\"`,]"; "");
+def is_health: health_path
+  | test("(^|/)(health|healthz|healthcheck|health-check|ready|readyz|readiness|livez|liveness|ping|alive)/?$|^/?(api/)?(v[0-9]+/)?status/?$"; "i");
+def is_monitor: ((.name // "") | test("^(gatus|uptime-kuma|upptime|statping)$"; "i"))
+  or ([.meta.topics[]? | strings] | any(test("^(gatus|uptime-kuma|upptime)$"; "i")));
+'
+
 runbook_tag_heading() {
   case $1 in
     setup) echo "Getting it running" ;;
@@ -120,13 +136,15 @@ runbook_render() {
 
     # The first script whose name matches each role, in the order a person needs
     # them. Anything not claimed here is still listed, just not first.
-    def pick($names): ($p.commands.scripts // {}) | to_entries
-      | map(select(.key as $k | $names | index($k))) | .[0];
+    # The order of $names decides, not the order the file declares them in, so
+    # the same repository always yields the same command.
+    def pick($names): ($p.commands.scripts // {}) as $s
+      | [$names[] as $n | $s | to_entries[] | select(.key == $n)] | .[0];
 
     (pick(["dev", "start", "serve", "run"])) as $run
     | (pick(["test"])) as $test
     | (pick(["build", "compile"])) as $build
-    | (pick(["typecheck", "lint", "check"])) as $check
+    | (pick(["check", "lint", "typecheck"])) as $check
     | [$run, $test, $build, $check] as $first
     | [$first[] | select(. != null) | .key] as $claimed
 
@@ -143,7 +161,9 @@ runbook_render() {
                                elif .key == "test" then "test"
                                elif .key | test("^(build|compile)$") then "build"
                                else "check" end)
-                     + "** — `" + .value + "`"))
+                     + "** — `" + .value + "`"
+                     + (if (.key | test("^(dev|start|serve|run|test|build|compile|check)$")) then ""
+                        else " (script `" + .key + "`)" end)))
               + [""]
          else [] end)
 
@@ -267,8 +287,8 @@ runbook_render() {
 
   # ------------------------------------------------------- is it alive
   local health obs
-  health=$(jq -r --argjson p "$prof" '
-    [$p.routes[]? | select(test("/(health|healthz|status|ping|ready|live)"; "i"))] | .[]' <<<'{}')
+  health=$(jq -r --argjson p "$prof" "$RUNBOOK_JQ_HEALTH"'
+    [$p.routes[]? | select(is_health)] | .[]' <<<'{}')
   obs=$(jq -r --argjson p "$prof" '
     [$p.env[]? | select(test("SENTRY|BETTERSTACK|DATADOG|NEWRELIC|NEW_RELIC|LOGTAIL|ROLLBAR|GRAFANA|HONEYCOMB|BUGSNAG|PROMETHEUS"))] | .[]' <<<'{}')
 
@@ -315,9 +335,12 @@ runbook_render() {
   local coupled=""
   [[ -f $DIR/map/coupling.json ]] && coupled=$(jq -r --arg r "$repo" '
     [.pairs[] | select(.a == $r or .b == $r)]
-    | sort_by(-.days) | .[0:5][]
-    | "- **" + (if .a == $r then .b else .a end) + "** — merged the same day \(.days)× by "
-      + (.authors | join(", "))' "$DIR/map/coupling.json" 2>/dev/null || true)
+    | sort_by(-.days, -(.weeks // 0)) | .[0:5][]
+    | select(.days > 0 or (.weeks // 0) > 0)
+    | "- **" + (if .a == $r then .b else .a end) + "** — "
+      + (if .days > 0 then "merged the same day \(.days)×"
+         else "changed in the same week \(.weeks)×" end)
+      + " by " + (.authors | join(", "))' "$DIR/map/coupling.json" 2>/dev/null || true)
 
   if [[ -n $blast || -n $coupled ]]; then
     echo "## What it drags with it"
@@ -441,7 +464,7 @@ runbook_org() {
 
     echo "## Health endpoints"
     echo
-    jq -r '.[] | .name as $n | [.routes[]? | select(test("/(health|healthz|status|ping|ready|live)"; "i"))]
+    jq -r "$RUNBOOK_JQ_HEALTH"'.[] | .name as $n | [.routes[]? | select(is_health)]
       | if length == 0 then empty else "- **" + $n + "** — `" + .[0] + "`" end' "$profiles"
     echo
 
@@ -512,18 +535,28 @@ runbook_incidents_page() {
     echo
     echo "| Repo | Alerting through | Health endpoint |"
     echo "|---|---|---|"
-    jq -r '.[] | .name as $n
+    jq -r "$RUNBOOK_JQ_HEALTH"'.[] | .name as $n
       | ([.env[]? | (match("SENTRY|BETTERSTACK|DATADOG|NEW_?RELIC|LOGTAIL|ROLLBAR|GRAFANA|HONEYCOMB|BUGSNAG") | .string)] | unique) as $a
-      | ([.routes[]? | select(test("/(health|healthz|status|ping|ready|live)"; "i"))] | .[0]) as $h
+      | ([.routes[]? | select(is_health)] | .[0]) as $h
       | select(($a | length) > 0 or $h != null)
       | "| [" + $n + "](runbooks/" + $n + ".md) | "
         + (if ($a | length) > 0 then ($a | join(", ")) else "—" end) + " | "
         + (if $h != null then "`" + $h + "`" else "—" end) + " |"' "$profiles"
     echo
 
+    local monitors
+    monitors=$(jq -r "$RUNBOOK_JQ_HEALTH"'[.[] | select(is_monitor) | .name] | sort | join(", ")' "$profiles")
+    if [[ -n $monitors ]]; then
+      echo "**Uptime monitors:** $monitors"
+      echo
+      echo "Its configuration probes other apps' hosts. This scan does not read it, so which"
+      echo "of them it covers is not listed here."
+      echo
+    fi
+
     local silent
-    silent=$(jq -r '.[] | select([.env[]? | select(test("SENTRY|BETTERSTACK|DATADOG|NEW_?RELIC|LOGTAIL|ROLLBAR|GRAFANA|HONEYCOMB|BUGSNAG"))] | length == 0)
-      | select([.routes[]? | select(test("/(health|healthz|status|ping|ready|live)"; "i"))] | length == 0)
+    silent=$(jq -r "$RUNBOOK_JQ_HEALTH"'.[] | select(is_monitor | not) | select([.env[]? | select(test("SENTRY|BETTERSTACK|DATADOG|NEW_?RELIC|LOGTAIL|ROLLBAR|GRAFANA|HONEYCOMB|BUGSNAG"))] | length == 0)
+      | select([.routes[]? | select(is_health)] | length == 0)
       | .name' "$profiles" | sort | paste -sd, - | sed 's/,/, /g' || true)
     if [[ -n $silent ]]; then
       echo "**Nothing reports on these:** $silent"
@@ -619,12 +652,18 @@ cmd_runbook() {
   fi
 
   mkdir -p "$DIR/map/runbooks"
-  local n
+  local n hold
+  # shellcheck disable=SC2034  # read by notes_index, in this function's scope
+  local NOTES_INDEX_CACHE=""
+  # One parse of the notes for every runbook, not one per repo.
+  hold=$(mktemp)
+  notes_index_hold "$hold"
   while read -r n; do
     [[ -n $n ]] || continue
     runbook_render "$n" >"$DIR/map/runbooks/$n.md" 2>/dev/null || true
   done < <(jq -r '.[].name' "$DIR/map/repos.json")
   runbook_org
   runbook_incidents_page
+  rm -f "$hold"
   echo "$(jq 'length' "$DIR/map/repos.json") runbooks in $DIR/map/runbooks/"
 }

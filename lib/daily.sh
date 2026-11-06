@@ -127,7 +127,7 @@ cmd_daily() {
   fi
 
   need claude "the digest's prose is written by Claude Code in headless mode"
-  [[ -n $model ]] || model=$(cfg model "sonnet")
+  [[ -n $model ]] || model=$(cfg report_model claude-sonnet-5)
 
   local body
   body=$( {
@@ -145,7 +145,8 @@ cmd_daily() {
   local out="$DIR/reports/daily/$date.md"
   {
     printf '# %s · %s\n\n' "$ORG" "$(date_fmt "$date" '%A %-d %B %Y')"
-    linkify_prs "$ORG" "$DIR/map/graph.json" <<<"$body"
+    plain_stat_keys <(printf '%s' "$stats") <<<"$body" |
+      linkify_prs "$ORG" "$DIR/map/graph.json"
     printf '\n---\n\n'
     printf '%s merged · %s opened · %s repos · %s people' \
       "$(jq -r .merged <<<"$stats")" "$(jq -r .opened <<<"$stats")" \

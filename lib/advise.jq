@@ -151,15 +151,42 @@ def days_since($now):
        signal: signal_kind,
        source: "code"}]) as $uses
 
+# The domains of the reading nothing says the organization owns. `orgami dns`
+# falls back to the hosts the code calls when it has no ownership signal, and
+# keeps what it finds there in `unverified_vendors` rather than `vendors`. A
+# reading taken before that split has no `unverified` field, and one whose
+# domains came from the host nodes is exactly that fallback — every domain in it
+# is somebody's, and nothing says whose.
+| (if $reading == null then []
+   elif ($reading.unverified | type) == "array" then $reading.unverified
+   elif (($reading.origin // "") | startswith("the host nodes in map/graph.json"))
+   then ($reading.domains // [])
+   else [] end) as $unverified
+
 # The DNS reading, flattened to the same row shape. One row per record that
 # matched, so a domain whose MX points at Google and whose apex carries a
 # google-site-verification token contributes both — a reader checking the
 # finding wants the records, not a summary of them.
-| ([($reading.vendors // [])[] | . as $v | ($v.evidence // [])[]
+#
+# A record on an unverified domain is an account of whoever owns that domain:
+# azure.com carries Microsoft's own Microsoft 365 token. Counted here it would
+# become a subscription this organization does not have, so it never becomes a
+# row — it is listed under `excluded` instead, where a reader can see it.
+| ([(($reading.vendors // []) + ($reading.unverified_vendors // []))[]
+    | . as $v | ($v.evidence // [])[]
     | {vendor: $v.id, repo: null, domain: .domain, at: .at,
        signal: .signal, source: "dns",
        name: ($v.name // ""), category: ($v.category // ""),
-       portal: ($v.portal // ""), flags: ($v.flags // [])}]) as $dnsrows
+       portal: ($v.portal // ""), flags: ($v.flags // [])}]) as $dnsall
+| ([$dnsall[] | select(.domain as $d | ($unverified | index($d)) == null)]) as $dnsrows
+| ([$dnsall[] | select(.domain as $d | ($unverified | index($d)) != null)]
+   | group_by(.domain)
+   | map({domain: .[0].domain,
+          vendors: (map(.vendor) | unique),
+          names: (map(.name) | unique),
+          reason: ("nothing says the organization owns " + .[0].domain
+                   + " — it came from a host the code calls, so its records "
+                   + "are the accounts of whoever does")})) as $dns_unverified
 
 | (($cat // []) | map({key: .id, value: .}) | from_entries) as $bycat
 | ((([$vnodes[] | .id | strip_prefix("vendor:")])
@@ -276,28 +303,48 @@ def days_since($now):
                      else "" end))})) as $single
 
 # --- 3. a live subscription behind a repo nobody touches ----------------------
+#
+# High only when the repository commits to the vendor — a package, a terraform
+# provider, a workflow action, a variable the deployment has to set. A hostname
+# in a string is the weakest thing the scanner matches: a Google Fonts
+# stylesheet or an OAuth scope URL is a googleapis.com host and no Google Cloud
+# account at all. So a pair resting on hosts alone is medium, and its claim
+# says it is a mention rather than calling it wired in.
 | ([$vendors[] | . as $v | .repos[] as $r
     | (($pushed[$r]) // "") as $p
     | ($p | days_since($now)) as $age
     | select($age != null and $age > $stale)
+    | ([$v.rows[] | select(.repo == $r)]) as $rrows
+    | all($rrows[]; .signal == "host") as $mention
     | {kind: "orphan-vendor",
        id: ("orphan-vendor:" + $v.id + "@" + $r),
-       confidence: "high",
+       confidence: (if $mention then "medium" else "high" end),
        vendors: [$v.id],
        repos: [$r],
        repo_count: 1,
        last_push: ($p[0:10]),
        days_since_push: $age,
        sources: $v.sources,
-       evidence: ([$v.rows[] | select(.repo == $r)] | ev_rows),
-       claim: ($v.name + " is wired into " + $r + ", which has not been pushed to since "
-               + ($p[0:10]) + " — " + ($age | tostring) + " days. The code is idle; the "
-               + "subscription behind it may not be.")}]) as $orphan
+       signals: ([$rrows[].signal] | unique),
+       evidence: ($rrows | ev_rows),
+       claim: (if $mention
+               then $v.name + " is named in " + $r + " only by a hostname in a URL — a "
+                    + "mention, not a package or a provider block — and " + $r
+                    + " has not been pushed to since " + ($p[0:10]) + " — "
+                    + ($age | tostring) + " days. If an account stands behind the URL, "
+                    + "the code that calls it is idle."
+               else $v.name + " is wired into " + $r + ", which has not been pushed to since "
+                    + ($p[0:10]) + " — " + ($age | tostring) + " days. The code is idle; the "
+                    + "subscription behind it may not be."
+               end)}]) as $orphan
 
 # --- 4. the variable that was declared and never used -------------------------
 #
 # Scoped to the pair, not to the repo: a vendor whose only trace in this
-# repository is a variable name. What this cannot rule out is a hostname —
+# repository is a variable name. The claim names the manifests *the scan read*
+# rather than every manifest in the repository, because which ones a scan reads
+# is the scanner's business — a root-only scan of a pnpm workspace never opens
+# apps/backend/package.json, and "no manifest names it" would then be false. What this cannot rule out is a hostname —
 # `lib/vendors.sh` ranks a host below an env var and discards it when both
 # match — so the claim says what was ruled out and stops there.
 #
@@ -323,9 +370,9 @@ def days_since($now):
        sources: $v.sources,
        evidence: (ev_rows + ($v.dns | ev_rows)),
        claim: ($v.name + " is matched in " + $r + " by an environment variable and "
-               + "nothing stronger — no package manifest, terraform provider or workflow "
-               + "action in that repository names it. The variable is declared; the SDK "
-               + "may never have been wired."
+               + "nothing stronger — no package manifest the scan read, no terraform "
+               + "provider and no workflow action in that repository names it. The "
+               + "variable is declared; the SDK may never have been wired."
                + (if ($v.dns | length) > 0
                   then " Public DNS says the account is real, which makes the unused "
                        + "variable the more interesting half."
@@ -445,7 +492,8 @@ def days_since($now):
 # two different things depending on the answer.
 | (if $reading == null then null
    else {generated: ($reading.generated // null),
-         domains: ($reading.domains // []),
+         domains: [($reading.domains // [])[] | select(. as $d | ($unverified | index($d)) == null)],
+         unverified: $unverified,
          age_days: (($reading.generated_epoch // null)
                     | if . == null then null else (($now - .) / 86400 | floor) end),
          stale_days: $dns_stale}
@@ -464,12 +512,14 @@ def days_since($now):
    # withheld it lives.
    excluded: {duplicate_category: $dup_excluded,
               ghost_env_var: $ghost_excluded,
+              dns_unverified: $dns_unverified,
               substitutable_categories: $subst,
               policy: ("lib/advise.jq — substitutable_categories, "
                        + "and the no-sdk flag in lib/vendors.tsv")},
    counts: {proposals: ($open | length),
             suppressed: ($hidden | length),
-            excluded: (($dup_excluded | length) + ($ghost_excluded | length)),
+            excluded: (($dup_excluded | length) + ($ghost_excluded | length)
+                       + ($dns_unverified | length)),
             vendors: ($vendors | length),
             repos: (($repos // []) | length),
             vendors_from_code: ([$vendors[] | select(.repo_count > 0)] | length),

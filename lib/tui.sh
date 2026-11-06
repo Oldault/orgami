@@ -302,7 +302,7 @@ tui_card() {
       end;
     def clip($n): if ($n > 1 and length > $n) then (.[0:($n - 1)] + "…") else . end;
     def elide($n): if length > $n then ("…" + .[(length - $n + 1):]) else . end;
-    def field($label; $value): "  " + $m + ($label | pad(18)) + $r + $value;
+    def field($key; $value): "  " + $m + ($key | pad(18)) + $r + $value;
 
     (if $w > 74 then 30 elif $w > 56 then 24 else 18 end) as $lw
     | (if $w - $lw - 4 > 12 then $w - $lw - 4 else 12 end) as $ew
@@ -314,6 +314,9 @@ tui_card() {
     | (($prof[] | select(.name == $name)) // {}) as $pr
     | [$g.edges[] | select(.from == "repo:" + $name)] as $out
     | [$g.edges[] | select(.to == "repo:" + $name)] as $in
+    | [$out[] | select(.kind == "deploys-to" or .kind == "depends-on"
+                       or (.kind == "uses" and (.to | startswith("tool:"))))] as $runs
+    | [$runs[] | select(.kind == "uses") | .to | sub("^tool:"; "")] as $tools
 
     | [
         $a + "▪ " + $b + $name + $r + "  " + $m + (($n.meta.language // "unmapped"))
@@ -346,7 +349,10 @@ tui_card() {
                 | unique | .[0:8])
            end)
 
-      + ($out | map(select(.kind == "deploys-to" or .kind == "uses" or .kind == "depends-on"))
+      # Only a tool: edge is deployment, as on the card (lib/card.sh). A
+      # vendor: edge is a bill the repo runs up, listed under VENDORS by name;
+      # one that is also a tool here is said once, under RUNS ON.
+      + ($runs
          | if length == 0 then
              ["", $m + $b + "RUNS ON" + $r,
               "  " + $d + "nothing committed here says where this deploys" + $r]
@@ -354,6 +360,18 @@ tui_card() {
              [""] + [$m + $b + "RUNS ON" + $r]
              + (map("  " + ((.to | sub("^[a-z-]+:"; "")) | pad($lw)) + evidence(.evidence))
                 | unique | .[0:8])
+           end)
+
+      + ($out | map(select(.kind == "uses" and (.to | startswith("vendor:"))
+                           and ((.to | sub("^vendor:"; "")) | IN($tools[]) | not)))
+         | group_by(.to)
+         | map(.[0].to as $v
+               | {name: ([$g.nodes[] | select(.id == $v) | .name // empty][0] // ($v | sub("^vendor:"; ""))),
+                  evidence: .[0].evidence})
+         | sort_by(.name | ascii_downcase)
+         | if length == 0 then [] else
+             [""] + [$m + $b + "VENDORS" + $r]
+             + (.[0:8] | map("  " + (.name | pad($lw)) + evidence(.evidence)))
            end)
 
       + (($pr.workflows // []) | map(select(.deploys)) | if length == 0 then [] else

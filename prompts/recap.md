@@ -14,8 +14,12 @@ Rules:
   `merged_by_bots`, and PULL_REQUESTS still holds all of them. So a bot's pull
   request is never a theme, never an author, and never part of "the team merged
   N changes". Say what the bots did in one clause under debt and maintenance —
-  "`merged_by_bots` dependency and release pull requests merged alongside" — and
-  nowhere else. If `merged_by_bots` is 0, do not mention bots at all.
+  "N dependency and release pull requests merged alongside", with N taken from
+  `merged_by_bots` — and nowhere else. If `merged_by_bots` is 0, do not mention bots at all.
+- STATS keys are for you, not the reader. Never write a key name such as
+  `merged_by_bots` or `median_hours_to_merge` in the prose; say it in words with
+  the number ("two bot pull requests", "a median of 5 hours to merge").
+  `merged_total` is people plus bots; `merged` is people only.
 - Answer *why*, not *what changed*. "Checkout dropped card errors" beats
   "updated PaymentIntent handling in stripe.rb".
 - Group by intent, not by repository. A theme spanning three repos is one theme.
@@ -91,9 +95,15 @@ reading.
 
 ## Watch list
 
-Bullets. Things that will hurt if they continue: review bottlenecks, repos with
-no activity, growing unresolved threads, oversized PRs. Omit the section if
-nothing qualifies.
+Bullets. Before writing one, check PULL_REQUESTS: an item that a pull request
+from this same week already resolved (a default changed, a gap closed, a thing
+removed) is not a watch item. Leave it out, or say it was resolved and cite the
+PR. Each item cites what it rests on: the pull request, or the STATS figure in
+words. An item that rests on neither is a guess; leave it out. Never contradict
+an earlier section of this recap: a thing listed as shipped, fixed or removed
+is not still pending here. Things that will hurt if they continue: review
+bottlenecks, repos with no activity, growing unresolved threads, oversized PRs.
+Omit the section if nothing qualifies.
 
 Output only the markdown body. No preamble, no title heading, no code fence
 around the whole thing.

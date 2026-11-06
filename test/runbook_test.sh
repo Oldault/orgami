@@ -406,4 +406,48 @@ seen=$(cd "$fixture" && runbook_seen_before api)
 grep -q 'RBPWN' <<<"$seen" && fail "a report not named like a week was read: $seen"
 rm -f "$DIR/reports/"*RBPWN*
 
+# --- a billing route is not a health endpoint; an uptime monitor is not silent --
+#
+# The old pattern matched "/status" anywhere in a route, so a billing route
+# `bills/:billId/status` was listed as the repository's health endpoint. gatus
+# is a repository whose configuration probes the organization's hosts; it has no
+# health route of its own and used to be filed under "Nothing reports on these".
+# `check` is declared twice here: it must be one command, and the same one on
+# every render.
+tmp=$(mktemp)
+jq '. + [
+  {"name": "billy", "meta": {"language": "TypeScript", "private": false},
+   "frameworks": [], "env": [], "workflows": [], "serves": [], "agent_docs": [],
+   "commands": {"scripts": {"lint": "make lint", "check": "make check"}},
+   "routes": ["backend/src/api/bill.controller.ts:60: GET bills/:billId/status",
+              "src/live/stream.ts:3: GET /liveStream"]},
+  {"name": "gatus", "meta": {"language": "Go", "private": true, "topics": []},
+   "frameworks": [], "env": [], "workflows": [], "routes": [], "serves": [],
+   "agent_docs": [], "commands": {"scripts": {}}}]' "$DIR/map/repos.json" >"$tmp"
+mv "$tmp" "$DIR/map/repos.json"
+page=$(incidents) || fail "the incidents page failed with a monitor in the map"
+grep -q 'billId/status' <<<"$page" && fail "a billing route was listed as a health endpoint"
+silent=$(grep -F 'Nothing reports on these' <<<"$page")
+grep -q 'billy' <<<"$silent" || fail "billy serves no health endpoint and must be listed as silent: $silent"
+grep -q 'gatus' <<<"$silent" && fail "gatus is an uptime monitor and must not be listed as silent"
+grep -qF -- '**Uptime monitors:** gatus' <<<"$page" || fail "gatus must be named as a monitor"
+billy=$(runbook_render billy)
+grep -q 'billId/status' <<<"$billy" && fail "the runbook listed a billing route as a health endpoint"
+grep -q 'liveStream' <<<"$billy" && fail "a /liveStream route was listed as a health endpoint"
+[[ $(grep -c '`check`\|\*\*check\*\*' <<<"$billy") -le 1 ]] || fail "check maps to two commands in one runbook"
+grep -qF -- '**check** — `make check`' <<<"$billy" || fail "check must be the declared check script"
+[[ $billy == "$(runbook_render billy)" ]] || fail "the same repository rendered two different runbooks"
+
+# A co-change pair with no same-day merge is described by weeks, never "0x".
+cat >"$DIR/map/coupling.json" <<'JSON'
+{"pairs": [{"a": "web", "b": "billing", "days": 0, "weeks": 2, "authors": ["tester"]},
+           {"a": "web", "b": "bare", "days": 0, "weeks": 0, "authors": ["tester"]},
+           {"a": "web", "b": "gated", "days": 3, "weeks": 3, "authors": ["tester"]}]}
+JSON
+web=$(runbook_render web)
+grep -q 'same day 0' <<<"$web" && fail "a pair that never merged the same day printed 0×"
+grep -qF -- 'changed in the same week 2×' <<<"$web" || fail "a weeks-only pair must be described by weeks"
+grep -qF -- 'merged the same day 3×' <<<"$web" || fail "a same-day pair must keep its count"
+grep -qF -- '**bare**' <<<"$(section "What it drags with it" "$web")" && fail "a pair with no co-change at all was listed"
+
 echo "runbook: quotes traceable, tags placed, absence stated, no empty headings, no model"

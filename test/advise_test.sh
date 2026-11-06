@@ -432,6 +432,91 @@ grep -qF 'rejected 3 times in 3 answered' <<<"$record_page" ||
   { echo "FAIL: the proposal row does not say why it ranks lower" >&2; fail=1; }
 [[ $fail == 0 ]] && echo "ok   the record carries across runs, resolves, rejects, and moves the rank without hiding a row"
 
+# --- a hostname is a mention, and a domain nobody owns is nobody's account ----
+#
+# A Google Fonts stylesheet is a googleapis.com URL, and the catalogue reads that
+# host as Google Cloud. In a quiet repository it must not become a high
+# confidence orphan beside one resting on a package: the repository commits to
+# nothing. And a DNS reading taken off the hosts the code calls — azure.com, out
+# of `cognitiveservices.azure.com` — carries Microsoft's own Microsoft 365
+# token, which is no account of this organization's.
+DIR="$fixture/hosts"
+mkdir -p "$DIR/map" "$DIR/notes"
+cat >"$DIR/map/graph.json" <<JSON
+{"company": "acme", "org": "acme", "generated": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+ "nodes": [
+   {"id": "repo:api", "kind": "repo", "name": "api", "meta": {"pushed_at": "${new}T09:00:00Z"}},
+   {"id": "repo:legacy", "kind": "repo", "name": "legacy", "meta": {"pushed_at": "${old}T09:00:00Z"}},
+   {"id": "vendor:gcp", "kind": "vendor", "name": "Google Cloud", "meta": {"category": "hosting"}},
+   {"id": "vendor:sentry", "kind": "vendor", "name": "Sentry", "meta": {"category": "error-tracking"}},
+   {"id": "vendor:twilio", "kind": "vendor", "name": "Twilio", "meta": {"category": "sms"}}],
+ "edges": [
+   {"from": "repo:legacy", "to": "vendor:gcp", "kind": "uses",
+    "evidence": "src/FontIcon.tsx:37", "signal": "host", "confidence": "extracted"},
+   {"from": "repo:legacy", "to": "vendor:sentry", "kind": "uses",
+    "evidence": "package.json:20", "signal": "pkg", "confidence": "extracted"},
+   {"from": "repo:api", "to": "vendor:twilio", "kind": "uses",
+    "evidence": ".env.example:3", "signal": "env", "confidence": "extracted"}]}
+JSON
+echo '[]' >"$DIR/map/repos.json"
+# A reading from before `orgami dns` kept unowned domains apart: no
+# `unverified` field, and the origin that says the domains came off host nodes.
+cat >"$DIR/map/dns.json" <<JSON
+{"company": "acme", "org": "acme", "generated_epoch": $(date -u +%s),
+ "origin": "the host nodes in map/graph.json", "domains": ["azure.com"],
+ "vendors": [{"id": "microsoft365", "name": "Microsoft 365", "category": "workspace",
+              "portal": "", "flags": [], "domains": ["azure.com"], "signals": ["txt"],
+              "evidence": [{"domain": "azure.com", "signal": "txt",
+                            "at": "TXT azure.com \"MS=ms123\" (dig 2026-11-01)"}]}]}
+JSON
+artifact="$DIR/map/advise.json"
+advise_compute "$artifact" 180
+
+assert "an orphan resting on a hostname alone is medium confidence" medium \
+  '[.proposals[] | select(.id == "orphan-vendor:gcp@legacy")][0].confidence'
+assert "and its claim calls it a mention" true \
+  '[.proposals[] | select(.id == "orphan-vendor:gcp@legacy")][0].claim | test("only by a hostname")'
+assert "an orphan resting on a package is still high" high \
+  '[.proposals[] | select(.id == "orphan-vendor:sentry@legacy")][0].confidence'
+assert "a ghost names only the manifests the scan read" true \
+  '[.proposals[] | select(.id == "ghost-env-var:twilio@api")][0].claim
+   | test("no package manifest the scan read")'
+assert "a domain taken off a host node is not an account of the org's" 0 \
+  '[.proposals[] | select(.vendors | index("microsoft365"))] | length'
+assert "and is not counted as a vendor DNS found" 0 '.counts.vendors_from_dns'
+assert "it is named under excluded instead" "azure.com Microsoft 365" \
+  '.excluded.dns_unverified[0] | "\(.domain) \(.names | join(","))"'
+assert "and the reading reports it apart from the org's own domains" "0 azure.com" \
+  '"\(.dns.domains | length) \(.dns.unverified | join(","))"'
+hosts_page=$(advise_render "$artifact" 0)
+grep -qF "Domains not known to be the organization's" <<<"$hosts_page" ||
+  { echo "FAIL: the report does not say which DNS records it left out" >&2; fail=1; }
+grep -qF 'Microsoft 365 has an account' <<<"$hosts_page" &&
+  { echo "FAIL: the report claims an account on a domain nobody said is the org's" >&2; fail=1; }
+
+# The shape `orgami dns` writes now: owned domains in `vendors`, the fallback's
+# finds in `unverified_vendors`, and the domains behind them in `unverified`.
+cat >"$DIR/map/dns.json" <<JSON
+{"company": "acme", "org": "acme", "generated_epoch": $(date -u +%s),
+ "origin": "the website on the acme GitHub profile",
+ "domains": ["acme.com", "partner.fr"], "unverified": ["partner.fr"],
+ "vendors": [{"id": "google-workspace", "name": "Google Workspace", "category": "workspace",
+              "portal": "", "flags": [], "domains": ["acme.com"], "signals": ["mx"],
+              "evidence": [{"domain": "acme.com", "signal": "mx",
+                            "at": "MX acme.com \"1 aspmx.l.google.com.\" (dig 2026-11-01)"}]}],
+ "unverified_vendors": [{"id": "microsoft365", "name": "Microsoft 365", "category": "workspace",
+              "portal": "", "flags": [], "domains": ["partner.fr"], "signals": ["txt"],
+              "evidence": [{"domain": "partner.fr", "signal": "txt",
+                            "at": "TXT partner.fr \"MS=ms123\" (dig 2026-11-01)"}]}]}
+JSON
+advise_compute "$artifact" 180
+assert "a record on an owned domain is still an account" 1 \
+  '[.proposals[] | select(.id == "dns-only-vendor:google-workspace")] | length'
+assert "one on an unverified domain is not, and makes no workspace duplicate" 0 \
+  '[.proposals[] | select(.vendors | index("microsoft365"))] | length'
+assert "the reading splits owned from unverified" "acme.com partner.fr" \
+  '"\(.dns.domains | join(",")) \(.dns.unverified | join(","))"'
+
 if [[ $fail -eq 0 ]]; then
   echo "advise: every proposal carries its file:line, ids hold still, a rejection sticks, and the record keeps score"
 else

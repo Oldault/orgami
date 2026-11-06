@@ -149,4 +149,42 @@ grep -q 'broken-fetcher' <<<"$(playbook_brief scraphome)" ||
 [[ -z $(playbook_brief WinIt-backend) ]] ||
   fail "a repo with no playbook must add nothing to the brief"
 
-echo "playbook: instances counted, one instance refused, the same job matched"
+# --- when the model gets called, and who waits for it -------------------------
+# Writing a playbook is a model call that sends the notes and pull request
+# bodies to Claude. A note that completes a topic starts it detached, after
+# saying so; nobody at the prompt waits on it.
+
+playbook_due scraphome new-endpoint && fail "one instance should not make a playbook due"
+touch -t 202001010000 "$(playbook_file scraphome broken-fetcher)"
+playbook_due scraphome broken-fetcher || fail "a note newer than the playbook should make it due"
+touch "$(playbook_file scraphome broken-fetcher)"
+playbook_due scraphome broken-fetcher && fail "a playbook newer than every note is not due"
+rm -f "$(playbook_file scraphome broken-fetcher)"
+playbook_due scraphome broken-fetcher || fail "two instances and no playbook should be due"
+
+echo '{"org": "acme", "report_model": "claude-test"}' >"$DIR/config.json"
+mkdir -p "$fixture/bin"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$fixture/bin/claude"
+# Stands in for bin/orgami in the detached child: records what it was asked to
+# do, then takes long enough that a caller waiting on it would show.
+cat >"$fixture/bin/orgami" <<'STUB'
+#!/usr/bin/env bash
+sleep 2
+echo "$ORGAMI_COMPANY $*" >"$SPAWNED.tmp"
+mv "$SPAWNED.tmp" "$SPAWNED"
+STUB
+chmod +x "$fixture/bin/claude" "$fixture/bin/orgami"
+export SPAWNED="$fixture/spawned"
+started=$SECONDS
+said=$(PATH="$fixture/bin:$PATH" ORGAMI_BIN="$fixture/bin/orgami" playbook_spawn scraphome broken-fetcher 2>&1) ||
+  fail "playbook_spawn started nothing for a due playbook"
+[[ $((SECONDS - started)) -lt 2 ]] || fail "playbook_spawn waited on the playbook instead of detaching"
+grep -q 'in the background with claude-test' <<<"$said" || fail "playbook_spawn did not say a model call is starting: $said"
+grep -q 'to Claude' <<<"$said" || fail "playbook_spawn did not say what leaves the machine: $said"
+for _ in $(seq 1 50); do [[ -f $SPAWNED ]] && break; sleep 0.1; done
+[[ $(cat "$SPAWNED" 2>/dev/null) == "acme playbook scraphome --topic broken-fetcher" ]] ||
+  fail "the detached run was not 'orgami playbook scraphome --topic broken-fetcher' for acme: $(cat "$SPAWNED" 2>/dev/null)"
+PATH="$fixture/bin:$PATH" ORGAMI_BIN="$fixture/bin/orgami" playbook_spawn scraphome new-endpoint 2>/dev/null &&
+  fail "playbook_spawn started a run for a topic that is not due"
+
+echo "playbook: instances counted, one instance refused, the same job matched, the model call detached and announced"

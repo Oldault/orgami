@@ -73,7 +73,10 @@ def replaced($all):
 # draw one as the other.
 def playbook_parts:
   . as $t
-  | (index("\n## What this was written from") // ($t | length)) as $cut
+  # A match offset, not index(): jq before 1.8 gives index() on a string in
+  # bytes and slices in characters, so every em dash in the prose moved the
+  # cut two characters into the heading below it.
+  | (first(match("\n## What this was written from") | .offset) // ($t | length)) as $cut
   | ($t[:$cut]
      | sub("^# [^\n]*\n"; "")
      | sub("<sub>[^<]*</sub>"; "")
@@ -114,6 +117,7 @@ def runbook_tags:
 | (.runbooks // []) as $runbooks
 | (.pages // []) as $pages
 | ([ (.map.graph.nodes // [])[] | select(.kind == "repo") | .name ]) as $repo_names
+| (.map.graph.generated // null) as $scanned
 
 # notes: the ones still standing, newest first, each carrying what it replaced;
 # the archived ones apart, reachable but not listed.
@@ -201,7 +205,18 @@ def runbook_tags:
         sections: [ .text | split("\n")[] | select(startswith("## ")) | .[3:] ],
         text} ]
    | sort_by(.repo)) as $rlist
-| {generated: ([ $rlist[] | .scan | select(. != null) | . + "T00:00:00Z" ] | newest),
+# A runbook is read when `orgami doc` writes it, with that moment's notes in
+# it, so its age is the newest file's write time (lib/web.sh, `written`). The
+# text carries only the day of the scan it was derived from: without a write
+# time, read as midnight, a runbook written an hour ago is "read 17 hours ago".
+# So that day is the fallback, as the full timestamp of the scan graph.json
+# holds when it is that scan, and the day alone when it is an older one.
+| ([ $runbooks[] | .written | select(type == "string") ] | newest) as $rwritten
+| ([ $rlist[] | .scan | select(. != null) ] | newest) as $rscan
+| {generated: (if $rwritten != null then $rwritten
+               elif $rscan == null then null
+               elif ($scanned | type) == "string" and $scanned[0:10] == $rscan then $scanned
+               else $rscan + "T00:00:00Z" end),
    command: "orgami doc",
    list: $rlist,
    tags: runbook_tags,

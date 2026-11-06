@@ -59,29 +59,17 @@ web_texts() {
 # things the page needs that `notes_index` drops: the archived ones, and which
 # note superseded which. Tags come out as an array.
 web_notes() {
-  local f
-  {
-    for f in "$DIR"/notes/*.md "$DIR"/notes/archive/*.md; do
-      [[ -f $f ]] || continue
-      awk -v file="${f#"$DIR"/}" '
-        BEGIN { inmeta = 0; body = "" }
-        NR == 1 && $0 == "---" { inmeta = 1; next }
-        inmeta && $0 == "---" { inmeta = 0; next }
-        inmeta {
-          key = $0; sub(/:.*/, "", key)
-          val = $0; sub(/^[^:]*:[ ]*/, "", val)
-          meta[key] = val
-          next
-        }
-        { body = body $0 "\n" }
-        END {
-          gsub(/\\/, "\\\\", body); gsub(/"/, "\\\"", body); gsub(/\n/, "\\n", body)
-          printf "{\"id\":\"%s\",\"author\":\"%s\",\"date\":\"%s\",\"repo\":\"%s\",\"tags\":\"%s\",\"topic\":\"%s\",\"supersedes\":\"%s\",\"file\":\"%s\",\"body\":\"%s\"}\n",
-            meta["id"], meta["author"], meta["date"], meta["repo"], meta["tags"], meta["topic"], meta["supersedes"], file, body
-        }' "$f"
-    done
-  } | LC_ALL=C jq -s '
-    map(.tags = (.tags | gsub("[\\[\\] ]"; "") | split(",") | map(select(. != "")))
+  local f files=()
+  for f in "$DIR"/notes/*.md "$DIR"/notes/archive/*.md; do
+    [[ -f $f ]] && files+=("$f")
+  done
+  # notes_parse reads each file with jq --rawfile, so a tab, a quote or a
+  # control character in one note cannot break the JSON for every note, which
+  # a hand-built printf did.
+  declare -F notes_parse >/dev/null || source "$ROOT/lib/notes.sh"
+  notes_parse ${files[@]+"${files[@]}"} | LC_ALL=C jq -s --arg d "$DIR/" '
+    map(.file |= ltrimstr($d))
+    | map(.tags = (.tags | gsub("[\\[\\] ]"; "") | split(",") | map(select(. != "")))
         | .archived = (.file | startswith("notes/archive/"))
         | .body = (.body | sub("\\n+$"; "")))
     | (map(select(.supersedes != "") | {key: .supersedes, value: .id}) | from_entries) as $by
@@ -159,8 +147,21 @@ web_sources() {
   web_texts "${md[@]:-}" >"$decisions"
   md=(); for f in "$DIR"/map/playbooks/*.md; do [[ -f $f ]] && md+=("map/playbooks/$(basename "$f")"); done
   web_texts "${md[@]:-}" >"$playbooks"
-  md=(); for f in "$DIR"/map/runbooks/*.md; do [[ -f $f ]] && md+=("map/runbooks/$(basename "$f")"); done
-  web_texts "${md[@]:-}" >"$runbooks"
+  # One runbook per repository, named after it, so the .github repository's is
+  # .github.md: a glob without the dotfile pattern drops it from the count.
+  md=(); for f in "$DIR"/map/runbooks/*.md "$DIR"/map/runbooks/.*.md; do [[ -f $f ]] && md+=("map/runbooks/$(basename "$f")"); done
+  # And when each was written. A runbook names only the day of the scan it was
+  # derived from, but `orgami doc` writes it again with today's notes in it, so
+  # the scan's day put a page written a minute ago at "read 17 hours ago". The
+  # file's own time is when the page the reader sees was made.
+  local written
+  written=$(mktemp)
+  for f in ${md[@]+"${md[@]}"}; do printf '%s\t%s\n' "$f" "$(file_mtime "$DIR/$f")"; done >"$written"
+  web_texts "${md[@]:-}" | jq --rawfile w "$written" '
+    ([$w | split("\n")[] | select(. != "") | split("\t")
+      | {key: .[0], value: (.[1] | tonumber)}] | from_entries) as $at
+    | map(. + {written: (($at[.file] // 0) | if . > 0 then todate else null end)})' >"$runbooks"
+  rm -f "$written"
   md=(); for f in "$DIR"/reports/*.md; do [[ -f $f ]] && md+=("reports/$(basename "$f")"); done
   web_texts "${md[@]:-}" >"$reports"
   md=(); for f in "$DIR"/reports/daily/*.md; do [[ -f $f ]] && md+=("reports/daily/$(basename "$f")"); done

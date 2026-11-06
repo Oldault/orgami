@@ -139,11 +139,31 @@ ui_create_docs_repo() {
   done
 }
 
+# ui_ask_exclude — which repos to skip, as a JSON array of patterns on stdout.
+# The same check init runs on --exclude: scan refuses a pattern jq cannot
+# compile, so a glob typed here would save a config no scan can use.
+ui_ask_exclude() {
+  local exclude="[]" patterns bad
+  if gum confirm --default=no "Skip some repositories?" --affirmative "yes" --negative "no"; then
+    while :; do
+      patterns=$(gum input --prompt "skip repos matching: " \
+        --placeholder "archived-, -sandbox, ^test") || true
+      exclude="[]"
+      [[ -n $patterns ]] && exclude=$(jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(. != ""))' <<<"$patterns")
+      bad=$(exclude_bad "$exclude")
+      [[ -z $bad ]] && break
+      gum style --foreground 1 "${bad%%$'\n'*} is not a regular expression — write '-infra\$' rather than '*-infra'" >&2
+      gum confirm "Try again?" || return 1
+    done
+  fi
+  echo "$exclude"
+}
+
 cmd_setup() {
   need_tty "pass it as flags: $INIT_USAGE"
   ui_need_gum || return 1
   need gh
-  gh auth status >/dev/null 2>&1 || die "gh is not signed in — run: gh auth login"
+  gh_auth_check
 
   echo
   ui_title "Add an org to orgami"
@@ -200,12 +220,8 @@ cmd_setup() {
     docs_path=$(gum input --prompt "path inside that repo: " --value "orgami") || return 1
   fi
 
-  local exclude="[]" patterns
-  if gum confirm --default=no "Skip some repositories?" --affirmative "yes" --negative "no"; then
-    patterns=$(gum input --prompt "skip repos matching: " \
-      --placeholder "archived-, -sandbox, ^test") || true
-    [[ -n $patterns ]] && exclude=$(jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(. != ""))' <<<"$patterns")
-  fi
+  local exclude
+  exclude=$(ui_ask_exclude) || return 1
 
   local model
   model=$(gum choose --header "Which model writes the recap?" \
@@ -257,7 +273,7 @@ cmd_setup() {
     if [[ ${prs:-0} -eq 0 ]]; then
       week=$(date_fmt "$(week_start 1)" %G-W%V)
       gum spin --spinner dot --title "nothing merged yet this week — fetching $week…" -- \
-        "$ORGAMI_BIN" pull --last 1 || true
+        "$ORGAMI_BIN" pull --weeks-ago 1 || true
     fi
     if ! command -v claude >/dev/null; then
       gum style --foreground 3 "no recap — claude is not on PATH; install Claude Code, then: orgami report --week $week"

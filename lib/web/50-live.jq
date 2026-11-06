@@ -100,7 +100,7 @@ def tool_provider($tools; $repo):
     | {signal, domain, at, vendor: {id: $v.id, name: $v.name, category: $v.category}}]
    | group_by(.signal + " " + .domain + " " + .at)
    | map({signal: .[0].signal, domain: .[0].domain, at: .[0].at,
-          dig: ((.[0].at | capture("\\(dig (?<d>[0-9]{4}-[0-9]{2}-[0-9]{2})\\)")?.d) // null),
+          dig: ((.[0].at | (capture("\\(dig (?<d>[0-9]{4}-[0-9]{2}-[0-9]{2})\\)")? // {}).d) // null),
           vendors: (map(.vendor) | unique_by(.id))})) as $records
 | (["txt", "mx", "spf", "dmarc", "cname", "ns"]) as $kind_order
 | ([$kind_order[] as $k

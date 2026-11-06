@@ -25,6 +25,8 @@ def route_of:
 | (.playbooks // []) as $playbooks
 | if $repos == null then {generated: null, missing: "orgami scan"} else
   ($g.edges // []) as $edges
+  | (reduce (($g.nodes // [])[] | select(.kind == "vendor")) as $n ({};
+       .[$n.id | tostring] = ($n.name // ($n.id | tostring | bare)))) as $vn
   | [ $repos[]
       | .name as $r
       | ("repo:" + $r) as $id
@@ -70,9 +72,26 @@ def route_of:
          edges: $links,
          edge_count: ($links | length),
          deploys_to: [ $links[] | select(.kind == "deploys-to" and .dir == "out") ],
+         # Split as the card splits them (lib/card.sh): a tool: edge is how the
+         # repo is deployed, a vendor: edge is a bill it runs up, named by node
+         # name. A vendor that is also a tool here is said once, as a tool.
+         deployed_with: ([ $links[] | select(.kind == "uses" and .dir == "out" and .peer_kind == "tool") | .peer ]
+                         | unique),
+         vendors: ([ $links[] | select(.kind == "uses" and .dir == "out" and .peer_kind == "vendor") ] as $v
+                   | ([ $links[] | select(.kind == "uses" and .dir == "out" and .peer_kind == "tool") | .peer ]) as $t
+                   | [ $v[] | select(.peer | IN($t[]) | not) ]
+                   | group_by(.peer)
+                   | map({id: .[0].peer, name: ($vn["vendor:" + .[0].peer] // .[0].peer), evidence: .[0].evidence})
+                   | sort_by(.name | ascii_downcase)),
+         routes_total: ([ (.routes_total // 0), ((.routes // []) | length) ] | max),
+         env_total: ([ (.env_total // 0), ((.env // []) | length) ] | max),
+         agent_doc_aliases: (.agent_doc_aliases // {}),
          live: [ ($live.deployments // [])[] | select(.repo == $r) ],
          coupling: ([ ($c.pairs // [])[]
                       | select(.a == $r or .b == $r)
+                      # Not `.stable // true`: `false // true` is true in jq.
+                      # A pair without the field predates it and is shown.
+                      | select(.stable != false)
                       | {other: (if .a == $r then .b else .a end), weeks, days, authors: (.authors // [])} ]
                     | sort_by(-.days, -.weeks, .other)),
          notes: [ $notes[] | select(.repo == $r)

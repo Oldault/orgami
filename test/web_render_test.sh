@@ -27,6 +27,9 @@ trap 'rm -rf "$scratch"' EXIT
 # the repository.
 cp -r test/fixtures/company "$scratch/acme"
 DIR="$scratch/acme"
+# A runbook's age is its file's write time, and a copy is written now: pin it,
+# so the page says the same thing on every run.
+TZ=UTC touch -t 202608180612.40 "$DIR"/map/runbooks/*.md
 # shellcheck disable=SC2034  # COMPANY and ORG are read by web_render, not by this test
 COMPANY="Ac<me> & Co"
 # shellcheck disable=SC2034
@@ -374,6 +377,20 @@ check "repos: the runbook and the playbooks are found by the repo's name" \
 check "repos: a section with nothing in it has nothing to draw" \
   "$(jq -r '.views.repos.repos[] | select(.name == "docs-site") | [(.env | length), (.notes | length), (.coupling | length), (.live | length), (.runbook == null)] | join(" ")' <<<"$data")" \
   "0 0 0 0 true"
+# The repo page is what the card prints, as data: a tool: edge is how it is
+# deployed and a vendor: edge a vendor by name, aws said once; the capped
+# lists carry their totals; a coupling pair that is not stable is not shown.
+repo_in='{map: {repos: [{name: "api", routes: ["a.ts:1 GET /x"], routes_total: 9, env: ["A"], env_total: 70, agent_doc_aliases: {"CLAUDE.md": "AGENTS.md"}}, {name: "web"}, {name: "ops"}],
+  graph: {nodes: [{id: "vendor:aws", kind: "vendor", name: "Amazon Web Services"}, {id: "vendor:stripe", kind: "vendor", name: "Stripe"}],
+          edges: [{from: "repo:api", to: "tool:aws", kind: "uses", evidence: "fly.toml"},
+                  {from: "repo:api", to: "vendor:aws", kind: "uses", evidence: "package.json:3"},
+                  {from: "repo:api", to: "vendor:stripe", kind: "uses", evidence: "package.json:4"}]},
+  coupling: {pairs: [{a: "api", b: "web", weeks: 3, days: 4, authors: ["a", "b"], stable: true},
+                     {a: "api", b: "ops", weeks: 1, days: 1, authors: ["a"], stable: false}]}}}'
+check "repos: deployed with, vendors by name, totals, aliases and stable coupling only" \
+  "$(jq -n "$repo_in" | jq -L lib -c -f lib/web/30-repos.jq \
+      | jq -r '.repos[] | select(.name == "api") | [(.deployed_with | join(",")), (.vendors | map(.name + "@" + .evidence) | join(",")), .routes_total, .env_total, .agent_doc_aliases["CLAUDE.md"], (.coupling | map(.other) | join(","))] | join(" ")')" \
+  "aws Stripe@package.json:4 9 70 AGENTS.md web"
 # The live view (lib/web/50-live.*): deployed vs configured, and the DNS
 # reading. The two diffs carry evidence, and the figures are jq's.
 live=$(jq -c '.views.live' <<<"$data")
@@ -482,7 +499,30 @@ DIR="$scratch/acme"
 memory=$(jq -c '.views.memory' <<<"$data")
 check "memory: each of the four sources says how old it is and what refreshes it" \
   "$(jq -r '[.generated, .sources.notes.generated, .sources.notes.command, .sources.decisions.generated, .sources.decisions.command, .sources.playbooks.command, .sources.runbooks.generated, .sources.runbooks.command] | join(" ")' <<<"$memory")" \
-  "2026-08-18T00:00:00Z 2026-08-05T16:30:00Z orgami note 2026-08-16T00:00:00Z orgami report orgami playbook <repo> --topic <topic> 2026-08-18T00:00:00Z orgami doc"
+  "2026-08-18T06:12:40Z 2026-08-05T16:30:00Z orgami note 2026-08-16T00:00:00Z orgami report orgami playbook <repo> --topic <topic> 2026-08-18T06:12:40Z orgami doc"
+# A runbook rendered from an older scan keeps that scan's day, and the
+# runbooks of a repo named .github are read: a glob would skip the dot file.
+check "memory: a runbook from an older scan keeps its own day" \
+  "$(jq -n '{map: {graph: {generated: "2026-08-20T09:00:00Z"}}, runbooks: [{file: "map/runbooks/api.md", text: "# api\n\n<sub>Derived from the scan of 2026-08-18. Nothing here was written by a model.</sub>"}]}' \
+      | jq -L lib -r --arg dir "$DIR" --arg company acme --arg org acme-inc -f lib/web/70-memory.jq \
+      | jq -r '.sources.runbooks.generated')" \
+  "2026-08-18T00:00:00Z"
+check "memory: a runbook written after its scan reads as written, not as scanned" \
+  "$(jq -n '{map: {graph: {generated: "2026-08-18T06:12:40Z"}}, runbooks: [{file: "map/runbooks/api.md", written: "2026-08-19T10:00:00Z", text: "# api\n\n<sub>Derived from the scan of 2026-08-18. Nothing here was written by a model.</sub>"}]}' \
+      | jq -L lib -r --arg dir "$DIR" --arg company acme --arg org acme-inc -f lib/web/70-memory.jq \
+      | jq -r '.sources.runbooks.generated')" \
+  "2026-08-19T10:00:00Z"
+dotdir="$scratch/dotdir"
+mkdir -p "$dotdir/map/runbooks"
+printf '# .github\n' >"$dotdir/map/runbooks/.github.md"
+printf '# api\n' >"$dotdir/map/runbooks/api.md"
+check "memory: the .github runbook is read beside the others" \
+  "$(DIR=$dotdir web_sources 2>/dev/null | jq -c '[.runbooks[].file]')" \
+  '["map/runbooks/.github.md","map/runbooks/api.md"]'
+TZ=UTC touch -t 202608191000.00 "$dotdir/map/runbooks/api.md"
+check "memory: each runbook carries its file's write time" \
+  "$(DIR=$dotdir web_sources 2>/dev/null | jq -r '.runbooks[] | select(.file == "map/runbooks/api.md") | .written')" \
+  "2026-08-19T10:00:00Z"
 check "memory: the figures are computed in jq" \
   "$(jq -r '[.counts.notes, .counts.decisions, .counts.playbooks, .counts.runbooks, .notes.counts.replaced, .notes.counts.archived, .notes.counts.answers, .decisions.counts.linked, .playbooks.counts.instances, .playbooks.counts.todos] | join(" ")' <<<"$memory")" \
   "5 2 1 1 1 1 1 2 2 1"

@@ -85,4 +85,10 @@ check "every edge carries one" \
 check "the company name is escaped into the page" \
   "$(grep -c 'Ac&lt;me&gt; &amp; Co' "$page")" "2"
 
+# The logo is drawn at 32 px. Embedding the 1254 px original and a favicon
+# wrapping it made 1.5 MB of every page base64; the cut-down pair is ~11 KB.
+check "the logo and favicon embedded cost under 20 KB" \
+  "$(grep -o 'base64,[A-Za-z0-9+/=]*' "$page" | wc -c | awk '{print ($1 < 20000) ? "small" : $1}')" "small"
+check "both are still there" "$(grep -o 'base64,' "$page" | wc -l | tr -d ' ')" "2"
+
 exit "$fail"

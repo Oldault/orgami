@@ -147,11 +147,19 @@ advise_render() {
         + " \(.counts.vendors_from_dns) in public DNS"
         + (if .counts.vendors_from_both > 0
            then ", and \(.counts.vendors_from_both) in both" else "" end)
-        + ". The DNS reading covers \(.dns.domains | join(", "))"
+        + (if (.dns.domains | length) > 0
+           then ". The DNS reading covers \(.dns.domains | join(", "))"
+           else ". The DNS reading covers no domain known to be the organization'"'"'s"
+           end)
         + (if .dns.age_days == null then ""
            else " and is \(.dns.age_days) day" + (if .dns.age_days == 1 then "" else "s" end) + " old"
            end)
         + "."
+        + (if ((.dns.unverified // []) | length) > 0
+           then " It also read \(.dns.unverified | join(", ")), taken from hosts the code"
+                + " calls and not known to be the organization'"'"'s, so those records are"
+                + " left out below."
+           else "" end)
         + (if .dns.stale
            then " That is past \(.dns.stale_days) days — re-run `orgami dns` before acting on it."
            else "" end)
@@ -247,17 +255,17 @@ EOF
         | .[]' "$a"
     fi
 
-    # What the rules matched and chose not to say. Two of them hold back where
-    # their premise does not hold, and a rule that silently deletes a finding is
-    # a rule nobody can disagree with — so the section names what was withheld
+    # What the rules matched and chose not to say. They hold back where their
+    # premise does not hold, and a rule that silently deletes a finding is a
+    # rule nobody can disagree with — so the section names what was withheld
     # and where the policy that withheld it lives. It disappears when there is
     # nothing to report, like every other generated section.
     if [[ $(jq -r '.counts.excluded' "$a") -gt 0 ]]; then
       echo "## Not proposed, on purpose"
       echo
       cat <<'EOF'
-Two rules matched more than they said. Both restraints are policy, both are
-written down, and both are here rather than left as an absence — a proposal
+The rules matched more than they said. Each restraint is policy, each is
+written down, and each is here rather than left as an absence — a proposal
 withheld quietly is one nobody can argue with.
 EOF
       echo
@@ -288,6 +296,20 @@ EOF
                | "- **\(.[0].name)** in "
                  + (if length == 1 then "1 repository" else "\(length) repositories"
                     end) + " — " + ([.[] | "`\(.id)`"] | join(", "))' "$a"
+        echo
+      fi
+      if [[ $(jq -r '(.excluded.dns_unverified // []) | length' "$a") -gt 0 ]]; then
+        cat <<'EOF'
+**Domains not known to be the organization's.** With no domains list in the
+config and no website on the GitHub profile, `orgami dns` reads the hosts the
+code calls. Those are as often a partner's API or a vendor's endpoint, and a
+verification token on azure.com is Microsoft's account, not this
+organization's. Their records are not counted as accounts here. Name the
+organization's own domains with `orgami dns --domain`. Held back here:
+EOF
+        echo
+        jq -r '.excluded.dns_unverified[]
+               | "- **\(.domain)** — \(.names | join(", "))"' "$a"
         echo
       fi
     fi

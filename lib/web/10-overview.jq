@@ -25,8 +25,8 @@
 # nobody reruns weekly. The page compares it to the reader's clock, never to a
 # date written here (rule 7), and says "over" past the limit and "twice over"
 # past two of them.
-| def reading($id; $label; $file; $gen; $cmd; $present; $limit):
-    {id: $id, label: $label, file: $file, command: $cmd, present: $present,
+| def reading($id; $name; $file; $gen; $cmd; $present; $limit):
+    {id: $id, label: $name, file: $file, command: $cmd, present: $present,
      generated: (if $present then $gen else null end),
      stale_after_days: $limit,
      stale: ($present and $gen != null and $mapped != null and $gen < $mapped)};

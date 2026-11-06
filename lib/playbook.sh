@@ -267,24 +267,57 @@ playbook_index() {
   return 0
 }
 
-# Called after a pattern note is written, by hand or by the session reader.
-# Builds the playbook the moment the topic has enough instances to have one, and
-# rebuilds it when a newer instance has overtaken what is on disk. Silent, and
-# never fatal — this runs behind other work.
-playbook_maybe() {
-  local repo=$1 topic=$2 out newest
-  [[ -n $repo && -n $topic ]] || return 0
+# playbook_due <repo> <topic> — succeeds when the playbook should be written
+# now, which is the moment a model gets called: the topic has enough instances
+# and no playbook yet, or a newer instance has overtaken the one on disk.
+playbook_due() {
+  local repo=$1 topic=$2 out newest n
+  [[ -n $repo && -n $topic ]] || return 1
   out=$(playbook_file "$repo" "$topic")
 
   if [[ -f $out ]]; then
     newest=$(notes_index 2>/dev/null | jq -r --arg r "$repo" --arg t "$topic" '
       [.[] | select(.repo == $r) | select(.topic == $t) | .file] | .[0] // ""' 2>/dev/null)
-    [[ -n $newest && -f $newest ]] || return 0
-    [[ $newest -nt $out ]] || return 0
+    [[ -n $newest && -f $newest ]] || return 1
+    [[ $newest -nt $out ]] || return 1
+  else
+    n=$(playbook_instance_count "$repo" "$topic")
+    [[ ${n:-0} -ge $PLAYBOOK_MIN_INSTANCES ]] || return 1
   fi
+  return 0
+}
+
+# Called after a pattern note is written by the session reader, which already
+# runs detached. Builds the playbook when it is due. Silent, and never fatal —
+# this runs behind other work.
+playbook_maybe() {
+  local repo=$1 topic=$2
+  playbook_due "$repo" "$topic" || return 0
 
   playbook_write "$repo" "$topic" >/dev/null 2>&1 || return 0
   playbook_index >/dev/null 2>&1 || true
+  return 0
+}
+
+# playbook_spawn <repo> <topic> — the same, for someone who just typed a note
+# and is waiting on the prompt. Writing a playbook is a model call that takes
+# tens of seconds and sends the topic's notes and the matching pull requests'
+# titles and bodies to Claude, so it runs detached and is announced first,
+# never done silently on the caller's clock. Fails when nothing was started.
+playbook_spawn() {
+  local repo=$1 topic=$2 n model logfile
+  playbook_due "$repo" "$topic" || return 1
+  n=$(playbook_instance_count "$repo" "$topic")
+  if ! command -v claude >/dev/null; then
+    log "playbook: $repo/$topic has $n instances, enough for a playbook — with claude on PATH, run: orgami playbook $repo --topic $topic"
+    return 1
+  fi
+  model=$(cfg playbook_model "$(cfg report_model claude-opus-5)")
+  logfile="$DIR/cache/playbook.log"
+  mkdir -p "$DIR/cache"
+  log "playbook: $repo/$topic has $n instances — writing its playbook in the background with $model."
+  log "  That sends these notes and the matching pull requests' titles and bodies to Claude. Progress: $logfile"
+  detach "$logfile" env ORGAMI_COMPANY="$COMPANY" "${ORGAMI_BIN:-$ROOT/bin/orgami}" playbook "$repo" --topic "$topic"
   return 0
 }
 

@@ -65,7 +65,21 @@ cmd_report() {
 
   [[ -n $week ]] || week=$(iso_week)
   local src="$DIR/cache/prs/$week.json"
-  [[ -f $src ]] || die "no cache for $week — run: orgami pull"
+  if [[ ! -f $src ]]; then
+    # Naming the way out: a bare "run: orgami pull" fetches only this week,
+    # which is not the week that was asked for or already cached.
+    # A glob, not `ls`: under errexit an `ls` that matches nothing ends the
+    # run before either message below is printed.
+    local have="" f
+    for f in "$DIR"/cache/prs/*.json; do
+      [[ -f $f && $f != *.stats.json ]] || continue
+      f=${f##*/}
+      have+="${f%.json} "
+    done
+    [[ -z $have ]] ||
+      die "no cache for $week — cached: ${have% } — use: orgami report --week <one of them>, or: orgami pull --weeks-ago N"
+    die "no cache for $week — run: orgami pull --last 1"
+  fi
 
   local count
   count=$(jq '.prs | length' "$src")
@@ -120,7 +134,8 @@ cmd_report() {
     rm -f "$digest"
     die "the model call did not complete — no recap written. Check that claude is authenticated, then: orgami report --week $week"
   fi
-  linkify_prs "$ORG" "$DIR/map/graph.json" <<<"$recap" >"$out.body"
+  plain_stat_keys "$stats" <<<"$recap" |
+    linkify_prs "$ORG" "$DIR/map/graph.json" >"$out.body"
 
   report_decisions "$week" "$digest" "$model"
   rm -f "$digest"
