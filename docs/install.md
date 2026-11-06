@@ -159,11 +159,11 @@ The one-line install follows `main`, and so does auto-update. To hold a team on
 a release you have read, fetch the installer from that tag and tell it the tag:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/v1.3.0/bootstrap.sh | ORGAMI_REF=v1.3.0 bash
+curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/v1.3.1/bootstrap.sh | ORGAMI_REF=v1.3.1 bash
 ```
 
 ```powershell
-$env:ORGAMI_REF = 'v1.3.0'; irm https://raw.githubusercontent.com/Oldault/orgami/v1.3.0/bootstrap.ps1 | iex
+$env:ORGAMI_REF = 'v1.3.1'; irm https://raw.githubusercontent.com/Oldault/orgami/v1.3.1/bootstrap.ps1 | iex
 ```
 
 The script that runs and the code it installs both come from the tag. The clone

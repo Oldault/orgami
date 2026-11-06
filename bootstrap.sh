@@ -11,7 +11,7 @@
 #   --no-cursor    leave Cursor alone
 #   --path         add ~/.local/bin to PATH in your shell profile without asking
 #   --no-path      leave the shell profile alone, and print the line instead
-#   --ref=v1.3.0   install that release and hold it there (ORGAMI_REF does the same)
+#   --ref=v1.3.1   install that release and hold it there (ORGAMI_REF does the same)
 #
 # A pinned install is a tag checked out on its own, with no branch to follow, so
 # `orgami update` and the daily auto-update leave it alone. Running this again

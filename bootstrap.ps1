@@ -13,7 +13,7 @@
 # the flags of bootstrap.sh are set through the environment instead:
 #   $env:ORGAMI_CURSOR = '1'   wire Cursor without asking (--cursor)
 #   $env:ORGAMI_CURSOR = '0'   leave Cursor alone (--no-cursor)
-#   $env:ORGAMI_REF = 'v1.3.0'  install that release and hold it there (--ref)
+#   $env:ORGAMI_REF = 'v1.3.1'  install that release and hold it there (--ref)
 
 $ErrorActionPreference = 'Stop'
 
