@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # report/daily/autonote hardening, with stub claude and gh and no network:
 #   - report --stats-only works with no claude on PATH
+#   - with claude nowhere on PATH, report and daily die naming --stats-only
 #   - an error string returned with exit 0 is not written as the recap
 #   - model calls go through model_call (tools off, settings off)
 #   - STATS key names the model quotes are rewritten as words or figures
@@ -49,6 +50,30 @@ for state in empty stats-only missing; do
   out=$(ORGAMI_HOME="$other" ./bin/orgami report --week 2020-W01 --stats-only 2>&1) && fail "report with the cache $state did not fail"
   [[ $out == *"orgami pull --last 1"* ]] || fail "report with the cache $state does not say to pull: '$out'"
 done
+
+# A machine with no claude at all: every PATH entry holding one is dropped, so
+# the real install on a developer's machine cannot stand in for a stub. The
+# recap and the digest each die naming the claude CLI and the --stats-only
+# command that still works, and write nothing.
+noclaude=""
+IFS=: read -ra dirs <<<"$PATH"
+for d in "${dirs[@]}"; do
+  [[ -n $d && ! -x $d/claude ]] && noclaude+="${noclaude:+:}$d"
+done
+out=$(PATH=$noclaude ./bin/orgami report --week 2026-W34 2>&1) && fail "report without claude did not fail"
+[[ $out == *"claude CLI"* && $out == *"orgami report --week 2026-W34 --stats-only"* ]] ||
+  fail "report without claude does not name the claude CLI and --stats-only: '$out'"
+[[ ! -f $home/reports/2026-W34.md ]] || fail "report without claude wrote a recap"
+mkdir -p "$home/cache/daily"
+cp test/fixtures/day.json "$home/cache/daily/2026-05-14.json"
+printf '#!/bin/sh\nexit 0\n' >"$fixture/bin/gh"
+chmod +x "$fixture/bin/gh"
+out=$(PATH=$fixture/bin:$noclaude ./bin/orgami daily --date 2026-05-14 2>&1) && fail "daily without claude did not fail"
+[[ $out == *"claude CLI"* && $out == *"orgami daily --date 2026-05-14 --stats-only"* ]] ||
+  fail "daily without claude does not name the claude CLI and --stats-only: '$out'"
+[[ ! -e $home/reports/daily/2026-05-14.md ]] || fail "daily without claude wrote a digest"
+PATH=$fixture/bin:$noclaude ./bin/orgami daily --date 2026-05-14 --stats-only >/dev/null 2>&1 ||
+  fail "daily --stats-only needs claude"
 
 cat >"$fixture/bin/claude" <<'STUB'
 #!/usr/bin/env bash

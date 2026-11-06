@@ -53,10 +53,10 @@ cmd_report() {
   load_company
   need jq
 
-  local week="" model=""
+  local week="" model="" week_flag=""
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --week) need_arg "$1" $#; week=$2; shift 2 ;;
+      --week) need_arg "$1" $#; week=$2; week_flag=" --week $2"; shift 2 ;;
       --model) need_arg "$1" $#; model=$2; shift 2 ;;
       --stats-only) STATS_ONLY=1; shift ;;
       *) die "unknown flag: $1" ;;
@@ -93,6 +93,11 @@ cmd_report() {
     return
   fi
 
+  # Here and not at the top: --stats-only never calls the model, so it must
+  # work on a machine without claude. Before the digest, so a missing claude
+  # leaves no temp file behind.
+  need_claude "the weekly recap" "orgami report${week_flag} --stats-only"
+
   # Trim bodies and comments hard — the model needs intent, not diffs.
   local digest
   digest=$(mktemp)
@@ -111,9 +116,6 @@ cmd_report() {
                        | {path, note: (.bodyText // "" | .[0:200])}] | .[0:5]
       }]' "$src" >"$digest"
 
-  # Here and not at the top: --stats-only never calls the model, so it must
-  # work on a machine without claude.
-  need claude "the report narrative is written by Claude Code in headless mode"
   [[ -n $model ]] || model=$(cfg report_model claude-sonnet-5)
   local out="$DIR/reports/$week.md"
 

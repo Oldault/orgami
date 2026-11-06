@@ -202,6 +202,14 @@ need() {
   command -v "$1" >/dev/null || die "$1 is not on PATH${2:+ ($2)}"
 }
 
+# need_claude <what> <stats-only command> — for the prose half of a digest. The
+# figures never come from the model, so a machine with no claude still has them,
+# and the message says so before it says how to install the rest.
+need_claude() {
+  command -v claude >/dev/null && return 0
+  die "$1 is written by the claude CLI (Claude Code), which is not on PATH — the numbers alone, with no model: $2 — for the prose, install claude: curl -fsSL https://claude.ai/install.sh | bash"
+}
+
 # need_arg <flag> <argc> [message] — guard for `--flag) x=$2; shift 2` parse
 # arms. bin/orgami runs under `set -u`, so a value-taking flag typed as the
 # last argument reads an unset $2 and aborts with bash's own "unbound

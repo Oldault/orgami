@@ -126,7 +126,9 @@ cmd_daily() {
     return 0
   fi
 
-  need claude "the digest's prose is written by Claude Code in headless mode"
+  local date_flag=""
+  [[ $date == "$(date -u +%Y-%m-%d)" ]] || date_flag=" --date $date"
+  need_claude "the daily digest" "orgami daily${date_flag} --stats-only"
   [[ -n $model ]] || model=$(cfg report_model claude-sonnet-5)
 
   local body
