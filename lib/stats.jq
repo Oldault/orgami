@@ -32,6 +32,9 @@ def tally(f): map(f) | group_by(.) | map({key: .[0], count: length})
     # figure here is handed to a model that must not count, so the pair it is
     # given has to say which side of the split it is on.
     merged_by_people: ($prs | length),
+    # Every merged pull request, bots included: the figure GitHub's own search
+    # shows, and the one the pull line prints.
+    merged_total: ($all | length),
     merged_by_bots: ([$all[] | select(.author.login | is_bot)] | length),
     repos_touched: ($prs | map(.repository.name) | unique | length),
     by_repo: ($prs | tally(.repository.name)),

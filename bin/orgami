@@ -34,7 +34,7 @@ orgami — your organization's map, digests and memory, in your agent's context
   orgami init               map your organization
   orgami view               the map, the repos, the notes, the recaps
   orgami note "…"           record what nobody should rediscover
-  orgami context [repo]     what an agent is handed before it edits
+  orgami context [repo]     what an agent is handed before it edits; --org for the org
   orgami daily              what the org did today
   orgami report             this week's recap
   orgami scan               rebuild the map from every repo
@@ -54,6 +54,8 @@ orgami — your organization's map, digests and memory, in your agent's context
 Setup
   orgami init                           map an organization, step by step
   orgami init <name> --org <github-org> [--docs-repo <url>] [--docs-path <dir>]
+  orgami init <name> --org <github-org> --exclude <regex,…>
+                                        skip repos whose name matches: '-infra$', not '*-infra'
   orgami join                           pick up an org a colleague already mapped
   orgami join <name> --repo <url>       the same, without the questions
   orgami schedule [--daily] [--off]     run on systemd, launchd or cron
@@ -66,8 +68,8 @@ Setup
                                         remove what orgami installed on this machine
 
 The map
-  orgami scan [--only <repo>] [--depth N]
-                                        rebuild the map from every repo
+  orgami scan [--only <repo>] [--depth N] [--jobs N]
+                                        rebuild the map from every repo, one scan at a time
   orgami doc [--narrate]                render ARCHITECTURE.md and the repo cards
   orgami html                           the map as one page you can open
   orgami web [--open]                   the whole map as one page you can open
@@ -97,10 +99,11 @@ The map
                                         the figures recorded, or drop one
 
 Digests
-  orgami daily [--date D | --yesterday] [--stats-only]
-                                        what the org did in one day
-  orgami pull [--last N] [--since D --until D]
-                                        cache merged PRs for a week
+  orgami daily [--date D | --yesterday] [--model M] [--stats-only]
+                                        what the org did in one day (model: report_model)
+  orgami pull [--last N | --weeks-ago N] [--since D --until D]
+                                        cache merged PRs: --last N, this week and the N
+                                        before it; --weeks-ago N, only the week N back
   orgami report [--week YYYY-Www] [--model M] [--stats-only]
                                         write the weekly recap
   orgami latest [--week W] [--raw]      read the newest recap
@@ -114,6 +117,8 @@ Team memory
   orgami autonote [publish|drafts]      send notes out as written, or hold them
   orgami note-sweep                     read back sessions that never ended cleanly
   orgami drafts                         keep or drop notes and decisions written for you
+  orgami drafts [--list [--json] | --keep <id> | --drop <id> | --count]
+                                        the same with no terminal: list, then act by id
   orgami sync [--pr]                    exchange notes through the docs repo
   orgami sync --pull [--max-age MIN]    take what the team wrote, push nothing
   orgami autosync                       reconcile everything: pull, push, review, merge
@@ -125,13 +130,13 @@ Team memory
   orgami prune --superseded | --id <id> archive notes that have had their day
 
 Agents
-  orgami context [repo]                 everything an agent needs before editing
+  orgami context [repo | --org]         everything an agent needs before editing
   orgami agents [--cursor] [--all]      write the context into AGENTS.md / rules
   orgami agents --refresh [--workspace P]  rewrite every block under a workspace
   orgami agents --cursor-hook [--user]  Cursor injects it at every session start
   orgami agents --git-hook              refresh the block on merge and checkout
   orgami mcp                            serve the map over MCP, for any client
-  orgami mcp --config <client>          the config snippet for cursor, opencode, …
+  orgami mcp --config <client>          the config snippet for cursor, zed, vscode, …
 
 More than one organization
   orgami use <name>                     make it the default

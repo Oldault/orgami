@@ -211,6 +211,39 @@ need_arg() {
   [[ $2 -ge 2 ]] || die "${3:-$1 wants a value after it}"
 }
 
+# gh_auth_die <gh error text> — die with the next step when <text> is gh
+# failing to authenticate, and return when it is some other failure, which the
+# caller words itself. A token in GH_TOKEN or GITHUB_TOKEN wins over gh's
+# stored login, so when that token is the bad one `gh auth login` changes
+# nothing, and the message names the variable instead.
+gh_auth_die() {
+  local text=$1 var=""
+  if [[ -n ${GH_TOKEN:-} ]]; then var=GH_TOKEN; elif [[ -n ${GITHUB_TOKEN:-} ]]; then var=GITHUB_TOKEN; fi
+  case $text in
+    *"The token in "*" is invalid"* | *"Bad credentials"* | *"HTTP 401"*)
+      [[ -z $var ]] || die "GitHub rejected the token in $var — replace it, or unset $var to use gh's own login (gh auth login)"
+      die "GitHub rejected gh's stored token — run: gh auth login -h github.com" ;;
+    *"not logged into"* | *"gh auth login"*)
+      die "gh is not signed in — run: gh auth login" ;;
+  esac
+  return 0
+}
+
+# gh_auth_check — die, with the next step, unless gh can authenticate to
+# github.com. --active is gh 2.40 and later; an older gh refuses the flag and
+# is asked again without it.
+gh_auth_check() {
+  local st why
+  st=$(gh auth status --active -h github.com 2>&1) || st=$(gh auth status -h github.com 2>&1) || {
+    gh_auth_die "$st"
+    # The first line is the host name; the reason is on the line marked X.
+    why=$(grep -m1 'X ' <<<"$st" || head -1 <<<"$st")
+    why=${why#"${why%%[![:space:]]*}"}
+    die "gh could not check its sign-in (${why#X }) — check the network, then: gh auth status"
+  }
+  return 0
+}
+
 company_dir() { echo "$ORGAMI_HOME/$1"; }
 
 current_company() {
@@ -335,12 +368,34 @@ model_output_ok() {
   return 0
 }
 
+# A STATS key the model quotes ("`merged_by_bots` (13)") is a variable name in
+# the team's recap. The prompt forbids it, but a rule the model may ignore is
+# not a guarantee, so the key is rewritten after the call the way references are
+# linked after it: lib/plain_keys.jq says how. $1 the STATS file; text on stdin.
+# If jq fails the text passes through unchanged rather than being lost.
+plain_stat_keys() {
+  local stats=$1 text out
+  text=$(cat)
+  if out=$(jq -Rsj --slurpfile s "$stats" -f "$ROOT/lib/plain_keys.jq" <<<"$text" 2>/dev/null); then
+    [[ $out == "$text" ]] || log "the model quoted STATS key names — rewritten as words"
+    printf '%s\n' "$out"
+  else
+    printf '%s\n' "$text"
+  fi
+}
+
 # Embed branding so exported pages remain a single file, including their favicon.
+#
+# From assets/, not docs/brand/: the approved logo there is 1254 px and the
+# favicon wraps it whole, which made 1.5 MB of every page base64 for an image
+# drawn at 32 px. assets/logo-64.png is that logo cut once to 64 px (sharp at
+# 2x), and assets/favicon.svg the same paper square around it — 3 and 5 KB.
+# Cut again from docs/brand/logo.png if the logo changes.
 orgami_brand_head() {
-  printf '<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,%s">\n' "$(base64 <"$(dirname "${BASH_SOURCE[0]}")/../docs/brand/favicon.svg" | tr -d '\r\n')"
+  printf '<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,%s">\n' "$(base64 <"$(dirname "${BASH_SOURCE[0]}")/../assets/favicon.svg" | tr -d '\r\n')"
   printf '<style>.orgami-logo{display:inline-block;width:32px;height:32px;vertical-align:middle;flex-shrink:0;background:#f7f5ef;border-radius:4px;object-fit:contain}</style>\n'
 }
 
 orgami_brand_image() {
-  printf '<img class="orgami-logo" width="32" height="32" alt="orgami" src="data:image/png;base64,%s">\n' "$(base64 <"$(dirname "${BASH_SOURCE[0]}")/../docs/brand/logo.png" | tr -d '\r\n')"
+  printf '<img class="orgami-logo" width="32" height="32" alt="orgami" src="data:image/png;base64,%s">\n' "$(base64 <"$(dirname "${BASH_SOURCE[0]}")/../assets/logo-64.png" | tr -d '\r\n')"
 }

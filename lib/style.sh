@@ -39,7 +39,11 @@ style_init() {
 
 # The kinds in the graph each get one colour, used everywhere they appear so a
 # host reads as a host in the list, in the card and in the query output.
+#
+# Prints nothing when colour is off: callers splice this into the text, and the
+# palette above is the only thing that knows whether the reader can take escapes.
 style_kind_color() {
+  [[ -n ${S_R-} ]] || return 0
   case $1 in
     repo) printf '%s' $'\033[38;5;39m' ;;
     host) printf '%s' $'\033[38;5;173m' ;;
