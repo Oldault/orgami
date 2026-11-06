@@ -136,6 +136,34 @@ jq -e --arg v "$ver" '(.ok | not) and (.detail | contains("CLI is " + $v + " and
   fail "a plugin on another version should be a warning naming both and orgami update, got: $c"
 rm -rf "$HOME/.claude"
 
+# --- git protocol: only the docs repo needs a credential helper ----------------
+# scan clones and fetches through gh, so its checkouts authenticate with gh's
+# login or GH_TOKEN and no helper. Plain git reaches only the docs repo, and
+# reads neither, so the warning is for a docs repo over https and nothing else
+# — GH_TOKEN set or not. ORGAMI_HOME outside HOME, and no system gitconfig, so
+# neither this machine's helper nor the HOME snapshot above is in play.
+proto() { # proto [env...] — the git protocol check's JSON
+  env GIT_CONFIG_NOSYSTEM=1 ORGAMI_HOME="$fixture/orgami" "$@" "$ROOT/bin/orgami" doctor --json |
+    jq -c '.checks[] | select(.name == "git protocol")' || true
+}
+mkdir -p "$fixture/orgami/acme"
+echo '{"default":"acme"}' >"$fixture/orgami/config.json"
+echo '{"org":"acme","docs_repo":""}' >"$fixture/orgami/acme/config.json"
+for tok in "" GH_TOKEN=ghp_test; do
+  c=$(proto ${tok:+"$tok"})
+  jq -e '.ok and (.detail | test("scan clones through gh"))' <<<"$c" >/dev/null ||
+    fail "with no docs repo, https and no helper is not a warning (${tok:-no env token}), got: $c"
+done
+echo '{"org":"acme","docs_repo":"https://github.com/acme/docs.git"}' >"$fixture/orgami/acme/config.json"
+for tok in "" GH_TOKEN=ghp_test; do
+  c=$(proto ${tok:+"$tok"})
+  jq -e '(.ok | not) and (.blocking | not) and (.detail | contains("https://github.com/acme/docs.git"))
+      and .fix == "gh auth setup-git"' <<<"$c" >/dev/null ||
+    fail "a docs repo over https with no helper should warn and name it (${tok:-no env token}), got: $c"
+done
+echo '{"org":"acme","docs_repo":"git@github.com:acme/docs.git"}' >"$fixture/orgami/acme/config.json"
+jq -e '.ok' <<<"$(proto)" >/dev/null || fail "a docs repo over ssh needs no https helper, got: $(proto)"
+
 # --- the session hooks -----------------------------------------------------------
 nocli="/usr/local/bin:/usr/bin:/bin"
 out=$(PATH=$nocli bash hooks/session-context.sh) || fail "session-context.sh exited non-zero"

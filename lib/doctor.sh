@@ -166,8 +166,21 @@ doctor_checks() {
     elif git config --get-urlmatch credential.helper https://github.com >/dev/null 2>&1; then
       doc_add "git protocol" 1 0 "https, with a credential helper"
     else
-      doc_add "git protocol" 0 0 "https with no credential helper — clones of private repositories will ask for a password" \
-        "gh auth setup-git"
+      # scan clones with `gh repo clone` and fetches through
+      # `gh auth git-credential`, so its checkouts authenticate as gh does —
+      # stored login or GH_TOKEN — with no helper configured. The docs repo is
+      # the one remote plain git reaches (join, sync, publish), and plain git
+      # reads neither, so only a docs repo over https makes this a warning.
+      local dcomp docs_repo=""
+      dcomp=${ORGAMI_COMPANY:-$(jq -r '.default // empty' "$ORGAMI_HOME/config.json" 2>/dev/null || true)}
+      [[ -z $dcomp ]] ||
+        docs_repo=$(jq -r '.docs_repo // empty' "$(company_dir "$dcomp")/config.json" 2>/dev/null || true)
+      if [[ $docs_repo == https://github.com/* ]]; then
+        doc_add "git protocol" 0 0 "https with no credential helper — scan clones through gh and needs none, but sync and publish reach $docs_repo with plain git, which uses neither gh's login nor GH_TOKEN, so a private docs repo is refused" \
+          "gh auth setup-git"
+      else
+        doc_add "git protocol" 1 0 "https — scan clones through gh's own login and needs no credential helper; a docs repo over https will: gh auth setup-git"
+      fi
     fi
   fi
 
