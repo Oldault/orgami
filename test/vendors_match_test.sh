@@ -256,7 +256,7 @@ catalogue=$(awk -F'\t' -v kinds="^($VENDOR_SIGNAL_KINDS):" '
       if ($6 == "") { print "row " NR " (" $1 "): empty flags column — end the row at portal instead"; bad = 1 }
       nfl = split($6, fl, ",")
       for (j = 1; j <= nfl; j++)
-        if (fl[j] != "no-sdk") { print "row " NR " (" $1 "): unknown flag " fl[j]; bad = 1 }
+        if (fl[j] != "no-sdk" && fl[j] != "no-bill") { print "row " NR " (" $1 "): unknown flag " fl[j]; bad = 1 }
     }
     n = split($4, part, "|"); cur = ""; count = 0
     for (i = 1; i <= n; i++) {

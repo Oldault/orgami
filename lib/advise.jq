@@ -122,6 +122,8 @@ def signal_kind:
 #   design, whiteboard    creative suites overlap and nobody consolidates them
 #   video, advertising    conferencing and ad platforms are bought per audience
 #   dns                   zones get served wherever they were registered
+#   verification          a token that names no product is not a job, and its
+#                         vendors carry `no-bill`, which no rule counts at all
 #
 # This is advice policy, not a fact about a vendor, which is why it lives here
 # and not in lib/vendors.tsv. The catalogue says what a vendor looks like in
@@ -172,8 +174,18 @@ def days_since($now):
 # azure.com carries Microsoft's own Microsoft 365 token. Counted here it would
 # become a subscription this organization does not have, so it never becomes a
 # row — it is listed under `excluded` instead, where a reader can see it.
+#
+# A row also has to be one the catalogue would still match today. A reading is
+# a file on disk and outlives the catalogue it was matched with: one taken
+# before google-site-verification moved off Google Workspace still files that
+# token as Workspace, and counting it would put back a subscription the
+# catalogue no longer claims. A vendor the catalogue does not know is kept, so
+# an empty or older catalogue never empties the reading.
+| (($cat // []) | map({key: .id, value: (.signals // "")}) | from_entries) as $catsig
 | ([(($reading.vendors // []) + ($reading.unverified_vendors // []))[]
     | . as $v | ($v.evidence // [])[]
+    | select(.signal as $k | ($catsig[$v.id] // null)
+             | . == null or test("(^|\\|)" + ($k // "") + ":"))
     | {vendor: $v.id, repo: null, domain: .domain, at: .at,
        signal: .signal, source: "dns",
        name: ($v.name // ""), category: ($v.category // ""),
@@ -237,7 +249,10 @@ def days_since($now):
 # has the mailboxes while the one holding a lone verification token may be a
 # single-sign-on tenant nobody has migrated. Naming the wrong one is the
 # difference between a sensible proposal and an absurd one.
+#
+# A `no-bill` vendor is no bill at all, so it is never one of the two.
 | ([$vendors[]
+    | select((.flags | index("no-bill")) | not)
     | select(.category != "" and (.repo_count > 0 or ((.dns | length) > 0)))]
    | group_by(.category)
    | map(select(length > 1))
@@ -408,7 +423,13 @@ def days_since($now):
 # receive reports. An SPF include, a CNAME or a nameserver is weaker — it says a
 # service was pointed at, or that somebody serves the zone, which is often
 # infrastructure the map already knows about under another name.
+#
+# Except where the record names no product. A google-site-verification token is
+# made by Search Console as often as by Workspace, so "an account" is true and
+# "a subscription to renew" is not — that vendor carries `no-bill` and is listed
+# under `excluded` instead, the way a no-sdk vendor is for the rule above.
 | ([$vendors[] | select((.dns | length) > 0 and .repo_count == 0)
+    | select((.flags | index("no-bill")) | not)
     | ([.dns[].signal] | unique) as $sigs
     | {kind: "dns-only-vendor",
        id: ("dns-only-vendor:" + .id),
@@ -427,6 +448,16 @@ def days_since($now):
                   else " records below say so" end)
                + " — and no repository in the map names it. Nothing in the code was "
                + "ever going to find this one.")}]) as $dnsonly
+
+| ([$vendors[] | select((.dns | length) > 0 and .repo_count == 0)
+    | select(.flags | index("no-bill"))
+    | {kind: "dns-only-vendor",
+       id: ("dns-only-vendor:" + .id),
+       vendor: .id,
+       name: .name,
+       domains: .domains,
+       reason: ("the record says the domain was verified with this vendor, not "
+                + "which product or that anybody pays for it")}]) as $dnsonly_excluded
 
 # --- the record: how proposals of each kind have fared --------------------------
 #
@@ -506,20 +537,21 @@ def days_since($now):
    scanned: (($graph.generated // "")[0:10]),
    stale_days: $stale,
    dns: $dnsinfo,
-   # Two rules do not fire everywhere they match, and both restraints are
+   # Three rules do not fire everywhere they match, and each restraint is
    # written down here rather than left as an absence. A reader who disagrees
-   # with either can see exactly what was withheld and where the policy that
-   # withheld it lives.
+   # with any of them can see exactly what was withheld and where the policy
+   # that withheld it lives.
    excluded: {duplicate_category: $dup_excluded,
               ghost_env_var: $ghost_excluded,
               dns_unverified: $dns_unverified,
+              dns_no_bill: $dnsonly_excluded,
               substitutable_categories: $subst,
               policy: ("lib/advise.jq — substitutable_categories, "
-                       + "and the no-sdk flag in lib/vendors.tsv")},
+                       + "and the no-sdk and no-bill flags in lib/vendors.tsv")},
    counts: {proposals: ($open | length),
             suppressed: ($hidden | length),
             excluded: (($dup_excluded | length) + ($ghost_excluded | length)
-                       + ($dns_unverified | length)),
+                       + ($dns_unverified | length) + ($dnsonly_excluded | length)),
             vendors: ($vendors | length),
             repos: (($repos // []) | length),
             vendors_from_code: ([$vendors[] | select(.repo_count > 0)] | length),

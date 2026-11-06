@@ -154,7 +154,8 @@ check "a partner's API is left out as not known to be the org's" true \
   '[.skipped[] | select(startswith("partner.fr — the code calls it"))] | length == 1'
 check "a free mail contact address is not read as the org's domain" false \
   '.domains | index("gmail.com") != null'
-check "the owned domains' records are accounts" "google-workspace" \
+# acme.com's MX is Workspace; acme.io's lone token is only a verification.
+check "the owned domains' records are accounts" "google-site-verification,google-workspace" \
   '[.vendors[].id] | join(",")'
 grep -qx 'api orgs/acmehq' "$GH_LOG" ||
   { echo "FAIL: the profile must be read with one GET of orgs/<org>" >&2; fail=1; }

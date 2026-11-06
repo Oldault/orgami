@@ -23,9 +23,10 @@
 #             swallowed into the regex before it, and the vendor quietly stops
 #             matching.
 #   portal    where a human goes to see what it costs. Never opened by orgami.
+#             On a `no-bill` row, where to see who holds the account instead.
 #   flags     optional, comma separated, and absent from most rows — a row with
 #             nothing to say here simply ends after `portal` rather than
-#             carrying a trailing tab nobody can see. One flag is defined:
+#             carrying a trailing tab nobody can see. Two flags are defined:
 #
 #               no-sdk  this vendor is normally wired in through a webhook URL,
 #                       a script tag, or a variable the platform injects into
@@ -38,6 +39,16 @@
 #                       offer a webhook: Sentry and Stripe do not get it. Slack
 #                       and Google Analytics do, because a webhook URL and a
 #                       script tag are how they are actually integrated.
+#
+#               no-bill the record proves somebody verified the domain with
+#                       this vendor, and nothing about which product or whether
+#                       anybody pays for it. A google-site-verification token is
+#                       created by Search Console, which is free, as often as by
+#                       Workspace, so it gets a row of its own rather than
+#                       standing as evidence for Workspace — the MX and SPF
+#                       records are what say there are mailboxes. lib/advise.jq
+#                       never proposes about a no-bill vendor and lists it under
+#                       what it held back; lib/dns.sh never lists it as paid for.
 #
 # The kinds, and what a fact of each one is:
 #
@@ -166,7 +177,8 @@ mux	Mux	media	pkg:^@mux/|pkg:^mux-(node|embed|player)$|env:MUX_|host:(^|\.)mux\.
 codecov	Codecov	code-quality	env:CODECOV_|host:(^|\.)codecov\.(io|com)$|action:^codecov/|file:^\.?codecov\.ya?ml$	https://app.codecov.io/plan	no-sdk
 sonar	Sonar	code-quality	pkg:^sonarqube-scanner$|pkg:^sonar-scanner$|env:SONAR_|host:(^|\.)sonarcloud\.io$|host:(^|\.)sonarsource\.com$|action:^SonarSource/|file:^sonar-project\.properties$	https://sonarcloud.io/organizations/_/billing
 snyk	Snyk	security	pkg:^snyk$|env:SNYK_|host:(^|\.)snyk\.io$|action:^snyk/|file:^\.snyk$	https://app.snyk.io/manage/billing
-google-workspace	Google Workspace	workspace	mx:(^|\.)aspmx\.l\.google\.com$|mx:(^|\.)googlemail\.com$|mx:^smtp\.google\.com$|txt:^google-site-verification=|spf:(^|\.)_spf\.google\.com$	https://admin.google.com/ac/billing
+google-workspace	Google Workspace	workspace	mx:(^|\.)aspmx\.l\.google\.com$|mx:(^|\.)googlemail\.com$|mx:^smtp\.google\.com$|spf:(^|\.)_spf\.google\.com$	https://admin.google.com/ac/billing
+google-site-verification	Google (Search Console or Workspace)	verification	txt:^google-site-verification=	https://search.google.com/search-console	no-bill
 microsoft365	Microsoft 365	workspace	mx:(^|\.)mail\.protection\.outlook\.com$|txt:^MS=|spf:(^|\.)spf\.protection\.outlook\.com$	https://admin.microsoft.com/Adminportal/Home#/subscriptions
 proton	Proton	workspace	mx:(^|\.)protonmail\.ch$|mx:(^|\.)protonmail\.com$|txt:^protonmail-verification=|spf:(^|\.)_spf\.protonmail\.ch$	https://account.proton.me/u/0/mail/dashboard
 zoho	Zoho	workspace	mx:(^|\.)zoho\.(com|eu|in|com\.au)$|txt:^zoho-verification=|spf:(^|\.)zoho\.(com|eu|in)$	https://www.zoho.com/us/subscriptions/

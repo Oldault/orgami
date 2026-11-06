@@ -691,15 +691,24 @@ dns_age_phrase() {
 # --- the page ------------------------------------------------------------------
 
 # One `### vendor` block per vendor in the list named by $2, with the records
-# behind it.
+# behind it. A `no-bill` vendor's portal is where to see who verified the
+# domain, not a bill, and its block says so rather than offering a price.
 dns_render_vendors() {
   jq -r --arg list "$2" '
     [(.[$list] // [])[]
+     | ((.flags // []) | index("no-bill") != null) as $nobill
      | "### \(.name)",
        "",
        "`vendor:\(.id)` · \(.category) · \(.domains | join(", "))"
-         + (if .portal == "" then "" else " · [what it costs](\(.portal))" end),
+         + (if .portal == "" then ""
+            elif $nobill then " · [who verified it](\(.portal))"
+            else " · [what it costs](\(.portal))" end),
        "",
+       (if $nobill
+        then "A verification token, and nothing more: a service of this vendor"
+             + " verified the domain. It does not say which one, or that anybody"
+             + " pays for it.", ""
+        else empty end),
        "| Record | Evidence |",
        "|---|---|",
        (.evidence[] | "| `\(.signal)` | `\(.at)` |"),
@@ -798,13 +807,16 @@ EOF
 dns_overview() {
   local f="$DIR/map/dns.json" age n
   [[ -f $f ]] || return 0
-  n=$(jq -r '.counts.vendors' "$f" 2>/dev/null || echo 0)
+  # A no-bill vendor is a verification, not a bill, so it is left off a list
+  # headed "paid for" — DNS.md still carries it with its record.
+  n=$(jq -r '[.vendors[] | select((.flags // []) | index("no-bill") | not)] | length' \
+    "$f" 2>/dev/null || echo 0)
   [[ ${n:-0} -gt 0 ]] || return 0
   age=$(dns_age_days || echo "?")
 
   echo "## What the DNS says is paid for"
   echo
-  jq -r '.vendors[]
+  jq -r '.vendors[] | select((.flags // []) | index("no-bill") | not)
     | "- **" + .name + "** — " + .category + " · " + (.domains | join(", "))
       + " · " + (.signals | join(", "))' "$f"
   echo

@@ -312,6 +312,19 @@ EOF
                | "- **\(.domain)** — \(.names | join(", "))"' "$a"
         echo
       fi
+      if [[ $(jq -r '(.excluded.dns_no_bill // []) | length' "$a") -gt 0 ]]; then
+        cat <<'EOF'
+**Records that name no product.** A `google-site-verification` token says a
+Google service verified the domain — Search Console, which is free, as often as
+Workspace. It is not a subscription to renew. The MX and SPF records are what
+say there are mailboxes. Those vendors carry `no-bill` in `lib/vendors.tsv`.
+Held back here:
+EOF
+        echo
+        jq -r '.excluded.dns_no_bill[]
+               | "- **\(.name)** on \(.domains | join(", ")) · `\(.id)`"' "$a"
+        echo
+      fi
     fi
 
     local hidden

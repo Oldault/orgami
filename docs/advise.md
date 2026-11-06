@@ -110,7 +110,11 @@ alone can never produce one of these. High confidence when a verification token,
 an MX record or a DMARC destination is behind it, since each of those is an
 account of its own; medium when it rests on an SPF include, a CNAME or a
 nameserver, which is often infrastructure the map already knows under another
-name.
+name. A record that names no product is not a subscription at all: a lone
+`google-site-verification` token is made by Search Console, which is free, as
+often as by Workspace, so its row carries `no-bill` in `lib/vendors.tsv` and
+this rule skips it. Google Workspace is proposed only from its MX or SPF
+records.
 
 **A variable declared for an SDK that was never wired.** A vendor matched in a
 repository by an environment variable and by nothing stronger — no package in
@@ -131,13 +135,14 @@ and Stripe do not get it.
 
 ## What it holds back, and says so
 
-Both of those restraints are policy, and policy that quietly deletes a finding
+Each of those restraints is policy, and policy that quietly deletes a finding
 is policy nobody can argue with. So the report carries a **Not proposed, on
 purpose** section naming every category it declined to call a duplicate,
 every vendor-and-repository pair the `no-sdk` flag took off the list, each with
-the id the proposal would have had, and the DNS records on domains not known to
-be the organization's (`excluded.dns_unverified`), which are held back and
-listed rather than proposed:
+the id the proposal would have had, every vendor the `no-bill` flag kept out of
+the DNS-only rule (`excluded.dns_no_bill`), and the DNS records on domains not
+known to be the organization's (`excluded.dns_unverified`), which are held back
+and listed rather than proposed:
 
 ```
 - **hosting** — AWS, Google Cloud, Heroku, Vercel, Netlify, Microsoft Azure ·

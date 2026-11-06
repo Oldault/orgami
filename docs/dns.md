@@ -105,7 +105,7 @@ it dropped for that reason. `--domain` is the way through.
 
 | Record | What it means |
 |---|---|
-| `txt` | a verification token — `google-site-verification=`, `MS=`, `atlassian-domain-verification=`, `docusign=`, `stripe-verification=`, `slack-domain-verification=` and friends. The strongest signal here: it is the vendor stating that this organization proved to *them* that it owns this domain |
+| `txt` | a verification token — `MS=`, `atlassian-domain-verification=`, `docusign=`, `stripe-verification=`, `slack-domain-verification=` and friends. The strongest signal here: it is the vendor stating that this organization proved to *them* that it owns this domain. `google-site-verification=` is the exception, below |
 | `mx` | where the mail goes, which is where the mailboxes are billed |
 | `spf` | an `include:` or `redirect=` — a service given permission to send mail as the organization |
 | `dmarc` | the `rua=`/`ruf=` destination in `_dmarc`. Nobody reads their own DMARC XML by hand, so that mailbox is a vendor |
@@ -115,9 +115,19 @@ it dropped for that reason. `--domain` is the way through.
 None of them is an invoice, and none says what anything costs. A verification
 token proves an account existed at the moment somebody set it up; it does not
 prove the plan is paid, or that it is still in use. A `google-site-verification`
-token in particular is used by Search Console as well as Workspace, so on its
-own it means "a Google product was verified against this domain" — the MX record
-is what says there are mailboxes.
+token in particular is made by Search Console, which is free, as well as by
+Workspace, so it is never read as Workspace. It has a catalogue row of its own,
+**Google (Search Console or Workspace)**, flagged `no-bill`: the page lists it
+with its record, links to where you can see who verified the domain rather than
+to a bill, and leaves it off the org page's "paid for" list, and `orgami advise`
+never proposes anything about it. Google Workspace is claimed only from the MX
+records (`aspmx.l.google.com`, `smtp.google.com`, `googlemail.com`) or an SPF
+`include:_spf.google.com` — those are what say there are mailboxes.
+
+A reading taken before this split still files the token under Workspace in
+`dns.json`. `orgami advise` counts a DNS row only while the catalogue still
+matches that kind of record for that vendor, so the old token is ignored there;
+run `orgami dns` again to relabel it on the DNS page.
 
 **A vendor that does not appear was not found in this organization's public
 DNS**, which is not the same fact as not being in use.
@@ -155,8 +165,8 @@ is counted and thrown away, and the count is reported:
 ```
 
 Within one vendor, three records of each domain and record kind are kept and the
-rest are counted — five `google-site-verification` tokens on one domain are five
-copies of one finding.
+rest are counted — five `MS=` tokens on one domain are five copies of one
+finding.
 
 ## The evidence line
 

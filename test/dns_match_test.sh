@@ -22,6 +22,10 @@
 #     list, once on behaviour
 #   - a vendor both the code and the DNS name is one vendor with two pieces of
 #     evidence, each tagged with where it came from
+#   - a google-site-verification token alone is not Google Workspace: Search
+#     Console makes the same record for free, so it is filed as a verification
+#     and never becomes a subscription to renew — not on a fresh reading, and
+#     not on a reading taken before the catalogue knew the difference
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
@@ -211,8 +215,13 @@ assert "a provider's own record is its supplier list, not the org's" 0 \
 # --- the near misses -----------------------------------------------------------
 
 assert "a token that only starts like Google's is not Google" 1 \
+  '[.vendors[] | select(.id == "google-site-verification") | .evidence[]
+    | select(.signal == "txt")] | length' "$out"
+assert "a Google verification token is not Workspace evidence" 0 \
   '[.vendors[] | select(.id == "google-workspace") | .evidence[]
     | select(.signal == "txt")] | length' "$out"
+assert "it is filed as a verification that names no product" "verification no-bill" \
+  '[.vendors[] | select(.id == "google-site-verification")][0] | "\(.category) \(.flags | join(","))"' "$out"
 assert "a host that only ends like Zendesk's is not Zendesk" 0 \
   '[.vendors[] | select(.id == "zendesk")] | length' "$out"
 assert "a TXT record nobody bills for matches nothing" true \
@@ -335,7 +344,11 @@ assert "two workspace suites are one duplicate-category proposal" 1 \
 
 assert "the artifact says how old the DNS reading is" 0 '.dns.age_days' "$artifact"
 assert "and that it is not stale yet" false '.dns.stale' "$artifact"
-assert "the counts split code from DNS" "1 10 1" \
+assert "a verification that names no product gets no proposal" 0 \
+  '[.proposals[] | select(.vendors | index("google-site-verification"))] | length' "$artifact"
+assert "and is listed as held back instead" "dns-only-vendor:google-site-verification" \
+  '[.excluded.dns_no_bill[].id] | join(",")' "$artifact"
+assert "the counts split code from DNS" "1 11 1" \
   '"\(.counts.vendors_from_code) \(.counts.vendors_from_dns) \(.counts.vendors_from_both)"' \
   "$artifact"
 
@@ -358,6 +371,51 @@ grep -q 'not found in this organization' "$dnspage" ||
   { echo "FAIL: the DNS page must say what an absence means" >&2; fail=1; }
 grep -q 'dig ' "$dnspage" ||
   { echo "FAIL: the DNS page must carry the command that re-runs the check" >&2; fail=1; }
+
+# --- a verification token alone is not a subscription --------------------------
+#
+# The domain a Search Console user has: a google-site-verification token, mail
+# somewhere else entirely. Nothing in the reading, the advice or either page may
+# say Google Workspace, or offer a bill for it.
+printf '"google-site-verification=onlyatoken123"\n' >"$zone/TXT-solo.io"
+printf '10 mx.solo-mail.example.\n' >"$zone/MX-solo.io"
+cmd_dns --yes --domain solo.io >/dev/null 2>"$home/run.log" ||
+  { cat "$home/run.log" >&2; echo "FAIL: orgami dns did not run on solo.io" >&2; exit 1; }
+
+assert "a token alone finds no Google Workspace" 0 \
+  '[.vendors[] | select(.id == "google-workspace")] | length' "$out"
+assert "it finds the verification, with its record" true \
+  '[.vendors[] | select(.id == "google-site-verification") | .evidence[].at][0]
+   | test("^TXT solo.io \"google-site-verification=onlyatoken123\"")' "$out"
+grep -q 'Google Workspace' "$DIR/map/DNS.md" &&
+  { echo "FAIL: the DNS page calls a lone verification token Google Workspace" >&2; fail=1; }
+grep -q 'what it costs' "$DIR/map/DNS.md" &&
+  { echo "FAIL: the DNS page offers a bill for a verification token" >&2; fail=1; }
+grep -q 'who verified it' "$DIR/map/DNS.md" ||
+  { echo "FAIL: the DNS page must say where to see who verified the domain" >&2; fail=1; }
+[[ -z $(dns_overview) ]] ||
+  { echo "FAIL: the org page lists a verification token under what is paid for" >&2; fail=1; }
+
+advise_compute "$artifact" 180
+assert "and advise proposes nothing about Google" 0 \
+  '[.proposals[] | select(.vendors | map(startswith("google")) | any)] | length' "$artifact"
+grep -q 'Records that name no product' <<<"$(advise_render "$artifact" 0)" ||
+  { echo "FAIL: the advise report must say what the no-bill flag held back" >&2; fail=1; }
+
+# A reading taken before the token moved off Google Workspace still files it
+# there. The catalogue no longer matches a txt record for Workspace, so advise
+# does not count it — no subscription comes back from an old file on disk.
+jq '.vendors = [{id: "google-workspace", name: "Google Workspace", category: "workspace",
+                 portal: "https://admin.google.com/ac/billing", flags: [],
+                 domains: ["solo.io"], signals: ["txt"],
+                 evidence: [{domain: "solo.io", signal: "txt",
+                             at: "TXT solo.io \"google-site-verification=onlyatoken123\" (dig 2026-08-18)"}]}]' \
+  "$out" >"$home/old.json" && mv "$home/old.json" "$out"
+advise_compute "$artifact" 180
+assert "an old reading's token is not Workspace either" 0 \
+  '[.proposals[] | select(.vendors | index("google-workspace"))] | length' "$artifact"
+assert "and leaves no Workspace vendor behind" 0 \
+  '[.vendors[] | select(.id == "google-workspace")] | length' "$artifact"
 
 if [[ $fail -eq 0 ]]; then
   echo "dns: every finding is a record you can look up, and the near misses were left alone"
