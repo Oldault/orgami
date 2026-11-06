@@ -178,6 +178,50 @@ check "--only keeps the changes-with edge, once" \
 check "--only keeps the imports edge, once" \
   "$(jq '[.edges[] | select(.kind == "imports")] | length' "$g")" "1"
 
+# --- a manifest names a repo only where the name stands whole ------------------
+# honox-website's package.json names its package honox.dev, gives its own GitHub
+# URL, has a honox command, and pulls in an @honox scope before it depends on
+# honox on line 9. Each earlier line holds "honox" against a dot, a hyphen or a
+# slash, or outside a dependency block; none of them is a reference, and the
+# honox edge cites the dependency line. A URL that does
+# name the repo, .git and all, still counts.
+(
+  # shellcheck source=../lib/common.sh
+  source lib/common.sh
+  # shellcheck source=../lib/scan.sh
+  source lib/scan.sh
+  ORG=acme EMIT="$tmp/links.jsonl" REPOLIST="$tmp/links.list"
+  : >"$EMIT"
+  printf '%s\n' honox honox-website website >"$REPOLIST"
+  mkdir -p "$tmp/hw"
+  printf '{\n  "name": "honox.dev",\n  "repository": "git@github.com:acme/honox-website.git",\n  "bin": {\n    "honox": "dist/cli.js"\n  },\n  "dependencies": {\n    "@honox/vite": "^1.0.0",\n    "honox": "^0.1.34"\n  }\n}\n' \
+    >"$tmp/hw/package.json"
+  scan_links honox-website "$tmp/hw"
+  check "manifest: the dependency is the evidence, not the repo's own URL" \
+    "$(jq -r 'select(.to == "repo:honox") | .evidence' "$EMIT")" "package.json:9"
+  check "manifest: a name inside a longer hyphenated name is no reference" \
+    "$(jq -r 'select(.to == "repo:website") | .evidence' "$EMIT")" ""
+  : >"$EMIT"
+  mkdir -p "$tmp/ci"
+  printf 'uses: actions/checkout@v4\nrun: git clone https://github.com/acme/honox.git\n' >"$tmp/ci/deploy.yml"
+  : >"$EMIT"
+  mkdir -p "$tmp/sc"
+  printf '{\n  "devDependencies": {\n    "@hono/honox-website": "1.0.0"\n  }\n}\n' >"$tmp/sc/package.json"
+  scan_links sc "$tmp/sc"
+  check "manifest: a dependency under an npm scope names the repo" \
+    "$(jq -r 'select(.to == "repo:honox-website") | .evidence' "$EMIT")" "package.json:3"
+  : >"$EMIT"
+  scan_links ci "$tmp/ci"
+  check "url: org/honox.git is a reference to honox" \
+    "$(jq -r 'select(.to == "repo:honox") | .evidence' "$EMIT")" "deploy.yml:2"
+  : >"$EMIT"
+  mkdir -p "$tmp/rd"
+  printf 'Forked from github.com/acme/honox-website.\nThe islands live in github.com/acme/honox.\n' >"$tmp/rd/README.md"
+  scan_links rd "$tmp/rd"
+  check "url: a sentence's full stop ends the name, a hyphen does not" \
+    "$(jq -r 'select(.to == "repo:honox") | .evidence' "$EMIT")" "README.md:2"
+) || fail=1
+
 check "the scan left nothing in its temp dir" "$(find "$scratch" -mindepth 1 | wc -l | tr -d ' ')" "0"
 
 exit "$fail"

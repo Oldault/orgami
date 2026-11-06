@@ -363,8 +363,11 @@ scan_links() {
     [[ -z $other || $other == "$repo" ]] && continue
     [[ $other == .* ]] && continue
     # A repo name may hold a dot, which a pattern reads as any character. The
-    # trailing class is the word boundary; `\b` is a GNU extension to BRE.
-    re="$ORG/${other//./\\.}([^A-Za-z0-9_]|\$)"
+    # trailing class is the word boundary; `\b` is a GNU extension to BRE. A
+    # hyphen or a dot continues a repo name, so neither ends one: org/honox is
+    # not in org/honox-website or org/honox.dev. Only .git may follow, or the
+    # full stop that ends a sentence.
+    re="$ORG/${other//./\\.}(\\.git)?\\.?([^A-Za-z0-9_.-]|\$)"
     # grep -r walks in readdir order, which a fetch's reset --hard reshuffles,
     # so the file cited is the first in byte order, and the line its first match:
     # a rescan of the same commits cites the same line.
@@ -376,13 +379,30 @@ scan_links() {
     [[ -z $hit ]] || hit="$hit:$(grep -nE -m1 "${pats[@]}" "$hit" 2>/dev/null)" || true
     if [[ -z $hit ]]; then
       # A dependency manifest naming the repo counts, but only for names long
-      # enough not to collide with an ordinary word.
+      # enough not to collide with an ordinary word. The name has to stand
+      # whole: grep -w reads a hyphen or a dot as a boundary, so `honox` matched
+      # `"name": "honox.dev"` and honox-website's own URL, and `hono` matched
+      # the npm scope in `@hono/vite-ssg` — each a line above the dependency
+      # that was the real evidence. A slash may come before the name (composer's
+      # vendor/name), never after it, where the name would be a scope or a path.
       [[ ${#other} -ge 4 ]] || continue
-      local mf
+      local mf whole="(^|[^A-Za-z0-9_.@-])${other//./\\.}([^A-Za-z0-9_./-]|\$)"
       for mf in Gemfile go.mod package.json requirements.txt pyproject.toml \
         Cargo.toml composer.json mix.exs; do
         [[ -f $src/$mf ]] || continue
-        hit=$(grep -nw -- "$other" "$src/$mf" 2>/dev/null | head -1) || true
+        if [[ $mf == package.json ]]; then
+          # Only a key inside a dependency block: `"bin": {"hono": ...}` names a
+          # command, and the dependency is further down. The key is the name, or
+          # the name under an npm scope, which need not be the org's:
+          # `"@hono/node-server"` is honojs/node-server.
+          hit=$(awk -v n="$other" '
+            /"(dependencies|devDependencies|peerDependencies|optionalDependencies)"[[:space:]]*:/ { d = 1; next }
+            d && /^[[:space:]]*}/ { d = 0 }
+            d && (index($0, "\"" n "\"") || $0 ~ ("\"@[^\"/]+/" n "\"")) { print NR ":" $0; exit }' \
+            "$src/$mf" 2>/dev/null) || true
+        else
+          hit=$(grep -nE -- "$whole" "$src/$mf" 2>/dev/null | head -1) || true
+        fi
         [[ -n $hit ]] && { hit="$src/$mf:$hit"; break; }
       done
     fi

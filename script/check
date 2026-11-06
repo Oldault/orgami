@@ -187,11 +187,11 @@ coupling() {
 
 # What the scan does to the graph as a whole once every repo is read: the
 # shares-config cap, one edge per (from, to, kind), byte-identical rescans,
-# and changes-with and imports surviving a full scan and --only. Stub gh that
-# clones local repositories.
+# and changes-with and imports surviving a full scan and --only, and a repo
+# name matched only where it stands whole. Stub gh that clones local repositories.
 scan_graph() {
   ./test/scan_graph_test.sh </dev/null >/dev/null
-  echo "scan-graph: conventions make no edge, one edge per pair and kind, a rescan is the same bytes"
+  echo "scan-graph: conventions make no edge, one edge per pair and kind, a rescan is the same bytes, a name matched only whole"
 }
 
 # `orgami update` runs unattended, so what matters is what it refuses. Runs
