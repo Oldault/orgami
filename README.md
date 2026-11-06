@@ -144,8 +144,8 @@ and nested `.env.example` count. An environment variable named only in
 Markdown, `docs/` or tests is left out. One scan per company runs at a time; a
 second is refused while the first is running.
 
-**Every edge carries the `file:line` it came from.** Nothing in the graph is
-inferred by a model, and every claim can be opened and checked.
+**Every edge carries the `file:line` it came from.** Nothing in the graph is a
+model's guess, and every claim can be opened and checked.
 
 ```bash
 orgami view              # the map, the repos, the notes and the recaps, in one screen

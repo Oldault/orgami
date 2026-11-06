@@ -44,7 +44,7 @@ The result is `map/graph.json` — a flat list of nodes and edges, nothing else.
 all rendered from it, so there is one source of truth and it diffs cleanly week
 to week.
 
-**Nothing in the graph is inferred by a model**, and `orgami doc --narrate` adds
+**Nothing in the graph is a model's guess**, and `orgami doc --narrate` adds
 one Claude-written summary paragraph on top, clearly separated from the facts
 underneath it.
 

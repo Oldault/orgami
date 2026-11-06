@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 # orgami scan — walk every repo in the org and write map/graph.json.
-# Every edge carries file:line evidence. Nothing in the graph is inferred by a model.
+# Every edge carries file:line evidence. Nothing in the graph is a model's guess.
 
 NOISE_DOMAINS='github\.com|githubusercontent\.com|githubapp\.com|docker\.io|ghcr\.io|quay\.io|npmjs\.(org|com)|rubygems\.org|pypi\.org|crates\.io|golang\.org|k8s\.io|kubernetes\.io|apache\.org|w3\.org|schema\.org|example\.(com|org)|localhost|\.local$|\.test$|nodejs\.org|python\.org|ubuntu\.com|debian\.org|alpinelinux\.org|letsencrypt\.org|sentry\.io|json-schema\.org'
 

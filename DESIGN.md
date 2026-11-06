@@ -43,8 +43,10 @@ inferred — is the product's own evidence vocabulary drawn as origami.
 - Nav · N1a: wordmark with the static mark, three text links, not sticky, no
   border, no button
 - Footer · Ft2 inline, under the closing sheet, the only middle-dot line
-- One all-type pause section (`#who`: the problem, its costs as a `dl`, then
-  the command index), one full-bleed dark band (`#agents`)
+- One all-type pause section (`#who`: the problem and its costs as a `dl`;
+  the command index that used to follow it was cut on 2026-11-06 — a reference
+  card persuades nobody, and `orgami help` is where commands live), one
+  full-bleed dark band (`#agents`)
 
 ## Tokens
 
@@ -111,15 +113,19 @@ base, `--s-1` .25rem to `--s-10` 8rem. Motion: `--dur-state` 160ms,
 
 - `--page-max` 72rem, `--gutter clamp(1rem, 4vw, 2.5rem)` as body padding.
 - A 12-column mental grid rendered as `5fr 7fr` text-left / asset-right
-  pairs (hero, agents, check, join, cost); one all-type pause section
+  pairs (hero, agents, check, monday, running, join, cost); one all-type pause section
   indented to column 3; one full-bleed dark band; the closing sheet
   `220px 1fr`.
 - Bento of exactly three unequal tiles: A `span 4`, B `span 2`, C `span 6`
   with an inner two-column grid. Under 960px all three go full width and C's
   inner grid stacks (text, then the command).
 - Section padding deliberately unequal: hero `2rem 5rem`, who `8rem`, agents
-  `6rem`, check `6rem`, team `6rem`, join `5rem`, cost `4rem`, close
-  `8rem 3rem`.
+  `6rem`, check `6rem`, monday `4rem 6rem`, team `6rem`, running `6rem 5rem`,
+  join `5rem`, cost `4rem`, close `8rem 3rem`.
+- Order: hero, who, agents, check, monday, team, running, join, cost, close.
+  The band answers "what does the agent get"; monday shows the recap as the
+  page it is; running carries the live and vendor story, the one an engineering
+  lead forwards upward.
 - Left-aligned everywhere; nothing centred. All `5fr 7fr` grids become one
   column at 960px; "Docs" leaves the nav under 480px (it recurs in the footer).
 
@@ -138,8 +144,19 @@ base, `--s-1` .25rem to `--s-10` 8rem. Motion: `--dur-state` 160ms,
 - The run card: paper-2 shell, paper header with the state text, `--term`
   pre showing the `--json` object from `docs/map.md`, two-tone evidence
   (extracted `--fold-lit`, inferred `--on-dark-2`). No ear.
+- The `#running` card is the run card without a state: a static caption in
+  the header, `--term` pre, the evidence in `--fold-lit`, the proposal's
+  headline in `.run b`. It never animates.
+- `.recap` (in `#monday`): the weekly report as a page — `--paper` shell,
+  hairline, 12px radius, a paper-2 header naming the file, body type in
+  Instrument Sans at `--fs-1`, section heads in Instrument Sans 600 (not
+  Bricolage: it is the report's own headings, not the page's), the stats line
+  in mono `--ink-2`, a hairline over the generated-by footer. No ear.
 - The transcript in the band sits directly on `--fold-deep` with no box and
   wraps like a terminal (`pre-wrap`); it never scrolls sideways.
+- `.versus` (in `#agents`, above the client list): two rows, without the map
+  and with it, hairlines in `--deep-bar-edge`; the "with" row's text is
+  `--on-dark`, the "without" row's `--on-dark-2`, which is the whole contrast.
 - The ear appears on exactly five things: the hero backing sheet, tiles A, B,
   C, and the closing sheet.
 
@@ -228,7 +245,12 @@ Three primitives and the ground: the fold, the type-in, state, and the grid.
   (`docs/demo.mp4`) are committed with the page; `og:image` uses
   `docs/brand/logo.png`.
 - The install line appears twice: hero and closing sheet. It is the one
-  action; the copy square is the only filled control.
+  action; the copy square is the only filled control. Under the hero line, a
+  text link goes to pinning a release in `docs/install.md`.
+- Every sample on the page is the honojs map (public), never a client's: the
+  transcript, the recap, the advise card. Quoted command output keeps its own
+  punctuation, middle dots included; the never-list's middle-dot rule governs
+  the page's copy, not what a command printed.
 
 ## The recording
 
@@ -236,7 +258,10 @@ Three primitives and the ground: the fold, the type-in, state, and the grid.
 in `docs/demo.tape`) as a muted, looping, inline `<video>` at 100% of its
 column, never cropped, on a green backing sheet offset 20px that may run off
 the right edge; `docs/demo-still.png` is its poster and its CSS background,
-so the first frame is on screen before a byte of video arrives. A text
+so the first frame is on screen before a byte of video arrives. The `src`
+carries `#t=4`: the take opens on an empty prompt being typed into, and four
+seconds in the brief is complete, so that is the frame a visitor meets; the
+loop then plays the whole take from zero. A text
 "pause" chip pauses the element because the loop runs longer than five
 seconds; under reduced motion JS holds the video on its first frame and the
 chip starts as "play". The gif stays for the README; social previews use the elephant logo. The
