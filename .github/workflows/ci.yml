@@ -46,6 +46,45 @@ jobs:
           [[ "$a" == "$c" ]] || { echo "manifest.json says $a, lib/mcp.py says $c"; exit 1; }
         shell: bash
 
+  # Every offline test in the script/check registry, so a check that exists
+  # only on a laptop cannot go stale. Syntax and lint run in their own job
+  # above; they run here too, as part of the whole pass.
+  checks:
+    name: every check in script/check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: script/check
+        run: ./script/check
+        shell: bash
+
+  # Debian 12 ships jq 1.6 and Ubuntu 24.04 ships 1.7.1; both refused programs
+  # that the 1.8 a developer runs accepts. The release binaries, pinned by
+  # checksum, put each first on PATH in turn (test/jq_compat_test.sh).
+  jq-compat:
+    name: jq 1.6 and 1.7.1
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: download jq 1.6 and 1.7.1
+        run: |
+          mkdir -p "$RUNNER_TEMP/jq"
+          cd "$RUNNER_TEMP/jq"
+          curl -fsSL -o jq-1.6 https://github.com/jqlang/jq/releases/download/jq-1.6/jq-linux64
+          curl -fsSL -o jq-1.7.1 https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64
+          printf '%s  %s\n' \
+            af986793a515d500ab2d35f8d2aecd656e764504b789b66d7e1a0b727a124c44 jq-1.6 \
+            5942c9b0934e510ee61eb3e30273f1b3fe2590df93933a93d7c58b81d19c8ff5 jq-1.7.1 | sha256sum -c -
+          chmod +x jq-1.6 jq-1.7.1
+          ./jq-1.6 --version && ./jq-1.7.1 --version
+        shell: bash
+
+      - name: the render paths run on each
+        run: JQ_COMPAT="$RUNNER_TEMP/jq/jq-1.6 $RUNNER_TEMP/jq/jq-1.7.1" ./test/jq_compat_test.sh
+        shell: bash
+
   cli:
     name: cli runs without a company
     runs-on: ubuntu-latest

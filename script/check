@@ -47,7 +47,7 @@ stats() {
   # the two people — it used to count all four — and `merged_without_review` is
   # one and not two because the bot release nobody reviewed is no longer in the
   # human figure. Both numbers changed meaning, not just value.
-  for k in "merged=2" "merged_by_people=2" "merged_by_bots=2" \
+  for k in "merged=2" "merged_by_people=2" "merged_by_bots=2" "merged_total=4" \
     "merged_without_review=1" "repos_touched=2"; do
     want=${k#*=}
     got=$(jq -r ".${k%%=*}" <<<"$out")
@@ -80,6 +80,15 @@ profile() {
   echo "profile_routes: test paths excluded from endpoints list"
 }
 
+# A monorepo's root manifest names no framework and no SDK; the packages do.
+# What the scan reads per package is pinned: pnpm, npm and lerna declarations,
+# the shallow fallback walk, links out of the checkout refused, and the ranked
+# and capped env list with its total. Fixture trees, no clone.
+workspace() {
+  ./test/profile_workspace_test.sh </dev/null >/dev/null
+  echo "workspace: packages found from every declaration, links out refused, env ranked with its total"
+}
+
 # `profile_framework` and `profile_commands` are where every new detection
 # branch lands, so what they already read off a checkout is pinned: one fixture
 # tree per case, no clone, no network.
@@ -94,6 +103,15 @@ detect() {
 vendors() {
   ./test/vendors_match_test.sh >/dev/null
   echo "vendors: matched on committed evidence, near misses left alone"
+}
+
+# The vendor list is a list of bills, so what may not reach it is pinned too:
+# commented-out lines, docs, tests, reference copies, public font and OAuth
+# hosts, a go.mod // indirect. A pnpm monorepo whose SDKs live in packages, and
+# every citation opened back at its file:line.
+vendors_precision() {
+  ./test/vendors_precision_test.sh </dev/null >/dev/null
+  echo "vendors-precision: workspace SDKs found, comments, docs and public hosts left out, every citation opens"
 }
 
 # A deploy edge says an organization runs its software somewhere, so it may only
@@ -124,6 +142,15 @@ dns() {
   echo "dns: records matched against the catalogue, near misses left alone"
 }
 
+# `orgami dns` asks the world about domains, so which domains it asks about is
+# the claim: the ones something says the org owns. A provider (azure.com), a
+# vendor endpoint and a partner's API are not queried as the org's. Stub gh
+# and a stub dig reading a recorded zone.
+dns_domains() {
+  ./test/dns_domains_test.sh </dev/null >/dev/null
+  echo "dns-domains: only owned domains queried, the fallback marked unverified, one read-only profile GET"
+}
+
 # `orgami live` attributes a deployment to a repo only when the map or an exact
 # name says so. Runs against a stub flyctl — no credentials, no network.
 live() {
@@ -131,6 +158,13 @@ live() {
   echo "live: deployments matched only on evidence, and dated"
   ./test/live_aws_test.sh >/dev/null
   echo "live/aws: every resource enumerated, only named ones attributed"
+}
+
+# A provider CLI that fails with a blank first line used to be reported with
+# no reason at all. Stub aws.
+live_error() {
+  ./test/live_error_test.sh </dev/null >/dev/null
+  echo "live-error: a failed provider CLI reports its first non-blank line"
 }
 
 # `orgami depth` may only call an edge extracted when the import resolves on its
@@ -149,6 +183,15 @@ depth() {
 coupling() {
   ./test/coupling_test.sh >/dev/null
   echo "coupling: correlation tagged inferred, seen-once and bots kept out"
+}
+
+# What the scan does to the graph as a whole once every repo is read: the
+# shares-config cap, one edge per (from, to, kind), byte-identical rescans,
+# and changes-with and imports surviving a full scan and --only. Stub gh that
+# clones local repositories.
+scan_graph() {
+  ./test/scan_graph_test.sh </dev/null >/dev/null
+  echo "scan-graph: conventions make no edge, one edge per pair and kind, a rescan is the same bytes"
 }
 
 # `orgami update` runs unattended, so what matters is what it refuses. Runs
@@ -175,11 +218,44 @@ agents() {
   echo "agents: user text and file mode preserved, an unclosed block refused"
 }
 
+# The MCP snippet each client is handed has its own shape (zed's
+# context_servers, vscode's servers), and the AGENTS.md block is committed into
+# somebody's repository, so it names no path on this machine.
+agents_mcp() {
+  ./test/agents_mcp_test.sh </dev/null >/dev/null
+  echo "agents-mcp: each client's snippet in its own shape, no absolute path in the agents block"
+}
+
 # A note left in an unmerged pull request is a note nobody wrote. Runs against a
 # stub gh and a stub git — no network, no repository, no push.
 notes() {
   ./test/notes_merge_test.sh >/dev/null
   echo "notes: a protected branch queues, a moved base retries, anything else reports"
+}
+
+# Every command that reads notes reads them through notes_parse, and one tab
+# or control character in one note used to break them all, the HTML page too.
+# A note on a repo the map lacks is refused, and two notes in one second keep
+# their own files. End-to-end through bin/orgami, stub gh.
+notes_index() {
+  ./test/notes_index_test.sh </dev/null >/dev/null
+  echo "notes-index: any character parses, unknown repos refused, ids never collide"
+}
+
+# Redaction and the note screen share one list, lib/secrets.tsv. Every shape on
+# it refused and redacted, the near misses passed, the file name and front
+# matter screened too, and a screen that cannot run refuses.
+secrets() {
+  ./test/secrets_test.sh </dev/null >/dev/null
+  echo "secrets: every listed shape refused and redacted, near misses pass, the screen fails closed"
+}
+
+# A docs repo starts empty, and a teammate pushes to it. Against file:// bare
+# repos: the first publish, sync after it, join bringing every published file,
+# sync --pull never overwriting, and an unreachable repo dying with a next step.
+docs_repo() {
+  ./test/notes_docs_repo_test.sh </dev/null >/dev/null
+  echo "docs-repo: an empty repo published into, a teammate's commit kept, nothing local overwritten"
 }
 
 # A cleanup command run when there is nothing to clean has to say so and leave
@@ -199,12 +275,34 @@ decisions() {
   echo "decisions: held unless autopublish, kept bullets land, dropped vanish, skipped stay, drafts never assembled"
 }
 
+# An agent has no terminal, so `orgami drafts` has to work without one:
+# --list, --keep and --drop by id, an unknown or path-like id changing nothing,
+# a kept note screened again.
+drafts() {
+  ./test/drafts_test.sh </dev/null >/dev/null
+  echo "drafts: listed, kept and dropped by id with no terminal, a kept note screened again"
+}
+
+# The session reader runs on every transcript, and a subagent's is not the
+# person's session. Sidechains skipped and marked, draft ids ASCII and unique.
+autonote() {
+  ./test/autonote_sweep_test.sh </dev/null >/dev/null
+  echo "autonote: subagent transcripts skipped, draft ids ASCII and never colliding"
+}
+
 # The recaps tab labels every recap by its first heading, and a recap with no
 # readable heading gets an empty label instead of taking the list down. Runs
 # the callback fzf's reload runs, against a temp ORGAMI_HOME — no fzf, no tty.
 tui() {
   ./test/tui_recaps_test.sh >/dev/null
   echo "tui: every recap listed, a headingless one with an empty label"
+}
+
+# Colour is for a terminal: `orgami query` into a pipe, or with NO_COLOR, writes
+# no escape code, and forced colour for the fzf preview still works.
+style() {
+  ./test/style_color_test.sh </dev/null >/dev/null
+  echo "style: no escape into a pipe or under NO_COLOR, forced colour still works"
 }
 
 # A playbook's prose is written by a model, so the gathering under it has to be
@@ -363,6 +461,15 @@ doc() {
   echo "doc: evidence and confidence intact, and an empty section has no heading"
 }
 
+# The card, ARCHITECTURE.md and `orgami context` are what a tester reads first:
+# tools and vendors told apart, capped lists saying so, an alias named once,
+# context outside the map saying so in a line, no local path in anything
+# committed. A hand-written company, no scan.
+cards() {
+  ./test/card_context_test.sh </dev/null >/dev/null
+  echo "cards: tools and vendors apart, caps said, context honest outside the map, no local paths"
+}
+
 # The shell completions may only offer what `orgami help --all` and the files
 # under $ORGAMI_HOME already say. Runs against a fixture home and this checkout
 # — no map, no token, no network.
@@ -462,7 +569,7 @@ schedule_path() {
 # not be written as the recap. Stub claude and gh.
 report_hardening() {
   ./test/report_hardening_test.sh </dev/null >/dev/null
-  echo "report: stats-only without claude, error replies refused, daily refetches a stale day"
+  echo "report: stats-only without claude, error replies refused, quoted STATS keys rewritten, daily refetches a stale day"
 }
 
 # An agent or a script runs init with no terminal. With flags it must write the
@@ -471,6 +578,14 @@ report_hardening() {
 init_headless() {
   ./test/init_headless_test.sh </dev/null >/dev/null
   echo "init: flags without a prompt, bare dies naming them, each gh failure told apart"
+}
+
+# A scan's failures have to say which failure they are: a bad token, a
+# missing repo, a broken clone. Exclude patterns are regexes, --jobs and
+# --depth are checked, and one scan per company runs at a time. Stub gh.
+scan_ops() {
+  ./test/scan_ops_test.sh </dev/null >/dev/null
+  echo "scan-ops: each gh failure told apart, globs refused, one scan at a time"
 }
 
 # fzf has changed its options across versions, and an option an old fzf does
@@ -496,6 +611,21 @@ doctor() {
   echo "doctor: JSON pinned, exit 1 only on a blocker; hooks silent or one line"
 }
 
+# The SessionStart hook runs in every session, mapped or not: outside a mapped
+# checkout it prints nothing, even with drafts and an update notice waiting.
+hook() {
+  ./test/hook_session_context_test.sh </dev/null >/dev/null
+  echo "hook: silent outside a mapped checkout, brief and drafts inside one"
+}
+
+# bootstrap.sh runs as `curl | bash`, where stdin is the script itself. Under
+# env -i with stub apt-get, sudo and curl: apt noninteractive with an empty
+# stdin, gnupg before Charm's key, a failure named, an old jq warned about.
+bootstrap() {
+  ./test/bootstrap_test.sh </dev/null >/dev/null
+  echo "bootstrap: apt noninteractive on an empty stdin, gnupg first, a failure named"
+}
+
 # uninstall edits files other tools own — crontab, Cursor's hooks.json and
 # mcp.json — so what it must keep matters as much as what it removes. Temp HOME
 # and stub systemctl, claude, crontab and gh.
@@ -510,6 +640,14 @@ mcp() {
   ./test/mcp_server_test.sh </dev/null
 }
 
+# Debian 12 ships jq 1.6 and Ubuntu 24.04 1.7.1, and each refused programs the
+# 1.8 on a developer's machine accepts. Runs the jq-heavy paths under each old
+# jq it finds (JQ_COMPAT, or jq-1.6 and jq-1.7.1 on PATH); prints its own line,
+# and skips itself with neither.
+jq_compat() {
+  ./test/jq_compat_test.sh </dev/null
+}
+
 # The check registry. One line per check: the flag that runs it on its own, and
 # the function behind it. Bare `script/check` walks this list in order, so a new
 # check is one self-contained line here plus its function above — nothing else
@@ -520,22 +658,34 @@ CHECKS=(
   --lint-only:lint
   --stats:stats
   --profile:profile
+  --workspace:workspace
   --detect:detect
   --vendors:vendors
+  --vendors-precision:vendors_precision
   --deploy:deploy
   --advise:advise
   --cost:cost
   --dns:dns
+  --dns-domains:dns_domains
   --live:live
+  --live-error:live_error
   --depth:depth
   --coupling:coupling
+  --scan-graph:scan_graph
   --update:update
   --publish:publish
   --notes:notes
+  --notes-index:notes_index
+  --secrets:secrets
+  --docs-repo:docs_repo
   --prune:prune
   --decisions:decisions
+  --drafts:drafts
+  --autonote:autonote
   --tui:tui
+  --style:style
   --agents:agents
+  --agents-mcp:agents_mcp
   --playbook:playbook
   --runbook:runbook
   --linkify:linkify
@@ -547,6 +697,7 @@ CHECKS=(
   --views:views
   --views-test:views_test
   --doc:doc
+  --cards:cards
   --completions:completions
   --helpers:helpers
   --review-auto:review_auto
@@ -561,11 +712,15 @@ CHECKS=(
   --schedule-path:schedule_path
   --report:report_hardening
   --init:init_headless
+  --scan-ops:scan_ops
   --fzf:fzf_compat
   --page-hostile:page_hostile
   --doctor:doctor
+  --hook:hook
+  --bootstrap:bootstrap
   --uninstall:uninstall
   --mcp:mcp
+  --jq-compat:jq_compat
 )
 
 # Generated from the registry, four flags to a line, so the usage block cannot
