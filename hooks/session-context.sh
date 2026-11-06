@@ -18,6 +18,9 @@ if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ] ||
     "$(command -v bash 2>/dev/null)"; do
     [ -x "$b" ] || continue
     "$b" -c '[ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 4 ]; }' 2>/dev/null || continue
+    # Meant to end the loop: the first bash new enough replaces this one, and
+    # the candidate was just run, so the exec does not fail.
+    # shellcheck disable=SC2093
     PATH="$(dirname "$b"):$PATH" ORGAMI_HOOK_REEXEC=1 exec "$b" "$0" "$@"
   done
   exit 0
@@ -45,7 +48,19 @@ fi
 JSON=0
 [[ ${1:-} == --json ]] && JSON=1
 
-cd "${CURSOR_PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}" 2>/dev/null || true
+# Leave saying nothing — `{}` for Cursor — or only the one line given.
+silent() {
+  if [[ $JSON == 1 ]]; then
+    if [[ -n ${1:-} ]]; then jq -n --arg c "$1" '{additional_context: $c}'; else echo '{}'; fi
+  elif [[ -n ${1:-} ]]; then
+    printf '%s\n' "$1"
+  fi
+  exit 0
+}
+# The editor names the project. When it names one that is not there, say
+# nothing: falling back to wherever the hook was started from would hand the
+# session another repository's context under this one's name.
+cd "${CURSOR_PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$PWD}}" 2>/dev/null || silent
 
 # Take whatever teammates have written since the last session, at most once
 # every half hour, and never let a slow network hold up the session.
@@ -87,30 +102,31 @@ orgami_update() {
 
 orgami_update --if-stale --background >/dev/null 2>&1 || true
 
-# What a previous session's update actually changed, said once.
-updated=$(orgami_update --report || true)
-
 brief=$("$ORGAMI" brief 2>/dev/null || true)
 
+# Outside a mapped checkout nothing is said at all, as the README promises:
+# drafts and an update notice belong to the organization, and a session in an
+# unrelated repository is no place to bring them up, nor to be told how to write
+# that organization's notes. The missing-CLI nudge is the one exception — it is
+# about the plugin itself, and breaks every session until it is fixed.
+[[ -n $brief ]] || silent "$nudge"
+
+# What a previous session's update actually changed, said once. Read only
+# here: the notice is removed as it is read, so an unmapped session would have
+# used it up unsaid.
+updated=$(orgami_update --report || true)
+
 # Notes drafted from earlier sessions and decisions mined from the week's pull
-# requests, waiting for a person to keep or drop them.
+# requests, waiting for a person to keep or drop them. Counted for the company
+# this checkout belongs to.
 drafts=$("$ORGAMI" drafts --count 2>/dev/null || echo 0)
 waiting=""
-if [[ ${drafts:-0} -gt 0 ]]; then
+if [[ ${drafts:-0} =~ ^[0-9]+$ && $drafts -gt 0 ]]; then
   waiting="
 $drafts draft(s) — notes read out of earlier sessions, decisions mined from
-pull requests — are waiting to be kept or thrown away. Mention this once: the
-user runs \`orgami drafts\` in a terminal, since it asks about each one."
-fi
-# Drafts and an update are worth surfacing even outside a mapped checkout; a
-# brief is not.
-if [[ -z $brief && -z $waiting && -z $updated ]]; then
-  if [[ -n $nudge ]]; then
-    printf '%s\n' "$nudge"
-  elif [[ $JSON == 1 ]]; then
-    echo '{}'
-  fi
-  exit 0
+pull requests — are waiting to be kept or thrown away. Mention this once.
+\`orgami drafts --list\` shows each with its id; once the user has said which,
+\`orgami drafts --keep <id>\` or \`--drop <id>\` acts on it."
 fi
 
 context=$(cat <<CTX

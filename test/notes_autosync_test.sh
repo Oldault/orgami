@@ -60,4 +60,16 @@ ORGAMI_HOME=$home ORGAMI_COMPANY=acme "$orgami" autosync --quiet >/dev/null 2>&1
   fail "autosync exited $? with notes_autosync true"
 published mine.md || fail "with notes_autosync true the note should have been pushed ($(tail -3 "$home/acme/cache/autosync.log"))"
 
-echo "notes_autosync: off only pulls, on pushes"
+# --- what a run prints is that run --------------------------------------------
+# The log is shared by every run. Printing its tail showed the previous run's
+# outcome above this one's, which read as this run having said both.
+
+jq '.notes_autosync = false' "$home/acme/config.json" >"$tmp/c" && mv "$tmp/c" "$home/acme/config.json"
+ORGAMI_HOME=$home ORGAMI_COMPANY=acme "$orgami" autosync </dev/null >/dev/null 2>&1 || fail "autosync with notes_autosync off failed"
+jq '.notes_autosync = true' "$home/acme/config.json" >"$tmp/c" && mv "$tmp/c" "$home/acme/config.json"
+out=$(ORGAMI_HOME=$home ORGAMI_COMPANY=acme "$orgami" autosync </dev/null 2>&1) || fail "autosync with notes_autosync on failed"
+grep -q 'notes_autosync is off' <<<"$out" && fail "autosync printed the previous run's outcome: $out"
+[[ $(grep -c '^--- ' <<<"$out") == 1 ]] || fail "autosync printed more than its own run: $out"
+grep -q 'notes_autosync is off' "$home/acme/cache/autosync.log" || fail "the log no longer keeps earlier runs"
+
+echo "notes_autosync: off only pulls, on pushes, each run prints only itself"

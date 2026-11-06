@@ -15,6 +15,9 @@ if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ] ||
     "$(command -v bash 2>/dev/null)"; do
     [ -x "$b" ] || continue
     "$b" -c '[ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 4 ]; }' 2>/dev/null || continue
+    # Meant to end the loop: the first bash new enough replaces this one, and
+    # the candidate was just run, so the exec does not fail.
+    # shellcheck disable=SC2093
     PATH="$(dirname "$b"):$PATH" ORGAMI_HOOK_REEXEC=1 exec "$b" "$0" "$@"
   done
   exit 0

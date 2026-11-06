@@ -124,6 +124,26 @@ publish_report_index() {
   } >"$dest/reports/README.md"
 }
 
+# publish_subject <clone> <docs_path> — what the staged commit holds, for its
+# subject. The recap named is the newest week whose file this commit adds or
+# changes; the calendar week it happens to run in may have no recap at all.
+publish_subject() {
+  local work=$1 path=$2 weeks newest n
+  weeks=$(git -C "$work" diff --cached --name-only -- "${path:+$path/}reports" 2>/dev/null |
+    sed -n 's|.*/\([0-9]\{4\}-W[0-9]\{2\}\)\.md$|\1|p' | sort -u)
+  if [[ -z $weeks ]]; then
+    echo "map"
+    return 0
+  fi
+  newest=$(tail -1 <<<"$weeks")
+  n=$(grep -c . <<<"$weeks")
+  if [[ $n -gt 1 ]]; then
+    echo "$(head -1 <<<"$weeks")..$newest recaps and map"
+  else
+    echo "$newest recap and map"
+  fi
+}
+
 cmd_publish() {
   load_company
   need git
@@ -142,35 +162,21 @@ cmd_publish() {
   path=$(cfg docs_path orgami)
   [[ -n $repo ]] || die "no docs_repo in $DIR/config.json — set it, or read the files in $DIR"
 
-  local work="$DIR/cache/docs"
-  if [[ -d $work/.git ]]; then
-    git -C "$work" fetch --quiet origin
-  else
-    git clone --quiet --depth 1 "$repo" "$work" || die "cannot clone $repo"
-  fi
-
-  # Notes sync leaves this checkout on its own branch. Get back onto the default
-  # one before writing anything, or the whole map lands on someone's note PR.
-  local main
-  # `|| true` matters: with set -e, an assignment whose command substitution
-  # fails ends the script here, which is why an empty docs repo used to make
-  # publish exit without a word.
-  main=$(git -C "$work" rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|origin/||' || true)
-  # An empty remote has no origin/HEAD, and rev-parse answers with the literal
-  # "HEAD" — which is not a branch anyone can check out.
-  [[ -n $main && $main != HEAD ]] ||
-    main=$(git -C "$work" symbolic-ref --short HEAD 2>/dev/null || echo main)
-  [[ -n $main && $main != HEAD ]] || main=main
+  # Notes sync leaves this checkout on its own branch. docs_checkout gets back
+  # onto the default one before anything is written, or the whole map lands on
+  # someone's note PR.
+  declare -F docs_checkout >/dev/null || source "$ROOT/lib/notes.sh"
+  local work="$DIR/cache/docs" main rc=0
+  main=$(docs_checkout "$repo" "$work") || rc=$?
+  case $rc in
+    0) ;;
+    1) die "cannot reach $repo — check the docs_repo URL and your access to it, then rerun: orgami publish" ;;
+    *) die "cannot get $work onto the docs repo's default branch — it is only a cache: rm -rf $work, then rerun: orgami publish" ;;
+  esac
   # A docs repo someone just created has no commits, so there is no
-  # origin/<main> to start from — begin the branch here instead of refusing.
-  if git -C "$work" rev-parse --verify --quiet "origin/$main" >/dev/null; then
-    git -C "$work" checkout -B "$main" --quiet "origin/$main" ||
-      die "cannot get onto $main in the docs repo"
-  else
-    git -C "$work" checkout -B "$main" --quiet ||
-      die "cannot start $main in the docs repo"
+  # origin/<main> to start from: the branch begins here instead of refusing.
+  git -C "$work" rev-parse --verify --quiet "origin/$main" >/dev/null ||
     log "$repo is empty — this publish will be its first commit"
-  fi
 
   local dest="$work/$path"
   mkdir -p "$dest/reports"
@@ -270,9 +276,10 @@ cmd_publish() {
   fi
 
   local msg
-  msg="docs(orgami): $COMPANY $(iso_week) recap and map"
+  msg="docs(orgami): $COMPANY $(publish_subject "$work" "$path")"
   git -C "$work" commit --quiet -m "$msg"
-  git -C "$work" push --quiet origin HEAD
+  git -C "$work" push --quiet origin HEAD ||
+    die "could not push to $repo — a teammate may have pushed since; rerun: orgami publish"
   echo "pushed: $msg"
 }
 

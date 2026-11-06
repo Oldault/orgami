@@ -8,12 +8,11 @@ doc_cards() {
   [[ -f $profiles ]] || return 0
   source "$ROOT/lib/card.sh"
   mkdir -p "$DIR/map/repos"
-  local repo
-  while read -r repo; do
-    [[ -n $repo ]] || continue
-    card_render "$repo" >"$DIR/map/repos/$repo.md" 2>/dev/null || true
-  done < <(jq -r '.[].name' "$profiles")
-  echo "$(jq 'length' "$profiles") cards in $DIR/map/repos/" >&2
+  # All cards in one pass: a card each, two jq runs and a read of the PR cache
+  # apiece, took four seconds for forty repos.
+  local n
+  n=$(card_render_all "$DIR/map/repos") || n=0
+  echo "$n cards in $DIR/map/repos/" >&2
 }
 
 doc_conventions() {
@@ -48,29 +47,44 @@ doc_conventions() {
 
     echo "## Per repository"
     echo
-    local any=0
-    while read -r repo; do
-      [[ -n $repo && $repo != ".github" ]] || continue
-      while read -r doc; do
-        [[ -n $doc ]] || continue
-        path="$DIR/cache/src/$repo/$doc"
-        clone_file "$DIR/cache/src/$repo" "$path" || continue
-        any=1
-        lines=$(wc -l <"$path")
-        echo "### \`$repo/$doc\` — $lines lines"
+    local any=0 url branch also
+    # One jq run for every repo's documents. A second name for the same file
+    # (CLAUDE.md as a link to AGENTS.md) is not a second section; it is named
+    # on the one it points at.
+    while IFS=$'\t' read -r repo doc url branch also; do
+      [[ -n $repo && -n $doc && $repo != ".github" ]] || continue
+      path="$DIR/cache/src/$repo/$doc"
+      clone_file "$DIR/cache/src/$repo" "$path" || continue
+      any=1
+      lines=$(wc -l <"$path" | tr -d ' ')
+      [[ $also == - ]] && also=""
+      echo "### \`$repo/$doc\` — $lines lines${also:+ (also $also)}"
+      echo
+      if [[ $lines -le 60 ]]; then
+        cat "$path"
+      else
+        echo "Sections:"
         echo
-        if [[ $lines -le 60 ]]; then
-          cat "$path"
+        grep -E '^#{1,3} ' "$path" | head -25 | sed 's/^#\{1,3\} /- /'
+        echo
+        # The page is published to the docs repo, so the full text is the
+        # file on GitHub, not the clone under this machine's home.
+        if [[ $url == https://* ]]; then
+          echo "Full text: [\`$repo/$doc\`]($url/blob/$branch/$doc)"
         else
-          echo "Sections:"
-          echo
-          grep -E '^#{1,3} ' "$path" | head -25 | sed 's/^#\{1,3\} /- /'
-          echo
-          echo "Full text: \`$path\`"
+          echo "Full text: \`$repo/$doc\`"
         fi
-        echo
-      done < <(jq -r --arg r "$repo" '.[] | select(.name == $r) | .agent_docs[]' "$profiles")
-    done < <(jq -r '.[] | select((.agent_docs | length) > 0) | .name' "$profiles")
+      fi
+      echo
+    done < <(jq -r '.[] | select((.name | type) == "string")
+      | .name as $n | (.meta.url // "" | tostring) as $u
+      | (.meta.default_branch // "main" | tostring) as $b
+      | (.agent_doc_aliases // {}) as $al
+      | (.agent_docs // [])[] as $d
+      | [$n, $d, (if $u == "" then "-" else $u end), $b,
+         ([$al | to_entries[] | select(.value == $d) | "`" + .key + "`"]
+          | if length > 0 then join(", ") else "-" end)]
+      | @tsv' "$profiles")
     [[ $any == 1 ]] ||
       echo "No repository carries an AGENTS.md, CLAUDE.md or CONTRIBUTING.md yet."
   } >"$out"
@@ -103,13 +117,35 @@ doc_runbooks() {
   source "$ROOT/lib/runbook.sh"
   source "$ROOT/lib/notes.sh" 2>/dev/null || true
   mkdir -p "$DIR/map/runbooks"
-  local n
-  while read -r n; do
-    [[ -n $n ]] || continue
-    runbook_render "$n" >"$DIR/map/runbooks/$n.md" 2>/dev/null || true
-  done < <(jq -r '.[].name' "$DIR/map/repos.json")
+  local n hold
+  # shellcheck disable=SC2034  # read by notes_index, in this function's scope
+  local NOTES_INDEX_CACHE=""
+  # One parse of the notes for every runbook, not one per repo.
+  hold=$(mktemp)
+  notes_index_hold "$hold"
+  # A runbook is some forty small jq, sed and grep runs, about a quarter of a
+  # second each repo, so forty repos one after another was most of the ten
+  # seconds `orgami doc` took. They share nothing but read-only inputs, so they
+  # are written by eight workers, each taking every eighth repo: no queue to
+  # keep, and the same eight scan defaults to. Each page goes to a temp file
+  # first, so an interrupted run leaves no half a page for `orgami web` to read.
+  local names=() k jobs=8
+  while read -r n; do [[ -n $n ]] && names+=("$n"); done < <(jq -r '.[].name' "$DIR/map/repos.json")
+  ((jobs > ${#names[@]})) && jobs=${#names[@]}
+  for ((k = 0; k < jobs; k++)); do
+    (
+      local i out
+      for ((i = k; i < ${#names[@]}; i += jobs)); do
+        out="$DIR/map/runbooks/${names[i]}.md"
+        runbook_render "${names[i]}" >"$out.tmp.$BASHPID" 2>/dev/null || true
+        mv -f "$out.tmp.$BASHPID" "$out"
+      done
+    ) &
+  done
+  wait
   runbook_org
   runbook_incidents_page
+  rm -f "$hold"
 
   # The index only. The playbooks themselves are written by a model, so they are
   # rewritten when an instance lands — not on every `orgami doc`.
@@ -273,22 +309,36 @@ PROMPT
 
     echo "## Repositories"
     echo
-    echo "| Repo | Language | Deployed with | Depends on | Reaches |"
-    echo "|---|---|---|---|---|"
+    # Deployed with is tool: edges only. A vendor: edge shares the kind "uses"
+    # but is a bill, not a deploy step, so it has a column of its own, by the
+    # vendor's name, and not again when the same company is a deploy tool.
+    # Reaches is the network: calls into another repo and hosts the repo
+    # reaches. References is a name written in a file — often a README link —
+    # which says the repo knows of the other, not that it talks to it.
+    echo "| Repo | Language | Deployed with | Vendors | Depends on | Reaches | References |"
+    echo "|---|---|---|---|---|---|---|"
     jq -r '
+      def cell: unique | join(", ") | if . == "" then "—" else . end;
       . as $g
+      | (reduce (.edges // [])[] as $e ({}; .[$e.from // "" | tostring] += [$e])) as $from
+      | (reduce (.nodes // [])[] as $v ({}; if $v.kind == "vendor" then .[$v.id] = ($v.name // $v.id) else . end)) as $vn
       | [$g.nodes[] | select(.kind == "repo")] | sort_by(.name)[]
       | .name as $n
-      | ("repo:" + $n) as $id
+      | ($from["repo:" + $n] // []) as $out
+      | [$out[] | select(.kind == "uses" and (.to | startswith("tool:"))) | .to | sub("^tool:"; "")] as $tools
       | [
           "[" + $n + "](" + (.meta.url // "") + ")",
           (.meta.language // "—"),
-          ([$g.edges[] | select(.from == $id and .kind == "uses")
-            | .to | sub("^tool:"; "")] | unique | join(", ") | if . == "" then "—" else . end),
-          ([$g.edges[] | select(.from == $id and .kind == "depends-on")
-            | .to | sub("^service:"; "")] | unique | join(", ") | if . == "" then "—" else . end),
-          ([$g.edges[] | select(.from == $id and .kind == "references")
-            | .to | sub("^repo:"; "")] | unique | join(", ") | if . == "" then "—" else . end)
+          ($tools | cell),
+          ([$out[] | select(.kind == "uses" and (.to | startswith("vendor:")))
+            | select(.to | sub("^vendor:"; "") | IN($tools[]) | not)
+            | ($vn[.to] // (.to | sub("^vendor:"; "")))] | cell),
+          ([$out[] | select(.kind == "depends-on")
+            | .to | sub("^service:"; "")] | cell),
+          ([$out[] | select(.kind == "calls" or .kind == "reaches")
+            | .to | sub("^(repo|host):"; "")] | cell),
+          ([$out[] | select(.kind == "references" or .kind == "imports")
+            | .to | sub("^repo:"; "")] | cell)
         ] | "| " + join(" | ") + " |"' "$g"
     echo
 
@@ -393,11 +443,12 @@ PROMPT
     jq -r '
       . as $g
       | [$g.nodes[] | select(.kind == "repo") | .name as $n | ("repo:" + $n) as $id
-         | select([$g.edges[] | select(.kind == "references" and (.from == $id or .to == $id))] | length == 0)
-         | select([$g.edges[] | select(.kind == "uses" and .from == $id)] | length == 0)
+         | select([$g.edges[] | select((.kind | IN("references", "calls", "imports")) and (.from == $id or .to == $id))] | length == 0)
+         | select([$g.edges[] | select(.from == $id and ((.kind == "uses" and (.to | startswith("tool:")))
+                                                         or (.kind | IN("deploys-to", "reaches", "depends-on"))))] | length == 0)
          | $n] as $orphans
       | if ($orphans | length) == 0 then "Every repository is connected to something."
-        else "These repos reference no other repo and declare no deployment tooling — libraries, archives, or scratch:\n\n"
+        else "These repos link to no other repo and declare no deployment tooling, host or backing service — a vendor they use is no link to anything here. Libraries, archives, or scratch:\n\n"
              + ($orphans | map("- `" + . + "`") | join("\n"))
         end' "$g"
     echo

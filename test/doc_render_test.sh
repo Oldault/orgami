@@ -124,7 +124,7 @@ check "a card names the frameworks the profile states" \
 check "and each command as the profile states it" \
   "$(grep -c '^- `build` — `next build`$' "$web")" "1"
 check "and the runtime it is run with" \
-  "$(grep -c 'pnpm · node 22' "$web")" "1"
+  "$(grep -cx 'package manager: pnpm · runtime: node 22' "$web")" "1"
 check "and the edge out of it keeps its evidence" \
   "$(grep -c '^- references \*\*billing\*\* — `package.json:14`$' "$web")" "1"
 check "and an edge into it says it was inferred" \

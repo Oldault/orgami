@@ -9,6 +9,7 @@ AUTONOTE_DAILY_CAP=${ORGAMI_AUTONOTE_CAP:-5}
 # Tool calls and their output are left out — they are already in git.
 autonote_digest() {
   local transcript=$1
+  declare -F secrets_redact >/dev/null || source "$(dirname "${BASH_SOURCE[0]}")/secrets.sh"
   jq -r '
     select(.type == "user" or .type == "assistant")
     | .message.content
@@ -16,12 +17,14 @@ autonote_digest() {
       else ([.[]? | select(.type == "text") | .text] | join("\n"))
       end' "$transcript" 2>/dev/null |
     grep -v '^$' |
-    # Anything that looks like a credential never leaves this machine.
-    sed -E 's/(sk|ghp|gho|ghs|ghu|xox[abps])-[A-Za-z0-9_-]{8,}/[redacted]/g;
-            s/AKIA[0-9A-Z]{12,}/[redacted]/g;
-            s/(Bearer|Authorization:)[[:space:]]+[A-Za-z0-9._-]{12,}/\1 [redacted]/g;
-            s/([A-Z0-9_]*(PASSWORD|SECRET|TOKEN|APIKEY|API_KEY|PRIVATE_KEY)[A-Z0-9_]*)[=:][[:space:]]*[^[:space:]]+/\1=[redacted]/g;
-            s#(mongodb\+srv|postgres|postgresql|mysql|redis)://[^[:space:]]+#\1://[redacted]#g' |
+    # Only the last 60000 characters are sent. Redacting a wider window keeps a
+    # credential the first cut splits in half far outside what is kept, and
+    # keeps a long session from costing a jq pass over all of it.
+    tail -c 240000 |
+    # Anything that looks like a credential never leaves this machine. The list
+    # is lib/secrets.tsv, the one the note screen refuses notes with; if the
+    # redaction cannot run, nothing is sent at all.
+    secrets_redact 2>/dev/null |
     tail -c 60000
 }
 
@@ -45,10 +48,28 @@ autonote_cap_reached() {
   return 1
 }
 
+# autonote_id <dir> <stamp-author> <first line> — an id no draft in <dir> has.
+# The slug is ASCII and can come out empty (a line with no Latin letters in
+# it); two sweeps can draft in the same second, and folding accents can turn
+# two different first lines into one slug. A file written under an id that
+# exists would replace a note nobody has seen.
+autonote_id() {
+  local dir=$1 base=$2 slug id n=2
+  slug=$(notes_slug "$3")
+  id="$base${slug:+-$slug}"
+  local try=$id
+  while [[ -e $dir/$try.md || -e $DIR/notes/$try.md ]]; do
+    try="$id-$n"
+    n=$((n + 1))
+  done
+  echo "$try"
+}
+
 # orgami note-auto <transcript> [<cwd>] — runs detached from the hook.
 cmd_note_auto() {
   local transcript=${1:-} where=${2:-$PWD}
   [[ -f $transcript ]] || die "usage: orgami note-auto <transcript> [<dir>]"
+  autonote_is_sidechain "$transcript" && return 0
 
   source "$ROOT/lib/card.sh"
   context_pick_company "$(card_repo_here "$where" 2>/dev/null || true)" 2>/dev/null || true
@@ -148,7 +169,7 @@ cmd_note_auto() {
   local author stamp id file
   author=$(notes_author)
   stamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  id="$(date -u +%Y%m%d-%H%M%S)-$author-$(notes_slug "$(head -1 <<<"$body")")"
+  id=$(autonote_id "$dest" "$(date -u +%Y%m%d-%H%M%S)-$author" "$(head -1 <<<"$body")")
   file="$dest/$id.md"
 
   {
@@ -198,14 +219,28 @@ autonote_state_dir() {
   echo "$d"
 }
 
+# A subagent's transcript is a fragment of the session that spawned it, written
+# under <session>/subagents/ and marked isSidechain. Read as sessions of their
+# own, one workflow fan-out spent the day's cap on pieces of one conversation
+# and left a draft per piece.
 autonote_transcripts() {
   local root files
   root="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"
   [[ -d $root ]] || return 0
-  files=$(find "$root" -name '*.jsonl' -mmin +"$AUTONOTE_SWEEP_QUIET" \
-    -mmin -"$AUTONOTE_SWEEP_WINDOW" 2>/dev/null)
+  files=$(find "$root" -name '*.jsonl' ! -path '*/subagents/*' \
+    -mmin +"$AUTONOTE_SWEEP_QUIET" -mmin -"$AUTONOTE_SWEEP_WINDOW" 2>/dev/null)
   [[ -n $files ]] || return 0
   printf '%s\n' "$files" | tr '\n' '\0' | xargs -0 ls -t 2>/dev/null
+}
+
+# Whether a transcript is a subagent's rather than a session's. The path is the
+# cheap test; the first record that carries isSidechain settles the rest, and
+# jq stops reading there. No `?` inside first(): jq 1.6 lets a try swallow the
+# break that ends it.
+autonote_is_sidechain() {
+  [[ $1 == */subagents/* ]] && return 0
+  [[ $(jq -n 'first(inputs | select(type == "object" and has("isSidechain")) | .isSidechain) // false' \
+    "$1" 2>/dev/null) == true ]]
 }
 
 # orgami note-sweep [--background] — read back whatever nobody closed.
@@ -230,7 +265,7 @@ cmd_note_sweep() {
     [[ -n ${CLAUDE_SESSION_ID:-} && $id == "${CLAUDE_SESSION_ID:-}" ]] && continue
     [[ -e $state/autonote-$id ]] && continue
 
-    autonote_worth_reading "$f" || {
+    { ! autonote_is_sidechain "$f" && autonote_worth_reading "$f"; } || {
       : >"$state/autonote-$id"
       continue
     }
@@ -293,6 +328,45 @@ decision_keep() {
   printf '%s\n' "$bullet" >>"$out"
 }
 
+# A decision bullet has no id of its own. Its week and a checksum of its text
+# give it one that holds while the bullets around it are kept or dropped, which
+# a position in the list would not.
+decision_id() {
+  printf '%s.%s\n' "$1" "$(printf '%s' "$2" | cksum | awk '{print $1}')"
+}
+
+# A decisions draft rewritten with what is left of it, or removed when nothing
+# is. Written beside the draft and moved over it, so an interrupted review never
+# leaves half a week behind.
+decision_draft_rewrite() {
+  local f=$1 week=$2 rest=$3 tmp
+  if [[ -s $rest ]]; then
+    tmp=$(mktemp "$f.XXXXXX")
+    { printf '## %s\n\n' "$week"; cat "$rest"; } >"$tmp"
+    mv "$tmp" "$f"
+  else
+    rm -f "$f"
+  fi
+}
+
+# One note draft, kept: screened again, because the screen may have learned a
+# shape since it was drafted, then moved in with the published notes.
+drafts_keep_note() {
+  local f=$1 kept kr kt
+  notes_screen_file "$f" "$COMPANY" || return 1
+  kept="$DIR/notes/$(basename "$f")"
+  mv "$f" "$kept" || return 1
+  # Kept, so it counts as evidence now — and it may be the one that completes
+  # a procedure.
+  kr=$(sed -n 's/^repo: //p' "$kept" | head -1)
+  kt=$(sed -n 's/^topic: //p' "$kept" | head -1)
+  if [[ -n $kr && -n $kt ]]; then
+    source "$ROOT/lib/playbook.sh"
+    playbook_spawn "$kr" "$kt" || true
+  fi
+  return 0
+}
+
 # orgami drafts, the decisions half: every held fragment, bullet by bullet.
 # What is skipped stays in the draft; a draft with nothing left is removed.
 drafts_decisions() {
@@ -328,11 +402,7 @@ drafts_decisions() {
         *) printf '%s\n' "$bullet" >>"$rest" ;;
       esac
     done < <(decision_bullets "$f")
-    if [[ -s $rest ]]; then
-      { printf '## %s\n\n' "$week"; cat "$rest"; } >"$f"
-    else
-      rm -f "$f"
-    fi
+    decision_draft_rewrite "$f" "$week" "$rest"
     rm -f "$rest"
   done
   echo
@@ -342,11 +412,126 @@ drafts_decisions() {
   return 0
 }
 
+# Every draft waiting, notes then decisions, as one JSON array. What --list
+# prints, and what an agent reads to put the choice to the user.
+drafts_json() {
+  local f week bullet
+  {
+    for f in "$DIR/notes/draft"/*.md; do
+      [[ -f $f ]] || continue
+      jq -n --arg id "$(basename "$f" .md)" --arg file "$f" \
+        --arg repo "$(sed -n 's/^repo: //p' "$f" | head -1)" \
+        --arg tags "$(sed -n 's/^tags: //p' "$f" | head -1)" \
+        --arg topic "$(sed -n 's/^topic: //p' "$f" | head -1)" \
+        --arg date "$(sed -n 's/^date: //p' "$f" | head -1)" \
+        --arg text "$(notes_body "$f" | sed '/./,$!d')" \
+        '{id: $id, kind: "note", repo: $repo, topic: $topic, date: $date,
+          tags: ($tags | ltrimstr("[") | rtrimstr("]") | split(",")
+                 | map(sub("^ +"; "") | sub(" +$"; "")) | map(select(length > 0))),
+          text: $text, file: $file}'
+    done
+    for f in "$DIR/map/decisions/draft"/*.md; do
+      [[ -f $f ]] || continue
+      week=$(basename "$f" .md)
+      while IFS= read -r -d $'\x1e' bullet; do
+        jq -n --arg id "$(decision_id "$week" "$bullet")" --arg week "$week" \
+          --arg text "$bullet" --arg file "$f" \
+          '{id: $id, kind: "decision", week: $week, text: $text, file: $file}'
+      done < <(decision_bullets "$f")
+    done
+  } | jq -s .
+}
+
+# drafts_act keep|drop <id> — one draft, by the id --list printed. A path or a
+# file name is taken down to its id, so nothing outside the draft folders can
+# be named.
+drafts_act() {
+  local act=$1 id=${2##*/} f week bullet rest found=0
+  id=${id%.md}
+  if [[ -z $id || $id == .* ]]; then
+    log "not a draft id: '$2'"
+    return 1
+  fi
+
+  f="$DIR/notes/draft/$id.md"
+  if [[ -f $f ]]; then
+    if [[ $act == keep ]]; then
+      drafts_keep_note "$f" || { log "kept nothing: $id does not pass screening"; return 1; }
+      echo "kept $id — in the runbooks at the next 'orgami doc', with the team at the next 'orgami sync'"
+    else
+      rm -f "$f"
+      echo "dropped $id"
+    fi
+    return 0
+  fi
+
+  week=${id%.*}
+  f="$DIR/map/decisions/draft/$week.md"
+  if [[ $id == *.* && -f $f ]]; then
+    rest=$(mktemp)
+    while IFS= read -r -d $'\x1e' bullet; do
+      if [[ $found == 0 && $(decision_id "$week" "$bullet") == "$id" ]]; then
+        found=1
+        [[ $act == keep ]] && decision_keep "$week" "$bullet"
+        continue
+      fi
+      printf '%s\n' "$bullet" >>"$rest"
+    done < <(decision_bullets "$f")
+    [[ $found == 1 ]] && decision_draft_rewrite "$f" "$week" "$rest"
+    rm -f "$rest"
+    if [[ $found == 1 ]]; then
+      if [[ $act == keep ]]; then
+        echo "kept $id — in DECISIONS.md at the next 'orgami doc'"
+      else
+        echo "dropped $id"
+      fi
+      return 0
+    fi
+  fi
+
+  log "no draft '$id'"
+  return 1
+}
+
+drafts_usage() {
+  cat <<'USAGE'
+usage: orgami drafts [--list [--json] | --keep <id>... | --drop <id>... | --count]
+
+Notes drafted from earlier sessions and decisions mined from pull requests wait
+here until a person keeps or drops them. With no flag, each one is shown in turn
+and asked about, which needs a terminal. The flags do the same without one.
+
+  --list         every draft waiting, with the id to act on
+  --json         the same list as JSON
+  --keep <id>    keep one: a note joins the team's notes, a decision its week
+  --drop <id>    throw one away
+  --count        how many are waiting
+
+--keep and --drop repeat, and mix: orgami drafts --keep <id> --drop <id>
+USAGE
+}
+
 # orgami drafts — keep or discard what was drafted while you worked.
 cmd_drafts() {
+  local list=0 json=0 count=0 acts=()
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+      -h | --help) drafts_usage; return 0 ;;
+      --count) count=1; shift ;;
+      --list) list=1; shift ;;
+      --json) list=1; json=1; shift ;;
+      --keep | --drop) need_arg "$1" $#; acts+=("${1#--}" "$2"); shift 2 ;;
+      *) die "unknown argument: $1 — see: orgami drafts --help" ;;
+    esac
+  done
+
+  # Inside a checkout, the drafts of the company that owns it: the session hook
+  # counts them beside that company's brief, and must not count another's.
+  source "$ROOT/lib/card.sh"
+  context_pick_company 2>/dev/null || true
   load_company
 
-  if [[ ${1:-} == --count ]]; then
+  if [[ $count == 1 ]]; then
     local n=0 f
     autonote_pending && n=$(find "$DIR/notes/draft" -name '*.md' | wc -l)
     if decisions_pending; then
@@ -354,13 +539,41 @@ cmd_drafts() {
         [[ -f $f ]] && n=$((n + $(grep -c '^- ' "$f")))
       done
     fi
-    echo "$n"
+    echo "$((n))"
     return 0
   fi
 
+  if [[ ${#acts[@]} -gt 0 ]]; then
+    local i bad=0
+    for ((i = 0; i < ${#acts[@]}; i += 2)); do
+      drafts_act "${acts[i]}" "${acts[i + 1]}" || bad=$((bad + 1))
+    done
+    [[ $bad == 0 ]] || die "$bad of $((${#acts[@]} / 2)) not done — see what is waiting with: orgami drafts --list"
+    return 0
+  fi
+
+  if [[ $list == 1 ]]; then
+    local all
+    all=$(drafts_json)
+    if [[ $json == 1 ]]; then
+      printf '%s\n' "$all"
+    elif [[ $(jq length <<<"$all") == 0 ]]; then
+      echo "nothing waiting"
+    else
+      jq -r '
+        def place: (if .kind == "note" then [.repo, (.tags | join(","))] else [.week] end)
+                   | map(select(. != "")) | join(" · ");
+        .[] | "\(.id)\n  \(.kind)\(place | if . == "" then "" else " · " + . end)\n  \(
+          .text | split("\n") | map(select(test("[^ ]"))) | (.[0] // "") | .[0:110])\n"' <<<"$all"
+      echo "keep or drop one with: orgami drafts --keep <id> | --drop <id>"
+    fi
+    return 0
+  fi
+
+  local hint="list them with: orgami drafts --list, then --keep <id> or --drop <id>"
   if ! autonote_pending; then
     if decisions_pending; then
-      need_tty "see what is waiting with: orgami drafts --count"
+      need_tty "$hint"
       drafts_decisions
     else
       echo "nothing waiting"
@@ -368,7 +581,7 @@ cmd_drafts() {
     return 0
   fi
 
-  need_tty "see what is waiting with: orgami drafts --count"
+  need_tty "$hint"
   local f n=0 kept=0 dropped=0
   for f in "$DIR/notes/draft"/*.md; do
     [[ -f $f ]] || continue
@@ -390,18 +603,7 @@ cmd_drafts() {
     fi
 
     case $choice in
-      keep*)
-        mv "$f" "$DIR/notes/$(basename "$f")" && kept=$((kept + 1))
-        # Kept, so it counts as evidence now — and it may be the one that
-        # completes a procedure.
-        local kr kt
-        kr=$(sed -n 's/^repo: //p' "$DIR/notes/$(basename "$f")" | head -1)
-        kt=$(sed -n 's/^topic: //p' "$DIR/notes/$(basename "$f")" | head -1)
-        if [[ -n $kr && -n $kt ]]; then
-          source "$ROOT/lib/playbook.sh"
-          playbook_maybe "$kr" "$kt" || true
-        fi
-        ;;
+      keep*) drafts_keep_note "$f" && kept=$((kept + 1)) ;;
       throw* | drop*) rm -f "$f" && dropped=$((dropped + 1)) ;;
       stop*) break ;;
       *) : ;;

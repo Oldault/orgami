@@ -26,28 +26,23 @@ notes_author() {
 notes_screen() {
   local text=$1 company=$2 problems=() warnings=()
 
-  local secret_patterns=(
-    '-----BEGIN [A-Z ]*PRIVATE KEY'
-    'AKIA[0-9A-Z]{16}'
-    'ASIA[0-9A-Z]{16}'
-    'gh[pousr]_[A-Za-z0-9]{20,}'
-    'github_pat_[A-Za-z0-9_]{20,}'
-    'xox[baprs]-[A-Za-z0-9-]{10,}'
-    '(sk|rk)_live_[A-Za-z0-9]{10,}'
-    'AIza[0-9A-Za-z_-]{30,}'
-    'eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}'
-    '://[^/@[:space:]:]+:[^/@[:space:]]{4,}@'
-    '(password|passwd|secret|api[_-]?key|access[_-]?token|private[_-]?key)[[:space:]]*[=:][[:space:]]*[^[:space:]<>"]{8,}'
-  )
-  local pat
-  for pat in "${secret_patterns[@]}"; do
-    if grep -qiE -- "$pat" <<<"$text"; then
-      problems+=("looks like a credential: $(grep -oiE -- "$pat" <<<"$text" | head -1 | cut -c1-28)…")
-    fi
-  done
+  # What counts as a credential is lib/secrets.tsv, the same list the session
+  # digest is redacted with. Only the kind and the first few characters are
+  # echoed back: the refusal lands in a terminal or a CI log, and quoting the
+  # match whole would publish the very thing it refused.
+  declare -F secrets_find >/dev/null || source "$(dirname "${BASH_SOURCE[0]}")/secrets.sh"
+  local found kind near
+  if found=$(secrets_find <<<"$text"); then
+    while IFS=$'\t' read -r kind near; do
+      [[ -n $kind ]] && problems+=("looks like a credential ($kind): ${near:0:6}…")
+    done <<<"$found"
+  else
+    # A screen that could not run is a refusal, never a pass.
+    problems+=("the credential screen could not run — check that jq works and $SECRETS_TSV exists")
+  fi
 
   # Another client's organization must not surface in this one's notes.
-  local other org
+  local other org pat
   while read -r other; do
     [[ -n $other && $other != "$company" ]] || continue
     org=$(jq -r '.org // empty' "$(company_dir "$other")/config.json" 2>/dev/null)
@@ -81,14 +76,49 @@ notes_screen() {
   return 1
 }
 
+# A note file as it would be published. Its name and front matter are pushed
+# along with the body, so they are screened with it: a hand-written note can
+# carry a key in its file name or its id as easily as in its text.
+notes_screen_file() {
+  local f=$1 company=$2
+  notes_screen "$(basename "$f")
+$(cat "$f")" "$company"
+}
+
 # Everything after the frontmatter. A sed range cannot do this reliably.
 notes_body() {
   awk 'f { print } /^---$/ { c++; if (c == 2) f = 1 }' "$1"
 }
 
+# A slug becomes a note id and a file name, which travel through git, URLs and
+# other people's file systems, so it is ASCII. Accented Latin letters are folded
+# to their base letter — "générer" reads "generer", not "g-n-rer" — and anything
+# else non-ASCII becomes a separator. LC_ALL=C makes sed and tr work on bytes,
+# the one reading GNU and BSD share in every locale; under a UTF-8 locale GNU
+# sed's [a-z] matches "é" and let it through. Cut before trimming, so a cut
+# never leaves a trailing dash.
 notes_slug() {
-  tr '[:upper:]' '[:lower:]' <<<"$1" |
-    sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g' | cut -c1-40
+  printf '%s\n' "$1" | LC_ALL=C sed -E '
+      s/(à|á|â|ã|ä|å|ā|ă|ą|À|Á|Â|Ã|Ä|Å|Ā|Ă|Ą)/a/g
+      s/(æ|Æ)/ae/g
+      s/(ç|ć|č|Ç|Ć|Č)/c/g
+      s/(ď|đ|Ď|Đ)/d/g
+      s/(è|é|ê|ë|ē|ė|ę|ě|È|É|Ê|Ë|Ē|Ė|Ę|Ě)/e/g
+      s/(ğ|Ğ)/g/g
+      s/(ì|í|î|ï|ī|į|ı|Ì|Í|Î|Ï|Ī|Į|İ)/i/g
+      s/(ł|ľ|Ł|Ľ)/l/g
+      s/(ñ|ń|ň|Ñ|Ń|Ň)/n/g
+      s/(ò|ó|ô|õ|ö|ø|ō|ő|Ò|Ó|Ô|Õ|Ö|Ø|Ō|Ő)/o/g
+      s/(œ|Œ)/oe/g
+      s/(ř|Ř)/r/g
+      s/(ś|š|ş|Ś|Š|Ş)/s/g
+      s/ß/ss/g
+      s/(ť|ţ|Ť|Ţ)/t/g
+      s/(ù|ú|û|ü|ū|ů|ű|ų|Ù|Ú|Û|Ü|Ū|Ů|Ű|Ų)/u/g
+      s/(ý|ÿ|Ý|Ÿ)/y/g
+      s/(ź|ż|ž|Ź|Ż|Ž)/z/g' |
+    LC_ALL=C tr '[:upper:]' '[:lower:]' |
+    LC_ALL=C sed -E 's/[^a-z0-9]+/-/g; s/^-+//' | cut -c1-40 | sed -E 's/-+$//'
 }
 
 # The repo this note is about: an explicit --repo, or the checkout we are in.
@@ -100,6 +130,52 @@ notes_repo_here() {
     echo "$guess"
   fi
   return 0
+}
+
+# notes_repo_canon <repo> — the map's spelling of a repository name, or nothing
+# when the map does not hold it. GitHub names are case-insensitive, so one
+# case-insensitive match is that repository. With no map yet there is nothing
+# to check against, and the name is taken as given.
+notes_repo_canon() {
+  local repos="$DIR/map/repos.json"
+  [[ -f $repos ]] || { echo "$1"; return 0; }
+  jq -r --arg r "$1" '
+    [.[].name | strings] as $names
+    | if any($names[]; . == $r) then $r
+      else [$names[] | select(ascii_downcase == ($r | ascii_downcase))]
+           | if length == 1 then .[0] else empty end
+      end' "$repos" 2>/dev/null ||
+    echo "$1" # a map jq cannot read checks nothing, as with no map at all
+}
+
+# notes_repo_close <repo> — up to five names in the map that look like the one
+# given: either contains the other, they match once punctuation is dropped, or
+# they share the first three letters. A typo is the usual reason a name is not
+# in the map, and these are what the typo was probably of.
+notes_repo_close() {
+  jq -r --arg r "$1" '
+    def norm: ascii_downcase | gsub("[^a-z0-9]"; "");
+    ($r | ascii_downcase) as $lr | ($r | norm) as $nr
+    | [.[].name | strings
+       | select((ascii_downcase) as $ln | (norm) as $nn
+                | ($nr != "" and ($nn | contains($nr))) or ($nn != "" and ($nr | contains($nn)))
+                  or ($lr | length) >= 3 and ($ln | startswith($lr[0:3])))]
+    | .[0:5] | join(", ")' "$DIR/map/repos.json" 2>/dev/null || true
+}
+
+# notes_repo_refusal <repo> — what to say when a note names a repository the
+# map does not hold. Filed under a typo, a note never reaches the real repo's
+# card or context, and nothing tells its author.
+notes_repo_refusal() {
+  local close
+  close=$(notes_repo_close "$1")
+  if [[ -n $close ]]; then
+    printf "'%s' is not a repository in the %s map — did you mean: %s?\n" "$1" "$COMPANY" "$close"
+  else
+    printf "'%s' is not a repository in the %s map (%s repos).\n" "$1" "$COMPANY" \
+      "$(jq 'length' "$DIR/map/repos.json" 2>/dev/null || echo 0)"
+  fi
+  printf '     Pass a name the map holds, leave --repo out for a note about the whole organization, or run orgami scan if the repo is new.'
 }
 
 cmd_note() {
@@ -120,6 +196,14 @@ cmd_note() {
       *) text="$*"; break ;;
     esac
   done
+
+  # Checked before the note is asked for, so nobody types it out to be refused.
+  if [[ -n $repo ]]; then
+    local canon
+    canon=$(notes_repo_canon "$repo")
+    [[ -n $canon ]] || die "$(notes_repo_refusal "$repo")"
+    repo=$canon
+  fi
 
   if [[ -z $text ]]; then
     need_tty "pass the note as an argument: orgami note [--repo <repo>] [--tag <tag>] \"...\""
@@ -176,10 +260,19 @@ cmd_note() {
   fi
   [[ -n $topic ]] && topic=$(notes_slug "$topic")
 
-  local author stamp id file
+  local author stamp id file slug base n=2
   author=$(notes_author)
   stamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-  id="$(date -u +%Y%m%d-%H%M%S)-$author-$(notes_slug "${text%%$'\n'*}")"
+  # A first line with no Latin letters slugs to nothing, and two notes in the
+  # same second with the same first words would share a file: the second one
+  # would overwrite the first. Same rule as autonote_id.
+  slug=$(notes_slug "${text%%$'\n'*}")
+  base="$(date -u +%Y%m%d-%H%M%S)-$author${slug:+-$slug}"
+  id=$base
+  while [[ -e $DIR/notes/$id.md ]]; do
+    id="$base-$n"
+    n=$((n + 1))
+  done
   file="$DIR/notes/$id.md"
 
   {
@@ -201,13 +294,15 @@ cmd_note() {
 
   echo "$file"
 
-  # The instance that completes a procedure writes the procedure.
+  # The instance that completes a procedure writes the procedure, in the
+  # background and said out loud: it is a model call.
   if [[ -n $repo && -n $topic ]]; then
     source "$ROOT/lib/playbook.sh"
-    playbook_maybe "$repo" "$topic" || true
-    local built
-    built=$(playbook_file "$repo" "$topic")
-    [[ -f $built ]] && log "playbook: $built"
+    if ! playbook_spawn "$repo" "$topic"; then
+      local built
+      built=$(playbook_file "$repo" "$topic")
+      [[ -f $built ]] && log "playbook: $built"
+    fi
   fi
 
   if [[ $push == 1 ]]; then
@@ -219,31 +314,66 @@ cmd_note() {
   return 0
 }
 
-# Frontmatter of every note as one JSON array, body included.
+# notes_parse <file>... — one JSON object per note file, frontmatter fields as
+# strings ("" when absent), body included. jq reads each file itself: JSON put
+# together with printf escaped only what someone thought of, so one tab in one
+# note broke the index for every command that reads it. A file is passed by
+# --rawfile rather than piped, because a stream of files glues the last line of
+# one that lacks a newline to the first line of the next. Batches keep the
+# argument list well under ARG_MAX in a home with thousands of notes.
+notes_parse() {
+  local f n=0 args=() names=()
+  for f in "$@" ""; do
+    if [[ -n $f && -f $f && -r $f ]]; then
+      args+=(--rawfile "n$n" "$f")
+      names+=("$f")
+      n=$((n + 1))
+    fi
+    [[ $n -gt 0 && ( -z $f || $n -ge 500 ) ]] || continue
+    jq -nc "${args[@]}" '
+      $ARGS.positional | to_entries[]
+      | .value as $file
+      | ($ARGS.named["n\(.key)"]
+         | if . == "" then [] else (if endswith("\n") then .[:-1] else . end) | split("\n") end) as $lines
+      | (if ($lines | length) > 0 and $lines[0] == "---"
+         then ([range(1; $lines | length) | select($lines[.] == "---")] | .[0] // ($lines | length))
+         else 0 end) as $stop
+      | (reduce ($lines[(if $stop > 0 then 1 else 0 end):$stop][] | select(. != "") | split(":")) as $kv ({};
+           .[$kv[0]] = (if ($kv | length) > 1 then ($kv[1:] | join(":") | sub("^ +"; "")) else $kv[0] end))) as $meta
+      | {id: ($meta.id // ""), author: ($meta.author // ""), date: ($meta.date // ""),
+         repo: ($meta.repo // ""), tags: ($meta.tags // ""), topic: ($meta.topic // ""),
+         supersedes: ($meta.supersedes // ""), file: $file,
+         body: ($lines[(if $stop > 0 then $stop + 1 else 0 end):] | map(. + "\n") | join(""))}' \
+      --args "${names[@]}"
+    args=() names=() n=0
+  done
+}
+
+# Frontmatter of every note as one JSON array, body included. A loop over every
+# repo (orgami doc's cards and runbooks) asks for it once per repo, so a caller
+# can parse once with notes_index_hold and every call in its scope reads that.
 notes_index() {
-  local f
+  if [[ -n ${NOTES_INDEX_CACHE:-} && -f $NOTES_INDEX_CACHE ]]; then
+    cat "$NOTES_INDEX_CACHE"
+    return 0
+  fi
+  local files=() f
   for f in "$DIR"/notes/*.md; do
-    [[ -f $f ]] || continue
-    awk -v file="$f" '
-      BEGIN { inmeta = 0; body = "" }
-      NR == 1 && $0 == "---" { inmeta = 1; next }
-      inmeta && $0 == "---" { inmeta = 0; next }
-      inmeta {
-        key = $0; sub(/:.*/, "", key)
-        val = $0; sub(/^[^:]*:[ ]*/, "", val)
-        meta[key] = val
-        next
-      }
-      { body = body $0 "\n" }
-      END {
-        gsub(/\\/, "\\\\", body); gsub(/"/, "\\\"", body); gsub(/\n/, "\\n", body)
-        printf "{\"id\":\"%s\",\"author\":\"%s\",\"date\":\"%s\",\"repo\":\"%s\",\"tags\":\"%s\",\"topic\":\"%s\",\"supersedes\":\"%s\",\"file\":\"%s\",\"body\":\"%s\"}\n",
-          meta["id"], meta["author"], meta["date"], meta["repo"], meta["tags"], meta["topic"], meta["supersedes"], file, body
-      }' "$f"
-  done | jq -s '
+    [[ -f $f ]] && files+=("$f")
+  done
+  notes_parse ${files[@]+"${files[@]}"} | jq -s '
     (map(.supersedes) | map(select(. != "")) | unique) as $dead
     | map(select(.id as $i | ($dead | index($i)) | not))
     | sort_by(.date) | reverse'
+}
+
+# notes_index_hold <file> — parse every note into <file> and point
+# NOTES_INDEX_CACHE at it. The caller declares `local NOTES_INDEX_CACHE` first,
+# so the cache ends with the caller and a later note is never missed.
+notes_index_hold() {
+  NOTES_INDEX_CACHE=""
+  notes_index >"$1" 2>/dev/null || return 0
+  NOTES_INDEX_CACHE=$1
 }
 
 # Every note, including the ones a newer note replaced.
@@ -287,11 +417,14 @@ cmd_notes() {
   done
 
   if [[ $pending == 1 ]]; then
-    local work known f base n=0
+    local work known="" f base n=0
     work="$DIR/cache/docs"
-    git -C "$work" fetch --quiet origin 2>/dev/null || true
-    known=$(git -C "$work" ls-tree -r --name-only origin/HEAD -- "$(cfg docs_path orgami)/notes" 2>/dev/null |
-      sed 's|.*/||' || true)
+    if [[ -d $work/.git ]]; then
+      docs_repair "$work"
+      git -C "$work" fetch --quiet origin 2>/dev/null || true
+      known=$(git -C "$work" ls-tree -r --name-only "origin/$(docs_default "$work")" -- "$(cfg docs_path orgami)/notes" 2>/dev/null |
+        sed 's|.*/||' || true)
+    fi
     for f in "$DIR"/notes/*.md; do
       [[ -f $f ]] || continue
       base=$(basename "$f")
@@ -320,11 +453,21 @@ cmd_notes() {
 
   # Screen every note on disk, including ones that arrived from teammates.
   if [[ $check == 1 ]]; then
-    local f bad=0
+    local f bad=0 r close
     for f in "$DIR"/notes/*.md; do
       [[ -f $f ]] || continue
-      if ! notes_screen "$(notes_body "$f")" "$COMPANY"; then
+      # The whole file, as orgami screen in CI reads it: the name and the
+      # frontmatter are published with the body.
+      if ! notes_screen_file "$f" "$COMPANY"; then
         echo "  ^ $(basename "$f")" >&2
+        bad=$((bad + 1))
+        continue
+      fi
+      r=$(notes_parse "$f" | jq -r '.repo')
+      if [[ -n $r && -z $(notes_repo_canon "$r") ]]; then
+        close=$(notes_repo_close "$r")
+        echo "$(basename "$f"): repo '$r' is not in the map${close:+ — close: $close}" >&2
+        echo "  fix its repo: line, or archive it: orgami prune --id $(basename "$f" .md)" >&2
         bad=$((bad + 1))
       fi
     done
@@ -337,7 +480,10 @@ cmd_notes() {
     return 0
   fi
 
-  [[ -d $DIR/notes ]] || die "no notes yet — write one with: orgami note \"...\""
+  # No notes is a state, not a failure: every reader of this — the MCP server,
+  # a script, the hook — would otherwise have to tell "none" from "broken".
+  compgen -G "$DIR/notes/*.md" >/dev/null 2>&1 ||
+    { echo "no notes yet — write one with: orgami note \"...\""; return 0; }
 
   notes_index | jq -r --arg repo "$repo" --arg tag "$tag" --arg q "$query" '
     [.[]
@@ -353,8 +499,12 @@ cmd_notes() {
 cmd_stale() {
   load_company
   local days=${1:-120} cutoff
+  # date(1) would otherwise be the one to object, in its own words and with
+  # no hint of what orgami wanted.
+  [[ $days =~ ^[0-9]{1,6}$ ]] || die "days is a whole number, like 120 — orgami stale [<days>]"
+  days=$((10#$days))
   cutoff=$(date_shift "$(date -u +%Y-%m-%d)" "-$days")
-  [[ -d $DIR/notes ]] || die "no notes yet"
+  compgen -G "$DIR/notes/*.md" >/dev/null 2>&1 || { echo "no notes yet"; return 0; }
 
   notes_index | jq -r --arg cutoff "$cutoff" --arg days "$days" '
     [.[] | select(.date[0:10] < $cutoff)]
@@ -424,7 +574,7 @@ cmd_screen() {
   [[ $# -gt 0 ]] || die "usage: orgami screen <file>..."
   for f in "$@"; do
     [[ -f $f ]] || continue
-    if notes_screen "$(notes_body "$f")" "${ORGAMI_COMPANY:-}"; then
+    if notes_screen_file "$f" "${ORGAMI_COMPANY:-}"; then
       echo "ok   $f"
     else
       echo "FAIL $f" >&2
@@ -963,7 +1113,12 @@ cmd_autosync() {
   fi
   trap 'rm -rf "$lock"' EXIT
 
-  # Subshells, so a sync or review that dies still lets the lock go.
+  # Subshells, so a sync or review that dies still lets the lock go. The run is
+  # written to its own file first: the log is shared by every run, and showing
+  # its tail showed whatever the run before this one had said as well.
+  local run
+  run=$(mktemp)
+  trap 'rm -rf "$lock" "$run"' EXIT
   {
     echo "--- $(date -u +%Y-%m-%dT%H:%M:%SZ) autosync $COMPANY"
     if [[ $(cfg notes_autosync false) != true ]]; then
@@ -978,12 +1133,13 @@ cmd_autosync() {
         (cmd_review --auto) || echo "review failed"
       fi
     fi
-  } >>"$DIR/cache/autosync.log" 2>&1
+  } >"$run" 2>&1
+  cat "$run" >>"$DIR/cache/autosync.log"
 
   if [[ $quiet == 0 ]]; then
-    tail -n 20 "$DIR/cache/autosync.log"
+    cat "$run"
   fi
-  rm -rf "$lock"
+  rm -rf "$lock" "$run"
   trap - EXIT
   return 0
 }
@@ -1026,23 +1182,29 @@ cmd_sync() {
     die "no docs_repo configured — nothing to sync with"
   fi
 
-  local work="$DIR/cache/docs"
-  if [[ -d $work/.git ]]; then
-    if ! git -C "$work" fetch --quiet origin; then
-      [[ $quiet == 1 ]] && return 0
-      die "cannot reach $repo"
-    fi
-    git -C "$work" reset --hard --quiet \
-      "origin/$(git -C "$work" rev-parse --abbrev-ref origin/HEAD | sed 's|origin/||')"
-  else
-    git clone --quiet --depth 1 "$repo" "$work" || die "cannot clone $repo"
-  fi
+  local work="$DIR/cache/docs" main rc=0
+  main=$(docs_checkout "$repo" "$work") || rc=$?
+  case $rc in
+    0) ;;
+    1) [[ $quiet == 1 ]] && return 0
+       die "cannot reach $repo — check the docs_repo URL and your access to it, then rerun: orgami sync" ;;
+    *) die "cannot get $work onto the docs repo's default branch — it is only a cache: rm -rf $work, then rerun: orgami sync" ;;
+  esac
 
   local remote="$work/$path/notes"
   docs_dir_inside "$work" "$work/$path" && docs_dir_inside "$work" "$remote" ||
     die "$repo:$path/notes is a link out of the docs repo — refusing to sync through it; ask whoever owns $repo to remove the link"
   mkdir -p "$remote" "$DIR/notes"
   date +%s >"$stamp"
+
+  # What a teammate published and this machine cannot write for itself. Only
+  # what is missing, so the files this machine wrote stay its own.
+  local taken
+  taken=$(docs_take "$work/$path" "$DIR")
+  if [[ $taken -gt 0 ]]; then
+    source "$ROOT/lib/playbook.sh"
+    playbook_index >/dev/null 2>&1 || true
+  fi
 
   if [[ $pull_only == 1 ]]; then
     local got=0
@@ -1053,7 +1215,7 @@ cmd_sync() {
       cp "$f" "$DIR/notes/$base"
       got=$((got + 1))
     done
-    [[ $quiet == 1 ]] || echo "$got new note(s)"
+    [[ $quiet == 1 ]] || echo "$got new note(s)$([[ $taken -gt 0 ]] && echo ", $taken published file(s) taken")"
     return 0
   fi
 
@@ -1103,14 +1265,22 @@ cmd_sync() {
   local pushed=0
 
   # Last check before anything leaves this machine. A note written by hand, or
-  # by an older version, gets the same screening as one written by the CLI.
-  local blocked=0
+  # by an older version, gets the same screening as one written by the CLI —
+  # the whole file, as the CI check on the docs repo reads it — and the same
+  # check that its repo is one the map holds.
+  local blocked=0 r
   for f in "$DIR"/notes/*.md; do
     [[ -f $f ]] || continue
     base=$(basename "$f")
     [[ -f $remote/$base ]] && continue
-    if ! notes_screen "$(notes_body "$f")" "$COMPANY" 2>/dev/null; then
+    if ! notes_screen_file "$f" "$COMPANY" 2>/dev/null; then
       log "not syncing $base — it does not pass screening; run: orgami notes --check"
+      blocked=$((blocked + 1))
+      continue
+    fi
+    r=$(notes_parse "$f" | jq -r '.repo')
+    if [[ -n $r && -z $(notes_repo_canon "$r") ]]; then
+      log "not syncing $base — its repo '$r' is not in the map; run: orgami notes --check"
       blocked=$((blocked + 1))
       continue
     fi
@@ -1128,13 +1298,11 @@ cmd_sync() {
     if [[ $review == 1 ]]; then
       # Already on the author's branch — one per author, reused, so syncing
       # twice before anyone reviews updates the same pull request.
-      local base existing
+      local base=$main existing
       git -C "$work" add -A "$path/notes"
       git -C "$work" commit --quiet -m "$msg" || true
       git -C "$work" push --quiet -u origin "$branch" || die "could not push $branch"
 
-      base=$(git -C "$work" rev-parse --abbrev-ref origin/HEAD 2>/dev/null | sed 's|origin/||')
-      [[ -n $base ]] || base=main
       existing=$(cd "$work" && gh pr list --head "$branch" --state open \
         --json number --jq '.[0].number // empty' 2>/dev/null || true)
 
@@ -1154,10 +1322,12 @@ Review for: anything that should not be shared, anything already stale, anything
       git -C "$work" checkout --quiet -
     else
       git -C "$work" commit --quiet -m "$msg"
-      git -C "$work" push --quiet origin HEAD || die "could not push — pull and retry"
+      git -C "$work" push --quiet origin HEAD ||
+        die "could not push to $repo — a teammate may have pushed first; rerun: orgami sync"
     fi
   fi
 
+  [[ $taken -gt 0 ]] && log "$taken playbook, runbook or recap file(s) taken from $repo"
   local mode="direct"
   [[ $review == 1 ]] && mode="pull request"
   echo "$pulled in, $pushed out$([[ $removed -gt 0 ]] && echo ", $removed removed") · $mode · \
@@ -1189,6 +1359,78 @@ join_discover() {
   done
 }
 
+# docs_repair <clone> — make a clone of the docs repo able to see its remote.
+# `git clone` of an empty repository writes no fetch refspec, because there was
+# no branch to map. Every later fetch then brought nothing, origin/main never
+# appeared, publish thought the repo was still empty after its own first push,
+# and sync died asking git for an origin/HEAD that did not exist.
+docs_repair() {
+  local work=$1
+  git -C "$work" config --get remote.origin.fetch >/dev/null 2>&1 ||
+    git -C "$work" config remote.origin.fetch '+refs/heads/*:refs/remotes/origin/*'
+}
+
+# docs_default <clone> — the docs repo's default branch. origin/HEAD when the
+# remote has said, then the usual names, then the clone's own HEAD, which a
+# clone of an empty repository takes from the remote's.
+docs_default() {
+  local work=$1 b
+  git -C "$work" symbolic-ref -q refs/remotes/origin/HEAD >/dev/null 2>&1 ||
+    git -C "$work" remote set-head origin --auto >/dev/null 2>&1 || true
+  b=$(git -C "$work" symbolic-ref -q --short refs/remotes/origin/HEAD 2>/dev/null || true)
+  b=${b#origin/}
+  if [[ -z $b ]]; then
+    local try
+    for try in main master; do
+      git -C "$work" rev-parse --verify -q "refs/remotes/origin/$try" >/dev/null && { b=$try; break; }
+    done
+  fi
+  if [[ -z $b ]]; then
+    b=$(git -C "$work" symbolic-ref -q --short HEAD 2>/dev/null || true)
+    # Sync leaves a review-mode clone on the author's branch; never the default.
+    [[ $b == orgami-notes/* ]] && b=""
+  fi
+  echo "${b:-main}"
+}
+
+# docs_checkout <repo> <clone> — the docs repo at <clone>, fetched and on its
+# default branch exactly as the remote has it, or on a new branch when the repo
+# has no commits yet. Prints the branch. Returns 1 when the repo cannot be
+# reached, 2 when the clone cannot be put on the branch. The clone is a cache:
+# everything in it is either on the remote or regenerated by the next run, so
+# a clone of some other repository is replaced rather than reused.
+docs_checkout() {
+  local repo=$1 work=$2 main err
+  # The URL as configured, not `remote get-url`: that applies insteadOf, and a
+  # rewritten URL would never match and re-clone on every run.
+  if [[ -d $work/.git && $(git -C "$work" config --get remote.origin.url 2>/dev/null) != "$repo" ]]; then
+    rm -rf "$work"
+  fi
+  if [[ -d $work/.git ]]; then
+    docs_repair "$work"
+    git -C "$work" fetch --quiet --prune origin || return 1
+  else
+    rm -rf "$work"
+    # The one line git prints for an empty repository is not news: the caller
+    # says it in orgami's words. Anything else is shown when the clone fails.
+    err=$(git clone --quiet --depth 1 "$repo" "$work" 2>&1) || {
+      [[ -n $err ]] && printf '%s\n' "$err" >&2
+      return 1
+    }
+    docs_repair "$work"
+  fi
+  main=$(docs_default "$work")
+  if git -C "$work" rev-parse --verify -q "refs/remotes/origin/$main" >/dev/null; then
+    git -C "$work" checkout --quiet -f -B "$main" "origin/$main" 2>/dev/null || return 2
+  elif [[ -n $(git -C "$work" ls-remote --heads origin 2>/dev/null) ]]; then
+    # The remote has branches but none this clone can name: not an empty repo.
+    return 2
+  else
+    git -C "$work" checkout --quiet -f -B "$main" 2>/dev/null || return 2
+  fi
+  echo "$main"
+}
+
 # docs_dir_inside <clone> <dir> — the directory is missing, or resolves inside
 # the clone and outside its .git. A committed link as notes/ or as the docs
 # path would otherwise have sync write and delete files wherever it points.
@@ -1198,6 +1440,39 @@ docs_dir_inside() {
   root=$(cd -P "$1" 2>/dev/null && pwd -P) || return 1
   real=$(cd -P "$2" 2>/dev/null && pwd -P) || return 1
   [[ $real == "$root"/* && $real != "$root/.git" && $real != "$root"/.git/* ]]
+}
+
+# docs_take <published-dir> <company-dir> — copy in what the docs repo holds
+# that nothing on this machine can regenerate: the playbooks a model wrote, the
+# daily digests and the weekly recaps written from someone else's pull cache,
+# and the runbooks. A file already here is kept, because here is where it is
+# written; only what is missing arrives. A name that is not shaped like the file
+# it claims to be is skipped, as is a link: a runbook prints the recap's name
+# as a heading, and cp copies whatever a link points at. Prints the count.
+docs_take() {
+  local src=$1 dir=$2 f name sub re to got=0
+  for sub in playbooks runbooks reports reports/daily; do
+    case $sub in
+      playbooks) re='^[A-Za-z0-9._-]+--[a-z0-9-]+\.md$' ;;
+      runbooks) re='^[A-Za-z0-9._-]+\.md$' ;;
+      reports) re='^[0-9]{4}-W[0-9]{2}\.md$' ;;
+      reports/daily) re='^[0-9]{4}-[0-9]{2}-[0-9]{2}\.md$' ;;
+    esac
+    # A committed link as the directory would have cp read wherever it points.
+    [[ -d $src/$sub ]] && docs_dir_inside "$src" "$src/$sub" || continue
+    for f in "$src/$sub"/*.md "$src/$sub"/.*.md; do
+      [[ -f $f && ! -L $f ]] || continue
+      name=${f##*/}
+      [[ $name =~ $re ]] || continue
+      to="$dir/map/$sub"
+      [[ $sub == reports* ]] && to="$dir/$sub"
+      [[ -e $to/$name ]] && continue
+      mkdir -p "$to"
+      cp "$f" "$to/$name"
+      got=$((got + 1))
+    done
+  done
+  echo "$got"
 }
 
 # Pulls a published map into a new company directory.
@@ -1221,12 +1496,7 @@ join_from_repo() {
 
   cp -f "$src"/*.md "$src"/*.json "$dir/map/" 2>/dev/null || true
   [[ -d $src/repos ]] && cp -r "$src/repos" "$dir/map/" 2>/dev/null
-  # Only a name shaped like a week: the runbook prints it as a heading.
-  local f
-  for f in "$src/reports/"*.md; do
-    [[ -f $f && ${f##*/} =~ ^[0-9]{4}-W[0-9]{2}\.md$ ]] || continue
-    cp -f "$f" "$dir/reports/"
-  done
+  docs_take "$src" "$dir" >/dev/null
   [[ -d $src/notes ]] && cp -f "$src/notes/"*.md "$dir/notes/" 2>/dev/null
 
   local org

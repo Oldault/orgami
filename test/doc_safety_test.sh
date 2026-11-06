@@ -88,7 +88,10 @@ check "every escaping link is gone" "$(find "$src/evil" -path "$src/evil/.git" -
 [[ -e $tmp/secret.yml && -f $tmp/outside/package.json ]] ||
   { echo "FAIL removing a link touched its target" >&2; fail=1; }
 check "a linked package.json is not read" "$(profile_framework "$src/evil" | jq -c .)" '[]'
-check "profile_docs keeps the inside link" "$(profile_docs "$src/good" | jq -c .)" '["AGENTS.md","CLAUDE.md"]'
+# The link is allowed and kept on disk (above), but it is the same file as
+# AGENTS.md, so it is listed once and recorded as an alias of it.
+check "profile_docs lists a linked doc once" "$(profile_docs "$src/good" | jq -c .)" '["AGENTS.md"]'
+check "the inside link is an alias" "$(profile_doc_aliases "$src/good" | jq -c .)" '{"CLAUDE.md":"AGENTS.md"}'
 
 # --- ASK-CLAUDE.md takes the names literally ---------------------------------
 
