@@ -620,10 +620,11 @@ hook() {
 
 # bootstrap.sh runs as `curl | bash`, where stdin is the script itself. Under
 # env -i with stub apt-get, sudo and curl: apt noninteractive with an empty
-# stdin, gnupg before Charm's key, a failure named, an old jq warned about.
+# stdin, gnupg before Charm's key, a failure named, an old jq warned about, and
+# --ref holding a release with no branch to follow.
 bootstrap() {
   ./test/bootstrap_test.sh </dev/null >/dev/null
-  echo "bootstrap: apt noninteractive on an empty stdin, gnupg first, a failure named"
+  echo "bootstrap: apt noninteractive on an empty stdin, gnupg first, a failure named, --ref pins a release"
 }
 
 # uninstall edits files other tools own — crontab, Cursor's hooks.json and

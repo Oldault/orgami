@@ -44,6 +44,11 @@ printf '#!/bin/sh\necho "install.sh ran"\n' >"$src/install.sh"
 printf '#!/bin/sh\nexit 0\n' >"$src/bin/orgami"
 git -C "$src" add -A
 git -C "$src" -c user.name=t -c user.email=t@t commit -qm init
+# A release, then one more commit on the branch, so a pinned install and an
+# unpinned one end up on different commits.
+git -C "$src" tag v0.1.0
+git -C "$src" -c user.name=t -c user.email=t@t commit -q --allow-empty -m after
+tagged=$(git -C "$src" rev-parse v0.1.0) tip=$(git -C "$src" rev-parse HEAD) branch=$(git -C "$src" symbolic-ref --short HEAD)
 git clone -q --bare "$src" "$fixture/orgami.git"
 
 # The script with /etc/apt/ moved into the fixture: the keyrings and source
@@ -177,5 +182,22 @@ rc=0
 boot >/dev/null 2>"$fixture/oldjq/err" || rc=$?
 check "old jq: the installer still finishes" "$rc" "0"
 check "old jq: the floor is said" "$(grep -c 'needs jq 1.6 or newer' "$fixture/oldjq/err")" "1"
+
+# --- a pinned install, moved, then unpinned ----------------------------------
+# Pinned means the tag on its own, with no branch: update_why_not then finds no
+# upstream and auto-update leaves it alone. Without --ref it goes back on the
+# branch, at its tip.
+setup pinned
+clone="$home/.local/share/orgami"
+rc=0
+boot --ref=v0.1.0 >/dev/null 2>"$fixture/pinned/err" || rc=$?
+check "pinned: the installer finishes" "$rc" "0"
+check "pinned: the clone is at the tag, on no branch" \
+  "$(git -C "$clone" rev-parse HEAD) $(git -C "$clone" symbolic-ref -q HEAD || echo detached)" "$tagged detached"
+boot >/dev/null 2>&1 || true
+check "unpinned: a run without --ref is back on the branch, at its tip" \
+  "$(git -C "$clone" rev-parse HEAD) $(git -C "$clone" symbolic-ref -q --short HEAD)" "$tip $branch"
+boot --ref=v0.1.0 >/dev/null 2>&1 || true
+check "pinned again: an existing clone moves to the tag" "$(git -C "$clone" rev-parse HEAD)" "$tagged"
 
 exit "$fail"

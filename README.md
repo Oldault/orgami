@@ -72,7 +72,8 @@ orgami init     # map your organization
 
 Everyone else on the team runs `orgami join` and picks it up — no scan, no
 clones. `--dry-run` prints every step without touching anything; installing by
-hand is in **[docs/install.md](docs/install.md)**.
+hand, or pinning a team to a release instead of following `main`, is in
+**[docs/install.md](docs/install.md)**.
 
 When something does not work, `orgami doctor` checks every tool, the `gh`
 sign-in, the timer's `PATH`, the Claude Code plugin and the configured company,

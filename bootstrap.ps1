@@ -13,8 +13,14 @@
 # the flags of bootstrap.sh are set through the environment instead:
 #   $env:ORGAMI_CURSOR = '1'   wire Cursor without asking (--cursor)
 #   $env:ORGAMI_CURSOR = '0'   leave Cursor alone (--no-cursor)
+#   $env:ORGAMI_REF = 'v1.3.0'  install that release and hold it there (--ref)
 
 $ErrorActionPreference = 'Stop'
+
+# The shell installer comes from the same ref it installs, so a pinned install
+# runs the script that shipped with that release.
+$ref = if ($env:ORGAMI_REF) { $env:ORGAMI_REF } else { 'main' }
+$refFlag = if ($env:ORGAMI_REF) { "--ref=$($env:ORGAMI_REF)" } else { '' }
 
 function Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 function Warn($msg) { Write-Host $msg -ForegroundColor Yellow }
@@ -45,7 +51,7 @@ try {
 if ($wsl) {
   Write-Host "WSL found — installing orgami inside it, which is the better home for it."
   $cursor = CursorFlag
-  wsl.exe -e bash -lc "curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.sh | bash -s -- $cursor"
+  wsl.exe -e bash -lc "curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/$ref/bootstrap.sh | bash -s -- $cursor $refFlag"
   Write-Host "`nDone. Open your WSL shell and run: orgami init" -ForegroundColor Green
   Write-Host "For Windows-native Cursor or Claude Code, point hook commands at: wsl.exe bash -lc `"orgami ...`""
   exit 0
@@ -92,7 +98,7 @@ Write-Host "  $bash"
 
 Step "Installing orgami"
 $cursor = CursorFlag
-& $bash -lc "curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.sh | bash -s -- $cursor"
+& $bash -lc "curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/$ref/bootstrap.sh | bash -s -- $cursor $refFlag"
 
 Write-Host "`nDone." -ForegroundColor Green
 Write-Host @"

@@ -147,6 +147,26 @@ about that.
 Turn it off with `ORGAMI_AUTOUPDATE=0`, or `"auto_update": false` in
 `~/.orgami/config.json`.
 
+### Pinning a release
+
+The one-line install follows `main`, and so does auto-update. To hold a team on
+a release you have read, fetch the installer from that tag and tell it the tag:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/v1.3.0/bootstrap.sh | ORGAMI_REF=v1.3.0 bash
+```
+
+```powershell
+$env:ORGAMI_REF = 'v1.3.0'; irm https://raw.githubusercontent.com/Oldault/orgami/v1.3.0/bootstrap.ps1 | iex
+```
+
+The script that runs and the code it installs both come from the tag. The clone
+is left on the tag, with no branch to follow, so `orgami update` and the daily
+auto-update leave it where it is and say it tracks no upstream branch. Run the
+installer again with a newer `ORGAMI_REF` to move it, or with none to put it
+back on `main`. Tags are listed at
+[github.com/Oldault/orgami/tags](https://github.com/Oldault/orgami/tags).
+
 ### Working on orgami itself
 
 Point both installs at your checkout, and an edit is live in the next session
@@ -213,7 +233,8 @@ orgami mcp --config cursor     # or opencode, codex, windsurf, zed, vscode
   `config.fish`). With no terminal to ask on it prints the exact line instead;
   `--path` / `--no-path` (or `ORGAMI_PATH=1` / `0`) decide without asking. The
   line checks `PATH` first, so a second run adds nothing
-- clones orgami to `~/.local/share/orgami` and links `orgami` into `~/.local/bin`
+- clones orgami to `~/.local/share/orgami` (at the release `--ref` or
+  `ORGAMI_REF` names, when one does) and links `orgami` into `~/.local/bin`
 - on macOS, installs a newer bash with Homebrew when the one on `PATH` is older
   than 4.4, and says to open a new terminal
 - **Claude Code**, if present: adds the marketplace and installs the plugin, so

@@ -11,6 +11,11 @@
 #   --no-cursor    leave Cursor alone
 #   --path         add ~/.local/bin to PATH in your shell profile without asking
 #   --no-path      leave the shell profile alone, and print the line instead
+#   --ref=v1.3.0   install that release and hold it there (ORGAMI_REF does the same)
+#
+# A pinned install is a tag checked out on its own, with no branch to follow, so
+# `orgami update` and the daily auto-update leave it alone. Running this again
+# with another --ref moves it; running it with none puts it back on main.
 #
 # Cursor is asked about when there is a terminal, and left alone when there is
 # not. ORGAMI_CURSOR=1 or 0 does the same as the two flags. The PATH line is
@@ -43,6 +48,7 @@ DEPS=1
 EDITORS=1
 CURSOR=${ORGAMI_CURSOR:-ask}
 ADD_PATH=${ORGAMI_PATH:-ask}
+REF=${ORGAMI_REF:-}
 
 for arg in "$@"; do
   case $arg in
@@ -53,8 +59,9 @@ for arg in "$@"; do
     --no-cursor) CURSOR=0 ;;
     --path) ADD_PATH=1 ;;
     --no-path) ADD_PATH=0 ;;
+    --ref=*) REF=${arg#--ref=} ;;
     -h | --help)
-      sed -n '2,23p' "$0" 2>/dev/null || true
+      sed -n '2,28p' "$0" 2>/dev/null || true
       exit 0
       ;;
   esac
@@ -256,12 +263,25 @@ command -v claude >/dev/null ||
 
 # ---------------------------------------------------------------------- orgami
 
-step "Installing orgami into $SRC"
-if [[ -d $SRC/.git ]]; then
+step "Installing orgami ${REF:+$REF }into $SRC"
+if [[ -d $SRC/.git && -n $REF ]]; then
+  run git -C "$SRC" fetch --quiet --tags origin
+  run git -C "$SRC" -c advice.detachedHead=false checkout --quiet "$REF"
+elif [[ -d $SRC/.git ]]; then
+  # Pinned before and not now: back onto the branch the clone came from, which
+  # is the one auto-update follows.
+  if [[ $DRY == 0 ]] && ! git -C "$SRC" symbolic-ref -q HEAD >/dev/null; then
+    branch=$(git -C "$SRC" rev-parse --abbrev-ref origin/HEAD)
+    run git -C "$SRC" checkout --quiet "${branch#origin/}"
+  fi
   run git -C "$SRC" pull --quiet --ff-only
 else
   run mkdir -p "$(dirname "$SRC")"
-  run git clone --quiet "$REPO_URL" "$SRC"
+  if [[ -n $REF ]]; then
+    run git -c advice.detachedHead=false clone --quiet --branch "$REF" "$REPO_URL" "$SRC"
+  else
+    run git clone --quiet "$REPO_URL" "$SRC"
+  fi
 fi
 run bash "$SRC/install.sh"
 
