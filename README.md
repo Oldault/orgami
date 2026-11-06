@@ -268,8 +268,8 @@ there was a package to install: a Slack webhook URL, a Google Analytics tag and
 a variable Vercel injects into its own build are complete as they are. Both
 restraints are written down — an allow-list in `lib/advise.jq`, a `no-sdk` flag
 in `lib/vendors.tsv` — and so is a third: a DNS record that names no product,
-like a lone `google-site-verification` token, carries `no-bill` and is never
-put forward as a subscription to renew. The report ends with what each of them
+like a lone `google-site-verification` or `MS=` token, carries `no-bill` and is
+never put forward as a subscription to renew. The report ends with what each of them
 withheld, so you can disagree with the policy instead of wondering where a
 finding went.
 
@@ -288,7 +288,9 @@ that this organization proved to *them* that it owns this domain. That is an
 account, not a mention. A `google-site-verification=` token says less: Search
 Console, which is free, makes the same record as Workspace, so on its own it is
 reported as "a Google service verified this domain" and never as a Workspace
-subscription — the MX and SPF records are what say there are mailboxes.
+subscription. An `MS=` token is the same: a free Entra tenant makes it, so it is
+never read as Microsoft 365. The MX and SPF records are what say there are
+mailboxes.
 `orgami dns` reads the verification tokens, the MX records, the
 SPF `include:` list, the DMARC reporting destination, a short list of
 conventional subdomains and the nameservers, and matches them against the same

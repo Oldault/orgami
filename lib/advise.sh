@@ -316,8 +316,9 @@ EOF
         cat <<'EOF'
 **Records that name no product.** A `google-site-verification` token says a
 Google service verified the domain — Search Console, which is free, as often as
-Workspace. It is not a subscription to renew. The MX and SPF records are what
-say there are mailboxes. Those vendors carry `no-bill` in `lib/vendors.tsv`.
+Workspace — and an `MS=` token says a Microsoft tenant did, which a free Entra
+tenant creates as readily as Microsoft 365. Neither is a subscription to renew.
+The MX and SPF records are what say there are mailboxes. Those vendors carry `no-bill` in `lib/vendors.tsv`.
 Held back here:
 EOF
         echo

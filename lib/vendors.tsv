@@ -46,7 +46,9 @@
 #                       created by Search Console, which is free, as often as by
 #                       Workspace, so it gets a row of its own rather than
 #                       standing as evidence for Workspace — the MX and SPF
-#                       records are what say there are mailboxes. lib/advise.jq
+#                       records are what say there are mailboxes. An `MS=` token
+#                       is the same: a free Entra tenant creates it, so it says
+#                       nothing about a Microsoft 365 subscription. lib/advise.jq
 #                       never proposes about a no-bill vendor and lists it under
 #                       what it held back; lib/dns.sh never lists it as paid for.
 #
@@ -179,7 +181,8 @@ sonar	Sonar	code-quality	pkg:^sonarqube-scanner$|pkg:^sonar-scanner$|env:SONAR_|
 snyk	Snyk	security	pkg:^snyk$|env:SNYK_|host:(^|\.)snyk\.io$|action:^snyk/|file:^\.snyk$	https://app.snyk.io/manage/billing
 google-workspace	Google Workspace	workspace	mx:(^|\.)aspmx\.l\.google\.com$|mx:(^|\.)googlemail\.com$|mx:^smtp\.google\.com$|spf:(^|\.)_spf\.google\.com$	https://admin.google.com/ac/billing
 google-site-verification	Google (Search Console or Workspace)	verification	txt:^google-site-verification=	https://search.google.com/search-console	no-bill
-microsoft365	Microsoft 365	workspace	mx:(^|\.)mail\.protection\.outlook\.com$|txt:^MS=|spf:(^|\.)spf\.protection\.outlook\.com$	https://admin.microsoft.com/Adminportal/Home#/subscriptions
+microsoft365	Microsoft 365	workspace	mx:(^|\.)mail\.protection\.outlook\.com$|spf:(^|\.)spf\.protection\.outlook\.com$	https://admin.microsoft.com/Adminportal/Home#/subscriptions
+microsoft-domain-verification	Microsoft (Entra or 365)	verification	txt:^MS=	https://entra.microsoft.com	no-bill
 proton	Proton	workspace	mx:(^|\.)protonmail\.ch$|mx:(^|\.)protonmail\.com$|txt:^protonmail-verification=|spf:(^|\.)_spf\.protonmail\.ch$	https://account.proton.me/u/0/mail/dashboard
 zoho	Zoho	workspace	mx:(^|\.)zoho\.(com|eu|in|com\.au)$|txt:^zoho-verification=|spf:(^|\.)zoho\.(com|eu|in)$	https://www.zoho.com/us/subscriptions/
 fastmail	Fastmail	workspace	mx:(^|\.)messagingengine\.com$|spf:(^|\.)messagingengine\.com$	https://app.fastmail.com/settings/billing

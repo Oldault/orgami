@@ -425,8 +425,9 @@ def days_since($now):
 # infrastructure the map already knows about under another name.
 #
 # Except where the record names no product. A google-site-verification token is
-# made by Search Console as often as by Workspace, so "an account" is true and
-# "a subscription to renew" is not — that vendor carries `no-bill` and is listed
+# made by Search Console as often as by Workspace, and an MS= token by a free
+# Entra tenant as often as by Microsoft 365, so "an account" is true and
+# "a subscription to renew" is not — those vendors carry `no-bill` and are listed
 # under `excluded` instead, the way a no-sdk vendor is for the rule above.
 | ([$vendors[] | select((.dns | length) > 0 and .repo_count == 0)
     | select((.flags | index("no-bill")) | not)

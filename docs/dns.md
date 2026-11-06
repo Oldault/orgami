@@ -105,7 +105,7 @@ it dropped for that reason. `--domain` is the way through.
 
 | Record | What it means |
 |---|---|
-| `txt` | a verification token — `MS=`, `atlassian-domain-verification=`, `docusign=`, `stripe-verification=`, `slack-domain-verification=` and friends. The strongest signal here: it is the vendor stating that this organization proved to *them* that it owns this domain. `google-site-verification=` is the exception, below |
+| `txt` | a verification token — `atlassian-domain-verification=`, `docusign=`, `stripe-verification=`, `slack-domain-verification=` and friends. The strongest signal here: it is the vendor stating that this organization proved to *them* that it owns this domain. `google-site-verification=` and `MS=` are the exceptions, below |
 | `mx` | where the mail goes, which is where the mailboxes are billed |
 | `spf` | an `include:` or `redirect=` — a service given permission to send mail as the organization |
 | `dmarc` | the `rua=`/`ruf=` destination in `_dmarc`. Nobody reads their own DMARC XML by hand, so that mailbox is a vendor |
@@ -124,10 +124,17 @@ never proposes anything about it. Google Workspace is claimed only from the MX
 records (`aspmx.l.google.com`, `smtp.google.com`, `googlemail.com`) or an SPF
 `include:_spf.google.com` — those are what say there are mailboxes.
 
-A reading taken before this split still files the token under Workspace in
-`dns.json`. `orgami advise` counts a DNS row only while the catalogue still
-matches that kind of record for that vendor, so the old token is ignored there;
-run `orgami dns` again to relabel it on the DNS page.
+An `MS=` token has the same flaw. Every Microsoft tenant that adds a custom
+domain makes one, and a free Entra ID tenant is a Microsoft tenant, so the
+token says nothing about a Microsoft 365 subscription. It has its own row,
+**Microsoft (Entra or 365)**, flagged `no-bill` and treated the same way.
+Microsoft 365 is claimed only from its MX record (`*.mail.protection.outlook.com`)
+or an SPF `include:spf.protection.outlook.com`.
+
+A reading taken before either split still files the token under Workspace or
+Microsoft 365 in `dns.json`. `orgami advise` counts a DNS row only while the
+catalogue still matches that kind of record for that vendor, so the old token
+is ignored there; run `orgami dns` again to relabel it on the DNS page.
 
 **A vendor that does not appear was not found in this organization's public
 DNS**, which is not the same fact as not being in use.
@@ -165,7 +172,7 @@ is counted and thrown away, and the count is reported:
 ```
 
 Within one vendor, three records of each domain and record kind are kept and the
-rest are counted — five `MS=` tokens on one domain are five copies of one
+rest are counted — five `docusign=` tokens on one domain are five copies of one
 finding.
 
 ## The evidence line

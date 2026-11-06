@@ -112,9 +112,10 @@ account of its own; medium when it rests on an SPF include, a CNAME or a
 nameserver, which is often infrastructure the map already knows under another
 name. A record that names no product is not a subscription at all: a lone
 `google-site-verification` token is made by Search Console, which is free, as
-often as by Workspace, so its row carries `no-bill` in `lib/vendors.tsv` and
-this rule skips it. Google Workspace is proposed only from its MX or SPF
-records.
+often as by Workspace, and a lone `MS=` token by a free Entra tenant as often as
+by Microsoft 365, so their rows carry `no-bill` in `lib/vendors.tsv` and this
+rule skips them. Google Workspace and Microsoft 365 are proposed only from
+their MX or SPF records.
 
 **A variable declared for an SDK that was never wired.** A vendor matched in a
 repository by an environment variable and by nothing stronger — no package in

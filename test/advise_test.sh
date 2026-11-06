@@ -439,7 +439,7 @@ grep -qF 'rejected 3 times in 3 answered' <<<"$record_page" ||
 # confidence orphan beside one resting on a package: the repository commits to
 # nothing. And a DNS reading taken off the hosts the code calls — azure.com, out
 # of `cognitiveservices.azure.com` — carries Microsoft's own Microsoft 365
-# token, which is no account of this organization's.
+# mail, which is no account of this organization's.
 DIR="$fixture/hosts"
 mkdir -p "$DIR/map" "$DIR/notes"
 cat >"$DIR/map/graph.json" <<JSON
@@ -465,9 +465,9 @@ cat >"$DIR/map/dns.json" <<JSON
 {"company": "acme", "org": "acme", "generated_epoch": $(date -u +%s),
  "origin": "the host nodes in map/graph.json", "domains": ["azure.com"],
  "vendors": [{"id": "microsoft365", "name": "Microsoft 365", "category": "workspace",
-              "portal": "", "flags": [], "domains": ["azure.com"], "signals": ["txt"],
-              "evidence": [{"domain": "azure.com", "signal": "txt",
-                            "at": "TXT azure.com \"MS=ms123\" (dig 2026-11-01)"}]}]}
+              "portal": "", "flags": [], "domains": ["azure.com"], "signals": ["mx"],
+              "evidence": [{"domain": "azure.com", "signal": "mx",
+                            "at": "MX azure.com \"0 azure-com.mail.protection.outlook.com.\" (dig 2026-11-01)"}]}]}
 JSON
 artifact="$DIR/map/advise.json"
 advise_compute "$artifact" 180
@@ -505,9 +505,9 @@ cat >"$DIR/map/dns.json" <<JSON
               "evidence": [{"domain": "acme.com", "signal": "mx",
                             "at": "MX acme.com \"1 aspmx.l.google.com.\" (dig 2026-11-01)"}]}],
  "unverified_vendors": [{"id": "microsoft365", "name": "Microsoft 365", "category": "workspace",
-              "portal": "", "flags": [], "domains": ["partner.fr"], "signals": ["txt"],
-              "evidence": [{"domain": "partner.fr", "signal": "txt",
-                            "at": "TXT partner.fr \"MS=ms123\" (dig 2026-11-01)"}]}]}
+              "portal": "", "flags": [], "domains": ["partner.fr"], "signals": ["mx"],
+              "evidence": [{"domain": "partner.fr", "signal": "mx",
+                            "at": "MX partner.fr \"0 partner-fr.mail.protection.outlook.com.\" (dig 2026-11-01)"}]}]}
 JSON
 advise_compute "$artifact" 180
 assert "a record on an owned domain is still an account" 1 \

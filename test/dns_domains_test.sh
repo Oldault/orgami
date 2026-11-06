@@ -181,7 +181,7 @@ check "and marks every one of them unverified" "partner.fr" '.unverified | join(
 check "it never queries a vendor's domain, even then" 0 \
   '[.domains[] | select(. == "azure.com" or . == "stripe.com")] | length'
 check "what it finds there is no account of the org's" 0 '.vendors | length'
-check "it is kept apart, for whoever checks" "meta-business,microsoft365" \
+check "it is kept apart, for whoever checks" "meta-business,microsoft-domain-verification" \
   '[.unverified_vendors[].id] | join(",")'
 check "and counted apart" "0 2" '"\(.counts.vendors) \(.counts.unverified_vendors)"'
 grep -qF "## On domains not known to be the organization's" "$home/acme/map/DNS.md" ||
@@ -196,8 +196,8 @@ jq '.domains = ["partner.fr"]' "$home/acme/config.json" >"$home/c.json"
 mv "$home/c.json" "$home/acme/config.json"
 : >"$GH_LOG"
 run
-check "a configured domain is the organization's" "microsoft365" \
-  '[.vendors[] | select(.id == "microsoft365") | .id] | join(",")'
+check "a configured domain is the organization's" "microsoft-domain-verification" \
+  '[.vendors[] | select(.id == "microsoft-domain-verification") | .id] | join(",")'
 check "and nothing is unverified" 0 '.unverified | length'
 [[ ! -s $GH_LOG ]] ||
   { echo "FAIL: with a domains list, the profile must not be read" >&2; fail=1; }
