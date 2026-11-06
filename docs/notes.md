@@ -11,6 +11,12 @@ orgami notes --repo WinIt-backend
 orgami sync
 ```
 
+`--repo` has to name a repository the map holds; case does not matter, and the
+note is filed under the map's spelling. A name the map does not hold is refused
+with the closest ones it does, and leaving `--repo` out files an org-wide note.
+`orgami notes` and `orgami stale` with no notes say so and exit 0; `stale`
+takes a whole number of days.
+
 Three things keep this from turning into a landfill or a leak.
 
 ## A note holds a fact; a playbook holds a procedure
@@ -30,12 +36,20 @@ rewrites it. See **[playbooks.md](playbooks.md)**.
 ## Nothing shareable gets in
 
 Before a note is written — and again before anything is pushed — it is screened
-for private keys, AWS and GitHub and Slack and Stripe tokens, JWTs, connection
-strings carrying a password, and `secret=`-shaped assignments. It is also
+for credentials: its text, and its file name and front matter, which are pushed
+with it. The list is `lib/secrets.tsv`, the same one that redacts a session
+transcript before the session-end note is drafted: GitHub, Anthropic, OpenAI,
+Stripe, npm, GitLab and Slack tokens, Slack webhooks, AWS keys, `Bearer` and
+`Authorization` values, passwords in URLs, `KEY=`, `TOKEN=`, `SECRET=` and
+`PASSWORD=` assignments, private key blocks, and "password is X". It is
+pattern-based: a secret in a shape nobody listed can still get through. A
+screen that cannot run refuses the note rather than passing it. It is also
 screened for the name of any *other* organization configured on the same
 machine, because notes are the obvious place for one org's details to end up in
 another's repository. Either refuses the write outright. `orgami notes --check` screens
-everything already on disk, including what arrived from teammates.
+everything already on disk, including what arrived from teammates, and also
+flags a note filed under a repo the map does not hold, with the `orgami prune
+--id` that archives it; `sync` holds such a note back.
 
 Writing a note from inside one organization's checkout while another is the
 current one is refused too, by comparing the checkout's git remote against the
@@ -100,8 +114,16 @@ orgami join
 
 Pick the organization and it finds the repo that already holds a map — probing
 every repo in the org in parallel, a couple of seconds — then pulls the map, the
-cards, the conventions, the decisions and every note out of it. One command
-instead of forty clones. Only whoever runs the weekly timer needs the checkouts.
+cards, the conventions, the decisions, the playbooks, the runbooks, the daily
+digests, the weekly recaps and every note out of it. One command instead of
+forty clones. Only whoever runs the weekly timer needs the checkouts.
+
+Afterwards `orgami sync` and `orgami sync --pull` take any published file the
+docs repo has and this machine lacks, and never overwrite a local one. A docs
+repo created empty keeps working after the first publish, and a `cache/docs`
+checkout left behind by an older version heals itself. `orgami publish` names
+in its commit subject the recap weeks the commit changes (`acme 2026-W44 recap
+and map`, `W44..W45 recaps and map`), or `acme map` when no recap changed.
 
 `orgami join <company> --repo <url> [--path <dir>]` skips the questions, for
 scripts and for a docs repo that lives outside the org. With no terminal, bare

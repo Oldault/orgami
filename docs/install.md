@@ -69,7 +69,8 @@ prints the exact command for *your* package manager if one is missing.
 | Tool | Needed for |
 |---|---|
 | `bash` 4.4+ | everything — older versions are refused at start |
-| `gh`, `jq`, `git` | everything |
+| `gh`, `git` | everything |
+| `jq` 1.6+ | everything — 1.7 or newer recommended: `orgami doc` runs several times faster. CI tests 1.6 and 1.7.1 in its `jq-compat` job |
 | `fzf` 0.29+ | `orgami view`, the terminal map browser |
 | `gum` | `orgami init` and the menu — flags work without it |
 | `python3` | optional: `orgami mcp` (the MCP server, including the one the Claude Code plugin starts) and `orgami depth` |
@@ -125,7 +126,9 @@ start of the weekly timer. The next session says what moved, once. It moves
 *every* copy on the machine, not the one that happens to be running — a plugin
 hook executes the plugin's copy while the CLI on your PATH is a different clone
 entirely, and updating only one of them is how the other stays a fortnight
-behind.
+behind. The CLI on your PATH counts only when it lives under `$HOME`: run with
+`HOME` pointed at a scratch directory, `orgami update` leaves the real clone
+alone and moves only the copy you ran.
 
 A CLI old enough to need updating has no `orgami update` in it, so the session
 hook falls back to the plugin's copy, which moves both. That closes the loop:
@@ -133,8 +136,13 @@ whichever copy is current updates the other, and there is no manual first step
 on a machine that has the plugin.
 
 It refuses any checkout with uncommitted work, commits of its own, or no
-upstream, and it never pulls Claude Code's clone directly — that goes through
-`claude plugin marketplace update`.
+upstream, and it never pulls Claude Code's clone directly. For the plugin it
+refreshes the marketplace (`claude plugin marketplace update orgami`), then
+moves the installed plugin (`claude plugin update orgami@orgami`), and reports
+it only when the installed version changed. `orgami update --check` lists the
+plugin with its own state. Between releases the plugin stays on the release
+version while the CLI clone moves per commit, and `orgami doctor` does not warn
+about that.
 
 Turn it off with `ORGAMI_AUTOUPDATE=0`, or `"auto_update": false` in
 `~/.orgami/config.json`.
@@ -169,7 +177,10 @@ It removes what orgami installed — the PATH link, completions, the skill link,
 the systemd or launchd timers, its crontab line, its Cursor hook and MCP
 entries, git-hook lines, the Claude Code plugin and its marketplace — and never
 the docs repo or anything published. `--purge` leaves the clone if it has
-uncommitted changes.
+uncommitted changes. It finishes by removing the directories orgami used when
+they are left empty (`~/.local/bin`, `~/.claude/skills`,
+`~/.config/systemd/user`, and so on); a directory with anything else in it
+stays.
 
 ## 6. Point it at an organization
 
@@ -190,7 +201,18 @@ orgami mcp --config cursor     # or opencode, codex, windsurf, zed, vscode
 
 - installs any of `git gh jq fzf gum python3` you are missing, through Homebrew,
   pacman, apt, dnf or winget — adding the GitHub CLI and Charm apt repositories
-  when the distribution needs them
+  when the distribution needs them, with `curl` and `gnupg` installed first
+  for their keys. apt runs non-interactively, so a question from a package
+  never reads the piped script as its answer
+- stops at the first command that fails, with a message naming that command;
+  run it again once that is fixed
+- warns when the `jq` on `PATH` is older than 1.6
+- when `~/.local/bin` is not on `PATH` and no shell profile adds it, asks
+  whether to add it to your shell's profile (`~/.bashrc`, plus `~/.bash_profile`
+  or `~/.profile` for login shells on Linux; `~/.zshrc`; fish's
+  `config.fish`). With no terminal to ask on it prints the exact line instead;
+  `--path` / `--no-path` (or `ORGAMI_PATH=1` / `0`) decide without asking. The
+  line checks `PATH` first, so a second run adds nothing
 - clones orgami to `~/.local/share/orgami` and links `orgami` into `~/.local/bin`
 - on macOS, installs a newer bash with Homebrew when the one on `PATH` is older
   than 4.4, and says to open a new terminal

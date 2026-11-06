@@ -96,8 +96,11 @@ per organization:
 jq '.advise_stale_days = 90' ~/.orgami/<company>/config.json
 ```
 
-High confidence — the date comes from GitHub's own record of the repository, not
-from an inference.
+High confidence when the repository commits to the vendor — a package, a
+terraform provider, a workflow action, an environment variable — since the date
+comes from GitHub's own record of the repository, not from an inference. Medium
+when the only evidence is a hostname in a URL, a Google Fonts stylesheet or an
+OAuth scope URL for example, which is a mention rather than an account.
 
 **An account nothing in the code accounts for.** A vendor public DNS names and
 no repository does — the workspace suite, the applicant tracker, the design
@@ -111,7 +114,9 @@ name.
 
 **A variable declared for an SDK that was never wired.** A vendor matched in a
 repository by an environment variable and by nothing stronger — no package in
-any manifest, no terraform provider, no workflow action. Usually a spike that
+any package manifest the scan read (workspace packages included), no terraform
+provider, no workflow action, no vendor config file and no call to the vendor's
+API host in the code. Usually a spike that
 was abandoned with the variable left behind, occasionally a live integration
 wired through something this scan does not read. Medium confidence, and the
 declaring line is right there to check.
@@ -128,9 +133,11 @@ and Stripe do not get it.
 
 Both of those restraints are policy, and policy that quietly deletes a finding
 is policy nobody can argue with. So the report carries a **Not proposed, on
-purpose** section naming every category it declined to call a duplicate and
+purpose** section naming every category it declined to call a duplicate,
 every vendor-and-repository pair the `no-sdk` flag took off the list, each with
-the id the proposal would have had:
+the id the proposal would have had, and the DNS records on domains not known to
+be the organization's (`excluded.dns_unverified`), which are held back and
+listed rather than proposed:
 
 ```
 - **hosting** — AWS, Google Cloud, Heroku, Vercel, Netlify, Microsoft Azure ·

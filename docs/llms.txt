@@ -2,7 +2,7 @@
 
 > orgami is a bash CLI that maps every repository in a GitHub organization — what each one is, how to run and test it, what it talks to, where it deploys — writes daily and weekly digests of merged work, keeps a shared team note memory in a git repo, and hands all of it to a coding agent at session start. Every edge in the map carries the file:line, URL or pull request it came from. A missing edge means "not found in committed configuration", never "not connected".
 
-Runs on Linux, macOS (bash 4.4 or newer, from Homebrew) and WSL. Needs git, gh and jq; fzf and gum for the interactive parts; python3 only for `orgami mcp` and `orgami depth`; the claude CLI only for the parts a model writes (recaps, daily digest, session notes, playbooks). It maps organizations only, not personal accounts. State lives in `~/.orgami/<company>/` (or `$ORGAMI_HOME`).
+Runs on Linux, macOS (bash 4.4 or newer, from Homebrew) and WSL. Needs git, gh and jq 1.6 or newer; fzf and gum for the interactive parts; python3 only for `orgami mcp` and `orgami depth`; the claude CLI only for the parts a model writes (recaps, daily digest, session notes, playbooks). It maps organizations only, not personal accounts. State lives in `~/.orgami/<company>/` (or `$ORGAMI_HOME`).
 
 Install: `curl -fsSL https://raw.githubusercontent.com/Oldault/orgami/main/bootstrap.sh | bash`, then `gh auth login`. With Claude Code: `/plugin marketplace add Oldault/orgami` and `/plugin install orgami@orgami`; the plugin brings the skill, session hooks and the `orgami_*` MCP tools.
 
@@ -11,12 +11,13 @@ Running from an agent: an agent's shell has no terminal. Every command works fro
 - `orgami doctor --json` — first-run checks, `{version, root, ok, checks: [{name, ok, blocking, detail, fix}]}`; exit 1 only when a check blocks; writes nothing
 - `orgami init <company> --org <github-org> --no-docs` — configure an org without questions and without a docs repo; or `--docs-repo <url>`
 - `orgami join <company> --repo <docs-repo-url>` — pick up a map a colleague already published
-- `orgami scan [--only <repo>]` — clone and map every active repo; writes `map/graph.json` (`{nodes, edges}`, each edge `{from, to, kind, evidence, confidence}`) and `map/repos.json`
+- `orgami scan [--only <repo>] [--jobs N]` — clone and map every active repo; writes `map/graph.json` (`{nodes, edges}`, each edge `{from, to, kind, evidence, confidence}`) and `map/repos.json`
 - `orgami query <repo|host|tool|service|vendor> --json` — one node, `{id, kind, name, meta, edges: {out, in}}`
-- `orgami context [repo]` — the page an agent reads before editing (markdown)
+- `orgami context [repo]` — the page an agent reads before editing (markdown); outside a mapped checkout one line saying so; `orgami context --org` for the organization overview
 - `orgami card <repo>` — the repo's stack, commands and links (markdown)
 - `orgami notes [--repo R] [--tag T] [query]` — what the team recorded
-- `orgami note --repo <repo> --tag <tag> "text"` — record a note locally; pushed only by `orgami sync`
+- `orgami note --repo <repo> --tag <tag> "text"` — record a note locally; pushed only by `orgami sync`. `--repo` must be a repo the map holds
+- `orgami drafts --list [--json]`, then `orgami drafts --keep <id>` or `--drop <id>` — notes and decisions written for the user; show the list and act only on what the user chose
 - `orgami advise --json`, `orgami live --json`, `orgami dns --domain <d> --yes --json` — vendors, deployments, DNS-verified accounts
 - `orgami report --stats-only`, `orgami daily --stats-only` — the week's and the day's numbers with no model call
 - `orgami web` — renders `map/orgami.html`, one static file; prints its path

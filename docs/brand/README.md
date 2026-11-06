@@ -5,6 +5,11 @@ The folded elephant in `logo.png` is the approved logo, copied unchanged from
 and both generated HTML pages. `favicon.svg` embeds the same artwork on warm
 paper so it remains visible in light and dark browser chrome.
 
+The generated pages do not embed those two files whole: they embed
+`assets/logo-64.png` and `assets/favicon.svg`, cut down from `logo.png` so the
+base64 stays small (`test/html_render_test.sh` holds it under 20 KB). If the
+approved logo changes, regenerate both.
+
 The explorations below are historical, superseded by the supplied elephant.
 
 # orgami mark — candidates

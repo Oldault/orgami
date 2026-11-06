@@ -44,7 +44,11 @@ non-obvious — is the wrong bar here and keeps everything out.
 ## What gets written
 
 The second instance under a topic writes the playbook, and every instance after
-that rewrites it. `~/.orgami/<company>/map/playbooks/<repo>--<topic>.md`:
+that rewrites it. When the instance is typed with `orgami note`, or kept with
+`orgami drafts --keep`, the playbook is written in the background: the command
+says so as it starts, names the model, says that the topic's notes and the
+matching pull requests' titles and bodies go to Claude, and logs to
+`<company>/cache/playbook.log`. `~/.orgami/<company>/map/playbooks/<repo>--<topic>.md`:
 
 ```bash
 orgami playbooks                                  # every one recorded

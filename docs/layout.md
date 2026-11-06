@@ -9,6 +9,7 @@ lib/prs.graphql        the query
 lib/bots.jq            what counts as a bot — the one definition, included
 lib/stats.jq           every number in the report
 lib/report.sh          stats + Claude -> reports/
+lib/plain_keys.jq      a STATS key name the model quoted, turned back into words
 lib/daily.jq           every number in the daily digest
 lib/daily.sh           one day: merged, opened, waiting, commits
 lib/scan.sh            repo scan -> map/graph.json
@@ -67,12 +68,15 @@ Company state, never in this repo:
   config.json          default company, and an optional "orgs" picker filter
   .venv/depth/         the tree-sitter grammars, created only by orgami depth
 ~/.orgami/<company>/
-  config.json          org, docs repo, include/exclude, model
+  config.json          org, docs repo, include/exclude (regexes on repo names), model
   cache/prs/           raw GraphQL responses, one file per week
   cache/daily/         one file per day: merged, opened, open, commits
   cache/repos/         the org's repo list
   cache/src/           shallow clones
   cache/docs/          the docs repo checkout
+  cache/.scan.lock/    while a scan runs: a directory holding its pid; a stale
+                       one is taken over by the next scan
+  cache/playbook.log   progress of a playbook written in the background
   reports/             one markdown recap per week
   reports/daily/       one digest per day, quiet days skipped
   notes/               one file per note, plus notes/archive/

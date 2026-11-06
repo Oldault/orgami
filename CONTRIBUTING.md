@@ -19,7 +19,7 @@ cd orgami
 ./bin/orgami --help          # runs straight out of the checkout, nothing to install
 ```
 
-You need `bash` 4.4 or newer, `git`, `jq` and `gh`; `fzf` and `gum` for the
+You need `bash` 4.4 or newer, `git`, `jq` 1.6 or newer and `gh`; `fzf` and `gum` for the
 interactive parts, `python3` for the MCP server and `orgami depth`.
 `orgami doctor` says which of them this machine is missing.
 
@@ -45,7 +45,7 @@ The deterministic half of orgami needs no GitHub token, no organization and no
 model at all:
 
 ```bash
-./script/check         # bash -n, shellcheck, and the stats program on a fixture week
+./script/check         # bash -n, shellcheck, the stats program, and every offline test
 ```
 
 That is exactly what CI runs. `test/fixtures/week.json` is a fake week of merged
@@ -76,7 +76,26 @@ They cover, among others, the headless paths (`init_headless`, `doctor`,
 `uninstall`), note sync and review (`notes_autosync`, `notes_review_auto`,
 `notes_join`, `notes_install_check`), the scan's merge and cache handling
 (`scan_merge`, `pull_cache`), the weekly run (`weekly`), and generated pages
-fed hostile input (`page_hostile`, `doc_safety`).
+fed hostile input (`page_hostile`, `doc_safety`), the secret screen
+(`secrets`), the installer under `env -i` (`bootstrap`), and the jq versions
+older distributions ship (`jq_compat`).
+
+### Older jq
+
+Debian 12 ships jq 1.6 and Ubuntu 24.04 and macOS 15 ship 1.7.1, and each has
+refused a program that the 1.8 on a developer's machine accepts. CI runs the
+jq-heavy paths under both in its `jq-compat` job. To do the same locally, fetch
+the release binaries
+(`https://github.com/jqlang/jq/releases/download/jq-1.6/jq-linux64` and
+`https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64`, or the
+macOS builds beside them) and name them:
+
+```bash
+JQ_COMPAT="/path/jq-1.6 /path/jq-1.7.1" ./test/jq_compat_test.sh
+```
+
+Without `JQ_COMPAT` it looks for `jq-1.6` and `jq-1.7.1` on `PATH`, and with
+neither it says so and passes.
 
 A new gate is one line in the `CHECKS` registry at the foot of `script/check` —
 the flag that runs it on its own, and the function behind it — plus that

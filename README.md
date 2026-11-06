@@ -83,7 +83,8 @@ and prints the fix beside each failure. `--json` is the same for an agent.
 | | |
 |---|---|
 | `bash` 4.4 or newer | everything — macOS's `/bin/bash` 3.2 is refused; the bootstrap installs a newer one with Homebrew |
-| `git`, `gh`, `jq` | everything |
+| `git`, `gh` | everything |
+| `jq` 1.6 or newer | everything — 1.7 or newer is faster: `orgami doc` runs several times quicker |
 | `fzf` 0.29 or newer | `orgami view` |
 | `gum` | the wizard and the menu — every question has a flag |
 | `python3` | optional: `orgami mcp` and `orgami depth` |
@@ -134,6 +135,13 @@ repo-to-repo references, frameworks, run and test commands, routes, shared
 environment contracts. The result is `map/graph.json`, a flat list of nodes and
 edges; `ARCHITECTURE.md`, the mermaid diagrams and the terminal view are all
 rendered from it.
+
+A monorepo is read package by package: the packages `pnpm-workspace.yaml`,
+`package.json` `workspaces` or `lerna.json` declare, otherwise the
+`package.json` files up to two levels down. Each package's frameworks, scripts
+and nested `.env.example` count. An environment variable named only in
+Markdown, `docs/` or tests is left out. One scan per company runs at a time; a
+second is refused while the first is running.
 
 **Every edge carries the `file:line` it came from.** Nothing in the graph is
 inferred by a model, and every claim can be opened and checked.
@@ -232,9 +240,10 @@ Names and endpoints only; no environment values, ever.
 
 Nobody has the list. The card is on file somewhere, the invoices land in four
 inboxes, and the only person who knew why there are two error trackers left in
-March. `orgami scan` already reads every dependency manifest, `.env.example`,
-terraform provider and workflow file in the org — so it can name the third-party
-services the code actually calls, each with the line that proves it.
+March. `orgami scan` already reads every dependency manifest (each workspace
+package's too), every `.env.example`, terraform provider and workflow file in
+the org — so it can name the third-party services the code actually calls,
+each with the line that proves it.
 
 ```bash
 orgami advise                          # what looks worth consolidating
@@ -307,6 +316,7 @@ at all, which is the half a merge-based recap cannot see.
 orgami daily                  # today, so far
 orgami daily --yesterday      # what the timer runs each weekday morning
 orgami daily --stats-only     # the numbers, no model call, no cost
+orgami daily --model M        # another model; the default is the config's report_model
 ```
 
 **A quiet day produces no file** — a digest that says "nothing happened" every
@@ -323,11 +333,14 @@ orgami schedule --daily --off        # stop it; the digests already written stay
 
 **Each week.** `orgami pull` pages the GitHub GraphQL search API for every PR the
 org merged that week — body, diff size, labels, reviews, review threads — and
-`orgami report` splits the work in two, which is the point:
+`orgami report` splits the work in two, which is the point. `pull --last N`
+caches this week and the N before it; `pull --weeks-ago N` caches only the week
+N weeks back.
 
 - **`jq` computes every number.** PR counts, median diff size, median hours to
   merge, how many merged with no review at all, who reviews whom, which files
-  keep attracting review threads. `lib/stats.jq`, deterministic, auditable.
+  keep attracting review threads. `merged` counts people; `merged_total` adds
+  the bots. `lib/stats.jq`, deterministic, auditable.
   `orgami report --stats-only` shows just this, and costs nothing.
 - **Claude writes the prose**, and is told the numbers rather than asked to
   count. It groups PRs by *why they happened* instead of by repository, and
@@ -350,6 +363,12 @@ orgami notes --repo billing-api
 orgami sync
 ```
 
+`note --repo` has to name a repo the map holds, in any case; a name it does not
+hold is refused with the close ones, and leaving `--repo` out files an org-wide
+note. `notes --check` flags a note on an unmapped repo, and `sync` holds it
+back. `orgami notes` and `orgami stale` with no notes exit 0; `stale` takes a
+whole number of days.
+
 Mostly you will not type that. When a session ends, orgami reads back what was
 said and writes a note if the session established something durable that is not
 visible in the code. Sessions rarely end cleanly — a window gets closed, a
@@ -365,7 +384,11 @@ orgami autonote drafts     # hold them for you instead
 
 Held is the default: a note carries your name, so publishing one unattended is
 your call. Held notes wait in `notes/draft/`, the next session says how many are
-waiting, and `orgami drafts` keeps or throws each one away. Set to publish, they
+waiting, and `orgami drafts` keeps or throws each one away. With no terminal —
+an agent's shell — `orgami drafts --list` shows them, and `--keep <id>` or
+`--drop <id>` acts on one: a note's id is the note's own, a decision's is
+`<week>.<checksum>`. An agent shows the list and acts only on what you choose.
+Set to publish, they
 go out as they are written — as a pull request when `notes_review` is on, which
 is the combination worth having: nobody writes the note, and the team can still
 turn one down.
@@ -377,8 +400,13 @@ time; only what you keep reaches `DECISIONS.md`. Set to publish, they go
 straight in, as they did before.
 
 Notes are screened for credentials before they are written and again before
-anything is pushed, they can require a pull request to reach the team, and they
-can be superseded and pruned. See **[docs/notes.md](docs/notes.md)**.
+anything is pushed — the file name and front matter as well as the text — they
+can require a pull request to reach the team, and they can be superseded and
+pruned. `orgami join` brings the published playbooks, runbooks, daily digests
+and weekly recaps along with the notes, and `sync` and `sync --pull` take any of
+those the docs repo has and this machine lacks, never overwriting a local file.
+A docs repo created empty works from the first publish. See
+**[docs/notes.md](docs/notes.md)**.
 
 ### The work that keeps coming round
 
@@ -394,7 +422,9 @@ orgami note --repo scraphome --tag pattern --topic broken-fetcher \
    logged success. Switched it to the headless path copart.ts already uses."
 ```
 
-Two instances under the same topic write that job's playbook by themselves —
+Two instances under the same topic write that job's playbook by themselves, in
+the background, and the command that completes the topic says so as it starts
+it (progress in `<company>/cache/playbook.log`) —
 when you are in this case, what to check first, the steps in order, the traps,
 and the check that closes it. Every claim in it carries the note or the pull
 request it came from, and each further instance rewrites it.
@@ -414,16 +444,23 @@ where the two disagree the evidence wins. See
 
 With the plugin installed there is nothing to run — opening Claude Code in a
 mapped checkout injects the repo's stack, commands, linked repos and team notes
-at session start, and prints nothing at all outside one. For the whole page:
+at session start, and prints nothing at all outside one. The one exception: when
+the plugin is installed but the CLI is not, every session gets a single line
+saying so. For the whole page:
 
 ```bash
-orgami context          # inside a checkout: that repo. anywhere else: the org.
-orgami context <repo>   # by name
+orgami context          # inside a mapped checkout: that repo. Elsewhere it says so in a line.
+orgami context <repo>   # by name; a name the map does not hold fails
+orgami context --org    # the organization overview
 ```
 
 Cursor reaches the same parity through its `sessionStart` hook; anything that
 speaks MCP gets the map as tools; anything that reads `AGENTS.md` can have the
-context written into the repo. See **[docs/agents.md](docs/agents.md)**.
+context written into the repo. `orgami mcp --config <client>` prints the
+snippet in each client's own shape: `context_servers` for zed, `servers` with
+`type: stdio` for vscode, and for claude-code a comment instead of the add
+command when the plugin already serves it. See
+**[docs/agents.md](docs/agents.md)**.
 
 ## Auto-update
 
@@ -431,14 +468,19 @@ On by default. Two copies end up on a machine — the clone that owns the CLI, a
 Claude Code keeps for the plugin — and neither updates itself. `orgami update`
 moves both, whichever one you run it from; it also runs once a day at session
 start and at the top of the weekly timer, and the next session says what
-changed. A CLI too old to have the command is updated by the plugin's copy
-instead, so there is nothing to do by hand. It refuses any checkout
+changed. For the plugin it refreshes the marketplace
+(`claude plugin marketplace update orgami`), then moves the installed plugin
+(`claude plugin update orgami@orgami`), and reports it only when the installed
+version changed. Between releases the plugin stays on the release version while
+the CLI clone moves per commit, and `orgami doctor` does not warn about that. A
+CLI too old to have the command is updated by the plugin's copy instead, so
+there is nothing to do by hand. It refuses any checkout
 with uncommitted work, commits of its own, or no upstream, so a machine that
 develops orgami is never pulled from underneath.
 
 ```bash
 orgami update          # both installs, and relink whatever is new
-orgami update --check  # what you would get, without taking it
+orgami update --check  # what you would get, without taking it; the plugin has its own line
 orgami update --dev    # this checkout becomes what the CLI and the plugin read
 ```
 
@@ -455,7 +497,10 @@ orgami uninstall             # the PATH link, completions, the skill, the timers
 orgami uninstall --purge     # also ~/.orgami, and the clone if it has no local changes
 ```
 
-It never touches the docs repo or anything already published.
+It finishes by removing the directories orgami's files were in when they are
+left empty (`~/.local/bin`, `~/.claude/skills`, `~/.config/systemd/user`, and
+so on); a directory holding anything else stays. It never touches the docs repo
+or anything already published.
 
 ## More than one organization
 
@@ -474,14 +519,26 @@ description, labels, sizes, reviewers, the start of review comments),
 messages), the session-end
 note (that session's transcript, with tokens and keys redacted first),
 `orgami playbook` (the notes and pull requests behind it), `orgami review --auto`
-(the notes in a pull request) and `orgami doc --narrate` (the graph). Each call
-runs with no tools, no MCP servers and none of your Claude Code settings or
+(the notes in a pull request) and `orgami doc --narrate` (the graph). A pattern
+note that completes a topic, typed or kept with `orgami drafts --keep`, starts
+`orgami playbook` in the background, which sends the topic's notes and the
+matching pull requests' titles and bodies; the CLI says so as it starts. Each
+call runs with no tools, no MCP servers and none of your Claude Code settings or
 hooks: the model can only write text back. Clones are never sent.
 
+Redaction and the note screen share one list, `lib/secrets.tsv`: GitHub,
+Anthropic and OpenAI, Stripe, npm, GitLab and Slack tokens, Slack webhooks, AWS
+keys, `Bearer` and `Authorization` values, passwords in URLs, `KEY=`, `TOKEN=`,
+`SECRET=` and `PASSWORD=` assignments, private key blocks, and "password is X".
+It is pattern-based, so a secret in a shape nobody listed can still get through.
+
 **To GitHub**, only when you ask: `orgami publish`, `orgami sync` and
-`orgami note --push` push to the docs repo, `orgami review` comments and merges, `review --install-check`
+`orgami note --push` push to the docs repo (a publish commit names the recap
+weeks it changes, or says `map`), `orgami review` comments and merges, `review --install-check`
 pushes a workflow, `orgami init` creates the docs repo if you choose that, and
 `orgami weekly` — what `orgami schedule` puts on the timer — ends with a publish.
+`orgami dns`, with no `--domain` and no `domains` list in the config, reads the
+org's GitHub profile once (`gh api orgs/<org>`, a GET) to learn its website.
 The session hook's `orgami autosync` only pulls teammates' notes unless
 `"notes_autosync": true` is set, which makes it publish yours too.
 

@@ -10,7 +10,7 @@ top of the invoice.
 DNS finds them, because a vendor that has been set up leaves a record behind.
 
 ```bash
-orgami dns                                # the domains the map already knows
+orgami dns                                # the domains something says the org owns
 orgami dns --domain acme.com              # one domain, on its own
 orgami dns --max-domains 10               # ask about more of them
 orgami dns --yes                          # no confirmation prompt
@@ -50,16 +50,27 @@ Never a domain there is no reason to think the organization owns. In order:
    ```json
    { "domains": ["acme.com", "acme.co.uk"], "dns_max_domains": 8 }
    ```
-2. **The apexes of the `host:` nodes the map already found.** Most-referenced
-   first, because the domain the organization's own services answer on is the
-   one most repositories point at.
-3. **`--domain`, repeatable.** A one-off, and it stands alone: somebody asking
+2. **With no list: the domains something says the organization owns.** The
+   website and the contact-address domain on the organization's GitHub
+   profile (one read-only `gh api orgs/<org>` GET; a failure is logged and the
+   run goes on), plus the map's `host:` nodes whose registrable name is the
+   organization's or the company's name. A host the code merely calls, with no
+   ownership signal, is not queried, and is named as such. A host the
+   catalogue knows as a vendor's endpoint (`api.stripe.com`) is dropped as
+   that vendor's.
+3. **Only with no ownership signal at all: the called hosts, as a fallback.**
+   It says so on stderr, and the findings go into `unverified_vendors`, not
+   `vendors`, and `DNS.md` lists them in a section of their own. `orgami advise`
+   leaves them out.
+4. **`--domain`, repeatable.** A one-off, and it stands alone: somebody asking
    about one domain does not want four others queried alongside it.
 
 Provider-owned domains are dropped hard — `vercel.app`, `fly.dev`,
 `herokuapp.com`, `netlify.app`, `github.io`, `amazonaws.com`, `pages.dev`,
-`workers.dev`, `onrender.com`, `railway.app` and the rest, plus everything
-`scan.sh`'s `NOISE_DOMAINS` already refuses to make a host node out of. Reading
+`workers.dev`, `onrender.com`, `railway.app`, `azure.com`, `microsoft.com`,
+`google.com`, blog hosts such as `medium.com`, free-mail domains such as
+`gmail.com`, and the rest, plus everything `scan.sh`'s `NOISE_DOMAINS` already
+refuses to make a host node out of. A provider's subdomain is caught too. Reading
 the DNS of `vercel.app` describes Vercel's zone and says nothing about anyone
 else.
 
@@ -158,6 +169,14 @@ read — enough to run the same check and see the same thing. A TXT record runs 
 255 characters and a DKIM key runs well past it, so a long one is cut; the whole
 of it is one `dig` away.
 
+## The file
+
+`map/dns.json` holds `vendors`, the accounts on domains something says the
+organization owns, and `counts.vendors`. A fallback reading adds `unverified`
+(the domains read with no ownership signal), `unverified_vendors` (the same
+shape as `vendors`) and `counts.unverified_vendors`. `origin` says where the
+domain list came from, for example `the website on the acme GitHub profile`.
+
 ## Where it shows up
 
 - **`map/DNS.md`** — the page, one section per vendor, published with the rest
@@ -186,5 +205,6 @@ different provider in an afternoon.
 }
 ```
 
-Neither is required. Without `domains`, the apexes come from the map; without
+Neither is required. Without `domains`, the domains come from the GitHub
+profile and the map, as above; without
 `dns_max_domains`, five domains are queried and the rest are named and skipped.

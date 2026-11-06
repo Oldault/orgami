@@ -22,7 +22,8 @@ orgami: needs bash 4.4 or newer (this is 3.2.57(1)-release) — on macOS: brew i
 
 ## What to install
 
-`git`, `gh`, `jq` are required. `fzf` (0.29 or newer) is for `orgami view`,
+`git`, `gh` and `jq` 1.6 or newer are required (1.7 or newer makes `orgami doc`
+several times faster). `fzf` (0.29 or newer) is for `orgami view`,
 `gum` for the wizard and the menu. `python3` is only for `orgami mcp` and
 `orgami depth`. `claude` (Claude Code) is only for the parts a model writes:
 the weekly recap, the daily digest, session notes, playbooks. Everything else

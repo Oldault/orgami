@@ -91,7 +91,7 @@ bead rather than quietly bending it.
 |---|---|---|
 | overview | the org at a glance: counts, freshness of every reading with the command that refreshes it, what changed this week, what advise ranks first | graph, repos, live, dns, advise, coupling, reports, notes |
 | map | the graph as a picture: force layout, kind filters, inferred toggle, search, node panel with both directions of every edge and the evidence | graph (+ depth and live totals) |
-| repos | a table (language, framework, runtime, edges, last push, deploy target, live state) and a page per repo | repos, graph, coupling, live, notes, runbooks, playbooks |
+| repos | a table (language, framework, runtime, edges, last push, deploy target, live state) and a page per repo, carrying what the card carries: the tools it is deployed with, its vendors by name, the totals behind capped lists, instruction-file aliases, and stable coupling pairs only | repos, graph, coupling, live, notes, runbooks, playbooks |
 | vendors | what the org pays for: vendor × repo by category, source badge (code / dns / both), the amount a person typed where one exists with who and when, a category total only where every vendor is costed, advise proposals ranked with evidence and the figure beside the blast radius, suppressed ones with reason and author, "not proposed, on purpose" | graph vendor nodes and edges, dns, advise, costs, notes |
 | live | deployed vs configured: per provider, per repo, state, urls, age; "configured but not seen" and "seen but not configured"; DNS records by kind | live, dns, graph deploys-to edges |
 | activity | the weeks as small multiples from `stats.jq`, the daily digests from `daily.jq`, coupling as a repo × repo matrix labelled correlation-not-dependency | weeks, days, reports, daily, coupling |
@@ -197,7 +197,7 @@ as missing, with a line on stderr.
 | `pages` | `map/*.md` | `[{file, text}]` |
 | `decisions` | `map/decisions/*.md` | `[{file, text}]` |
 | `playbooks` | `map/playbooks/*.md` | `[{file, text}]` — `<repo>--<topic>.md` |
-| `runbooks` | `map/runbooks/*.md` | `[{file, text}]` |
+| `runbooks` | `map/runbooks/*.md`, `.github.md` too | `[{file, text, written}]` — `written` is the file's write time, which the Memory view reads as the runbooks' age |
 | `reports` | `reports/*.md` | `[{file, text}]` |
 | `daily` | `reports/daily/*.md` | `[{file, text}]` |
 

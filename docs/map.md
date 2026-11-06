@@ -2,21 +2,42 @@
 
 `orgami scan` shallow-clones every non-archived, non-fork repo in the org — eight
 at a time behind a progress bar, `--jobs N` to change that — and pattern-matches
-what is committed:
+what is committed. `--jobs` and `--depth` take positive whole numbers, and one
+scan per company runs at a time: a second is refused while the first runs.
+`exclude` patterns in the config (`orgami init --exclude`) are regular
+expressions matched against repo names — `-infra$`, `^archived-` — not globs:
 
 | Looking for | Where |
 |---|---|
 | Deployment tooling | `.github/workflows` actions, `Dockerfile`, `config/deploy.yml` (Kamal), `fly.toml`, `vercel.json`, `netlify.toml`, `render.yaml`, `serverless.yml`, `Chart.yaml`, `Procfile`, `*.tf`, `ansible.cfg`, Kubernetes manifests, `.gitlab-ci.yml`, `Jenkinsfile`, `.circleci/config.yml`, `wrangler.toml` (Cloudflare), `railway.json`, `.coolify/`, `app.json` with Dokku's own keys, `captain-definition` (CapRover), `template.yaml` with the SAM transform, `cdk.json`, `supabase/config.toml` |
-| Servers and endpoints | Kamal `servers:`, Fly app names, Cloudflare worker names, Kubernetes ingress hosts, `.env.example` |
-| Backing services | `docker-compose.yml` images, `*_URL` / `*_HOST` names in `.env.example` |
-| Third-party vendors | dependency manifests, `.env.example` variable names, literal URLs, terraform providers and workflow actions, matched against `lib/vendors.tsv` |
+| Servers and endpoints | Kamal `servers:`, Fly app names, Cloudflare routes and custom domains, Kubernetes `- host:` lines, `.env.example` |
+| Backing services | compose file images, `*_URL` / `*_HOST` names in every `.env.example` |
+| Third-party vendors | dependency manifests at the root and in every workspace package or nested project, every `.env.example` a package keeps, variable reads in source code, literal URLs in code and config, terraform providers, workflow actions, and vendor config file names (`eas.json`, `fly.toml`, `wrangler.toml`, `vercel.json`…), matched against `lib/vendors.tsv` |
 | Third-party accounts | not from the scan at all — `orgami dns` reads the organization's public DNS for verification tokens, MX, SPF, DMARC, conventional CNAMEs and nameservers, against the same `lib/vendors.tsv`. Its own file, its own clock: [docs/dns.md](dns.md) |
 | Repo-to-repo links | `github.com/org/other`, `ghcr.io/org/other`, `@org/other`, and dependency manifests naming a sibling repo |
-| What a repo is | framework (Next.js, NestJS, Express, Rails, Django, FastAPI, Parse, Go, …), package manager, runtime version |
-| How to work on it | `package.json` scripts, Makefile targets, `bin/setup`-style scripts, Procfile process types |
-| What it serves | Express/Nest/Fastify routes, Next.js API routes and route handlers, Parse cloud functions, Flask and FastAPI decorators, Rails routes |
+| What a repo is | framework (Next.js, NestJS, Express, AdonisJS, Rails, Django, FastAPI, Parse, Go, …), package manager, runtime version, and the same per workspace package |
+| How to work on it | `package.json` scripts (a workspace package's as `<script> (<dir>)`, each with its `package.json:line`), Makefile targets, `bin/setup`-style scripts, Procfile process types |
+| What it serves | Express/Nest/Fastify routes, Next.js API routes and route handlers (under `src/` and in workspace packages too), Parse cloud functions, Flask and FastAPI decorators, Rails routes. A route quoted in a comment is not one |
 | What it calls | literal URLs in source, matched against the hosts other repos declare as their own |
 | Shared contracts | distinctive environment variables read by more than one repo |
+
+Deployment files are looked for below the root: Dockerfiles, compose files and
+`*.tf` up to five levels down (four for `*.tf`), with `tests/`, `fixtures/`,
+`examples/`, `templates/` and `playground/` skipped, and nested `.env.example`
+files are read. Cloudflare: no host comes from a wrangler `name`; only declared
+routes and custom domains become hosts, and a Pages project is cited at its
+`pages_build_output_dir` line.
+
+A monorepo is read per package: the packages `pnpm-workspace.yaml`,
+`package.json` `workspaces` or `lerna.json` declare, otherwise the
+`package.json` files two levels down. Environment names are ranked — the ones
+an example env file declares first, then the ones read in code — and a name
+mentioned only in Markdown, `docs/` or tests is left out.
+
+The vendor reading ignores commented-out lines, Markdown, `docs/`, tests,
+example, playground and demo directories, reference and third-party copies,
+files over 512 KiB, `go.mod` `// indirect` requirements, and public hosts such
+as font CDNs, OAuth scope URLs and public job boards.
 
 The result is `map/graph.json` — a flat list of nodes and edges, nothing else.
 `ARCHITECTURE.md`, the mermaid diagrams, `graph.html` and the terminal view are
@@ -38,8 +59,8 @@ that renders the graph says it too.
 | Edge | Why |
 |---|---|
 | `calls` | inferred — a repo's literal URL matched a host exactly one other repo claims as its own |
-| `shares-config` | inferred — two repos read the same distinctive environment variable name |
-| `changes-with` | inferred — the two keep landing pull requests in the same week |
+| `shares-config` | inferred — two repos read the same distinctive environment variable name. A name six or more repos declare, or one made only of generic words (`DATABASE_URL`, `DB_HOST`, `API_URL`), makes no edge |
+| `changes-with` | inferred — the two keep landing pull requests in the same week, by more than one author. `orgami scan` keeps these edges, and `imports`, by rebuilding them from `coupling.json` and `depth.json` |
 | `imports` | either — extracted when the specifier names the organization, inferred when a bare name merely equals a repo name |
 | everything else | extracted — `uses`, `deploys-to`, `depends-on`, `reaches`, `references` all point at a file |
 
@@ -174,7 +195,25 @@ by its kind, the same way the text pane and `graph.html` classify it.
 - **`coupling.json`** — which repos keep landing changes together, counted by
   same-day and same-week co-occurrence, bots excluded. Correlation, not
   dependency, and labelled as such — but it is the blast radius no static scan
-  can see, and it sharpens every week the timer runs.
+  can see, and it sharpens every week the timer runs. Each pair carries
+  `stable`, true when it becomes a `changes-with` edge: more than one week or
+  day, and more than one author. The card and the page show stable pairs only.
+
+## The repo card
+
+`orgami card <repo>`, and `map/repos/<repo>.md` from `orgami doc`, are the same
+page. Its sections: how to run it (each command with the `file:line` it was
+read from), **Packages** for a workspace, **Endpoints** and **Configuration**
+(saying "N of M" when the list is capped), **Runs on** (`deployed with` lists
+tools only, then hosts, `reaches` and backing services), **Vendors** by name
+with their evidence, and the instruction files, a second name for the same file
+given as "(also `CLAUDE.md`)". The `ARCHITECTURE.md` table has the columns
+Repo, Language, Deployed with, Vendors, Depends on, Reaches and References.
+
+`map/repos.json` holds each repo's profile. Besides the lists the card shows,
+it carries `env_total` and `routes_total` (the counts before the cap),
+`workspaces` (`[{dir, name, frameworks}]`), `agent_doc_aliases` (`{alias:
+kept}`), and `commands.evidence` (`{script: "path:line"}`, always present).
 
 ## Deeper than the scan goes
 
