@@ -13,6 +13,9 @@ to run it, what it talks to, where it deploys — digests what the team shipped
 today and this week, keeps the things you only learn once, and hands all of it to
 your coding agent at session start.
 
+It maps GitHub organizations, not personal accounts, and reads them through a
+signed-in `gh`.
+
 ![orgami: the context an agent is handed, one node and its evidence, the map in
 the terminal, and the week's numbers](docs/demo.gif)
 
@@ -67,7 +70,14 @@ Then, once, on one machine:
 
 ```bash
 gh auth login
-orgami init     # map your organization
+orgami init                                         # map your organization, step by step
+orgami init <name> --org <github-org> --no-docs     # the same with no questions, for a script or an agent
+```
+
+To see it on a public organization first, in about two minutes:
+
+```bash
+orgami init demo --org honojs --no-docs && orgami scan && orgami brief hono
 ```
 
 Everyone else on the team runs `orgami join` and picks it up — no scan, no
@@ -120,6 +130,10 @@ orgami doc             # render map/ARCHITECTURE.md
 orgami view            # browse the map in the terminal
 orgami publish         # commit both into the docs repo
 ```
+
+`orgami view` needs a terminal. Without one — an agent, a script, CI —
+`orgami query <node>` prints one node and its edges and `orgami card <repo>` one
+repository's page, both as plain text.
 
 `orgami weekly` runs that whole sequence; `orgami schedule` puts it on a systemd
 user timer, a launchd agent, or a cron line you paste anywhere else.
@@ -519,6 +533,26 @@ acquired org — `orgami init` again gives it its own directory under
 `~/.orgami`, `orgami use <name>` switches the default, and
 `ORGAMI_COMPANY=<name>` runs a single command against the other. Notes are
 screened against every org configured on the machine, so nothing crosses.
+
+## What the plugin runs
+
+The Claude Code plugin is this repository, and nothing it starts is new code:
+
+- **SessionStart** runs `hooks/session-context.sh`: it pulls teammates' notes
+  (at most every half hour, six seconds at most), starts `orgami autosync`,
+  `orgami note-sweep` and a once-a-day `orgami update` detached, and hands the
+  session `orgami brief` for the checkout — nothing at all outside a mapped one.
+- **SessionEnd** runs `hooks/session-note.sh`: when the session edited files or
+  ran commands, it starts `orgami note-auto` on the transcript, detached, which
+  drafts a note for you to keep or drop. `ORGAMI_AUTONOTE=0` turns it off.
+- **The MCP server** is `lib/mcp.py`, started with `python3`. Each of its tools
+  runs `bin/orgami` with the same arguments you would type, and returns what it
+  printed.
+
+All of it reaches GitHub through `gh`. `claude` is called only for prose: the
+drafted session note, a playbook that a completed topic starts, and the
+automatic review when `notes_review` is on. What each of those sends is the
+next section.
 
 ## What leaves your machine
 

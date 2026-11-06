@@ -95,6 +95,12 @@ gh auth login
 /plugin install orgami@orgami
 ```
 
+or the same in one command:
+
+```
+/plugin install orgami --marketplace Oldault/orgami
+```
+
 then, once, to put the CLI on your PATH:
 
 ```bash
@@ -206,8 +212,12 @@ stays.
 
 ```bash
 orgami init     # map one yourself — pick the org, it does the rest
+orgami init <name> --org <github-org> --no-docs   # the same, with no questions
 orgami join     # or pick up one a colleague already mapped, no scan needed
 ```
+
+It maps a GitHub organization, not a personal account. To try it on a public
+one: `orgami init demo --org honojs --no-docs && orgami scan && orgami brief hono`.
 
 ## 7. Optional, once per organization
 
