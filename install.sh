@@ -63,7 +63,8 @@ fi
 
 if ! command -v claude >/dev/null; then
   echo "missing: claude — curl -fsSL https://claude.ai/install.sh | bash" >&2
-  echo "         (only 'orgami report' needs it; everything else works without)" >&2
+  echo "         (only the written recaps, digests, session notes and playbooks need it;" >&2
+  echo "         --stats-only gives the numbers without it)" >&2
 fi
 
 if [[ ${#missing[@]} -gt 0 ]]; then
@@ -141,9 +142,12 @@ case ":$PATH:" in
   *) echo "note: $BIN_DIR is not on your PATH" >&2 ;;
 esac
 
+# init asks its questions on a terminal; the flag form is for anything without one.
 cat <<'EOF'
 
 next:
-  orgami init    map your organization, step by step
-  orgami         the menu
+  orgami init      map your organization, step by step
+                   or, with no terminal: orgami init <name> --org <github-org> --no-docs
+  orgami doctor    check what is installed and what is missing
+  orgami           the menu
 EOF
