@@ -169,9 +169,13 @@ sheet (220px). On dark surfaces CSS renders the silhouette light. The mark is
 static, including under reduced motion.
 
 `docs/brand/favicon.svg` embeds the same pixels on a warm paper background for
-visibility in either browser theme. Generated web and graph pages embed both
-the favicon and logo so exports still open offline. README and social metadata
-use the same PNG. Earlier proposals in `docs/brand/` are historical references.
+visibility in either browser theme; the README shows it. The landing page
+serves cut-down copies of the same pixels, never a redraw: `docs/brand/logo-440.png`
+for every `.mark` (220px at 2x is the largest it draws), `docs/favicon.ico`
+(16/32/48), `docs/favicon.svg` (96px) and `docs/brand/apple-touch-icon.png`
+(180px), all on the warm paper ground. Regenerate them from `logo.png` if the
+approved logo changes. Generated web and graph pages embed both the favicon
+and logo so exports still open offline. Earlier proposals in `docs/brand/` are historical references.
 
 ## The ground
 
@@ -242,8 +246,12 @@ Three primitives and the ground: the fold, the type-in, state, and the grid.
 - Links to `docs/*.md` point at the GitHub blob URL: the page is served
   from `docs/`, so a relative `docs/…` path is a dead link on Pages.
 - The reduced-motion still (`docs/demo-still.png`) and the video
-  (`docs/demo.mp4`) are committed with the page; `og:image` uses
-  `docs/brand/logo.png`.
+  (`docs/demo.mp4`) are committed with the page; `og:image` is
+  `docs/og.png`, 1200x630, served from orgami.dev: the elephant, the title,
+  and the real `orgami query create-hono` evidence lines on a `--fold-deep`
+  card. Re-render it when the title or the honojs sample changes.
+- `docs/404.html` is the not-found page Cloudflare serves; `docs/sitemap.xml`
+  and `docs/robots.txt` sit beside it.
 - The install line appears twice: hero and closing sheet. It is the one
   action; the copy square is the only filled control. Under the hero line, a
   text link goes to pinning a release in `docs/install.md`.
@@ -264,7 +272,7 @@ seconds in the brief is complete, so that is the frame a visitor meets; the
 loop then plays the whole take from zero. A text
 "pause" chip pauses the element because the loop runs longer than five
 seconds; under reduced motion JS holds the video on its first frame and the
-chip starts as "play". The gif stays for the README; social previews use the elephant logo. The
+chip starts as "play". The gif stays for the README; social previews use `docs/og.png`. The
 recording has real vhs chrome baked in; nothing on the page imitates it.
 Never a generated clip: the recording is the only footage on the page.
 
