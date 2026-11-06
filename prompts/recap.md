@@ -20,6 +20,9 @@ Rules:
   `merged_by_bots` or `median_hours_to_merge` in the prose; say it in words with
   the number ("two bot pull requests", "a median of 5 hours to merge").
   `merged_total` is people plus bots; `merged` is people only.
+- STATS and PULL_REQUESTS are your sources, and the reader has never seen
+  either. Never name them in the prose and never cite them as a source — no
+  "(STATS: …)", no "per STATS". The number in words is the citation.
 - Answer *why*, not *what changed*. "Checkout dropped card errors" beats
   "updated PaymentIntent handling in stripe.rb".
 - Group by intent, not by repository. A theme spanning three repos is one theme.
@@ -98,8 +101,9 @@ reading.
 Bullets. Before writing one, check PULL_REQUESTS: an item that a pull request
 from this same week already resolved (a default changed, a gap closed, a thing
 removed) is not a watch item. Leave it out, or say it was resolved and cite the
-PR. Each item cites what it rests on: the pull request, or the STATS figure in
-words. An item that rests on neither is a guess; leave it out. Never contradict
+PR. Each item cites what it rests on: the pull request, or the figure itself in
+words with its number ("3 pull requests merged without review"). An item that
+rests on neither is a guess; leave it out. Never contradict
 an earlier section of this recap: a thing listed as shipped, fixed or removed
 is not still pending here. Things that will hurt if they continue: review
 bottlenecks, repos with no activity, growing unresolved threads, oversized PRs.

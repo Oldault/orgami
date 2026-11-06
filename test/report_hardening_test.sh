@@ -59,7 +59,11 @@ case ${CLAUDE_MODE:-ok} in
   err) echo "API Error: Connection lost" ;;
   keys) printf '%s\n' '## How the team worked' '' \
     'All of it merged without review (`merged_without_review` is 1); `review_pairs` is empty.' \
-    'median_hours_to_merge stays words, `merged_by_bots` (7) keeps its own number. See api#1.' ;;
+    'median_hours_to_merge stays words, `merged_by_bots` (7) keeps its own number. See api#1.' \
+    '' '## Watch list' '' \
+    '- Review is thin (STATS: merged without review).' \
+    '- One merge nobody reviewed (STATS: `merged_without_review` is 1).' \
+    '- The same figure, cited bare (per STATS), and by path: `STATS.merged_without_review`.' ;;
   *) echo "Four PRs landed. See api#1." ;;
 esac
 STUB
@@ -83,6 +87,14 @@ grep -qF 'without review (1);' "$r" || fail "a key beside its value did not coll
 grep -qF 'review pairs is empty' "$r" || fail "a quoted key did not become words"
 grep -qF 'median hours to merge stays words' "$r" || fail "an unquoted key did not become words"
 grep -qF 'merged by bots (7)' "$r" || fail "a key beside a figure jq did not compute was reconciled"
+# Told to cite the figure an item rests on, the model names the document it
+# came from: "(STATS: merged without review)" reached a real recap with the key
+# rewritten and the label left. The label goes wherever it is used as one.
+grep -qE 'STATS' "$r" && fail "the STATS label reached the recap: $(cat "$r")"
+grep -qF -- '- Review is thin (merged without review).' "$r" || fail "a (STATS: words) citation kept its label"
+grep -qF -- '- One merge nobody reviewed (1).' "$r" || fail "a (STATS: key is n) citation did not collapse to the figure"
+grep -qF -- 'cited bare, and by path: merged without review.' "$r" ||
+  fail "a (per STATS) aside or a STATS.key path survived"
 
 # latest: README.md sorts after weeks and must not win.
 echo "# readme" >"$home/reports/README.md"
