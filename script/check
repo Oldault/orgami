@@ -349,6 +349,14 @@ flags() {
   echo "flags: a bare value-flag dies as orgami's error, and every arm is guarded"
 }
 
+# `<command> --help` answers before any company is resolved or any flag parsed,
+# with that command's lines sliced out of `help --all`. Every command it names,
+# with no company and with one. Temp ORGAMI_HOME, no gh, no network.
+help_check() {
+  ./test/help_test.sh </dev/null >/dev/null
+  echo "help: every command answers -h and --help, before setup and after"
+}
+
 # `orgami query --json` is what anything built on the map reads, so its shape
 # is pinned, and so is the confidence on every edge it hands out. Runs against a
 # hand-written graph.json under a temp ORGAMI_HOME.
@@ -692,6 +700,7 @@ CHECKS=(
   --linkify:linkify
   --schedule:schedule
   --flags:flags
+  --help-flags:help_check
   --query:query
   --html:html
   --web:web

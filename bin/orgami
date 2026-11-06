@@ -156,6 +156,38 @@ fi
 # Bare `orgami init` walks you through it instead of demanding flags.
 if [[ $cmd == init && $# -eq 0 && -t 0 && -t 1 ]]; then cmd=setup; fi
 
+# help_for <command> — that command's lines out of `help --all`: each line that
+# starts with it, and the indented lines under each. Sliced rather than written
+# per command, so a flag added to the help is in `<command> --help` too.
+# Returns 1 when the help has no line for it.
+help_for() {
+  usage_all | awk -v c="$1" '
+    /^  orgami / { split($0, w, " "); on = (w[2] == c); if (on) { print; n++ }; next }
+    on && /^      / { print; next }
+    { on = 0 }
+    END { exit n ? 0 : 1 }'
+}
+
+# `<command> -h` or `--help` anywhere in the arguments answers before anything
+# resolves a company or parses a flag, so it works on a machine with nothing set
+# up. The commands that print a usage of their own keep it: theirs says more.
+case $cmd in
+  help | -h | --help | init | agents | drafts | context | card | schedule) ;;
+  *)
+    for _a in "$@"; do
+      [[ $_a == -h || $_a == --help ]] || continue
+      [[ $cmd == read ]] && cmd=latest
+      if help_for "$cmd"; then exit 0; fi
+      case $cmd in
+        menu | setup | brief | show | open | note-auto | _tui)
+          echo "orgami $cmd has no section of its own — orgami help --all lists every command"
+          exit 0 ;;
+      esac
+      break
+    done
+    ;;
+esac
+
 # doctor is the command that says jq is missing, and help is how a new machine
 # finds doctor, so both run without it.
 case $cmd in

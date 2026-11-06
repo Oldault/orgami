@@ -140,7 +140,8 @@ user timer, a launchd agent, or a cron line you paste anywhere else.
 
 `orgami help` is the menu and eleven commands — the ones you use.
 `orgami help --all` is the rest: note review, MCP, per-repo runbooks, coupling,
-symbols, pruning, `doctor`, `uninstall`.
+symbols, pruning, `doctor`, `uninstall`. `orgami <command> --help` prints that command's lines
+and flags, before any organization is set up.
 
 ## The map
 
