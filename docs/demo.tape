@@ -9,15 +9,15 @@
 # It records against a mapped copy of a public organization, so nothing in the
 # GIF belongs to a client. Reproduce that first — it takes about a minute:
 #
-#   export ORGAMI_HOME=/tmp/orgami-demo
+#   export ORGAMI_HOME=~/orgami-demo     # vhs passes it through to the take
 #   orgami init demo --org honojs
-#   orgami scan --jobs 8 && orgami doc && orgami pull --last 1
-#   orgami note --repo hono "a line for the Notes tab to show"
+#   orgami scan --jobs 8 && orgami doc && orgami pull --last 2
+#   orgami note --repo honox "Island components cannot access the Context object."
 #
 # Never record against a client's organization. Repository names, hostnames and
 # IP addresses end up in every frame, and orgami's note screening does not cover
 # a GIF. The --week below is the week that was current when this was recorded;
-# `orgami pull --last 1` and the matching week is the pair to change.
+# `orgami pull --last 2` and the last full week is the pair to change.
 
 Output docs/demo.gif
 Output docs/demo.mp4
@@ -35,8 +35,6 @@ Set TypingSpeed 40ms
 Set Framerate 25
 Set WindowBar Colorful
 Set BorderRadius 8
-
-Env ORGAMI_HOME "/tmp/orgami-demo"
 
 Hide
 Type "unset PROMPT_COMMAND; PS1='❯ '; clear" Enter
@@ -82,6 +80,6 @@ Sleep 400ms
 
 # Every number in the weekly recap is computed by jq, never by a model.
 Set TypingSpeed 25ms
-Type "orgami report --stats-only --week 2026-W38 |" Enter
+Type "orgami report --stats-only --week 2026-W44 |" Enter
 Type "  jq '{merged, repos_touched, median_hours_to_merge, merged_without_review}'" Sleep 500ms Enter
 Sleep 4500ms
