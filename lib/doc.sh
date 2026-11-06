@@ -209,8 +209,8 @@ How to answer:
   than reasoning from general knowledge about software. "That is not recorded
   here" is a good answer.
 - Match the reader. If they are not an engineer, translate the technical terms
-  or leave them out — a repository name like `Attorney-Portal` means nothing to
-  them, so say "the attorney portal". If they are an engineer, give them the
+  or leave them out — a repository name like `Billing-API` means nothing to
+  them, so say "the billing service". If they are an engineer, give them the
   detail and the links.
 - Never state a number that is not written in the files. Do not estimate cost,
   revenue, hours, or customer counts. There is no basis for those here.

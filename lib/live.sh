@@ -29,9 +29,9 @@ live_repo_exists() {
 }
 
 # The repo of exactly this name, whatever its capitalisation — GitHub treats
-# `WinIt-backend` and `winit-backend` as the same name, so a provider that
+# `Billing-API` and `billing-api` as the same name, so a provider that
 # lowercased it has still named the repository. Anything less than the whole
-# name is not a match: `winit-backend-dev` is not `WinIt-backend`.
+# name is not a match: `billing-api-dev` is not `Billing-API`.
 live_repo_named() {
   jq -re --arg n "$1" '[.[] | select((.name | ascii_downcase) == ($n | ascii_downcase)) | .name]
                        | if length == 1 then .[0] else empty end' \

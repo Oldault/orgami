@@ -22,7 +22,7 @@ mkdir -p "$DIR/map" "$DIR/bin"
 echo '{"aws_region": "us-east-1"}' >"$DIR/config.json"
 
 cat >"$DIR/map/repos.json" <<'JSON'
-[{"name": "WinIt-backend"}, {"name": "reports"}, {"name": "ticket-api"}]
+[{"name": "Billing-API"}, {"name": "reports"}, {"name": "ticket-api"}]
 JSON
 
 cat >"$DIR/map/graph.json" <<'JSON'
@@ -52,8 +52,8 @@ JSON
 {"Functions": [
   {"FunctionName": "nightly-reports", "LastModified": "2026-08-01T10:00:00Z",
    "FunctionArn": "arn:aws:lambda:us-east-1:111122223333:function:nightly-reports"},
-  {"FunctionName": "winit-backend", "LastModified": "2026-08-02T10:00:00Z",
-   "FunctionArn": "arn:aws:lambda:us-east-1:111122223333:function:winit-backend"},
+  {"FunctionName": "billing-api", "LastModified": "2026-08-02T10:00:00Z",
+   "FunctionArn": "arn:aws:lambda:us-east-1:111122223333:function:billing-api"},
   {"FunctionName": "scraphome-api", "LastModified": "2026-08-03T10:00:00Z",
    "FunctionArn": "arn:aws:lambda:us-east-1:111122223333:function:scraphome-api"},
   {"FunctionName": "testalevy", "LastModified": "2026-08-04T10:00:00Z",
@@ -61,12 +61,12 @@ JSON
 JSON
     ;;
   "ecs list-clusters") echo '{"clusterArns": ["arn:aws:ecs:us-east-1:111122223333:cluster/main"]}' ;;
-  "ecs list-services") echo '{"serviceArns": ["arn:aws:ecs:us-east-1:111122223333:service/main/winit-preview-1"]}' ;;
+  "ecs list-services") echo '{"serviceArns": ["arn:aws:ecs:us-east-1:111122223333:service/main/billing-preview-1"]}' ;;
   "ecs describe-services")
     cat <<'JSON'
-{"services": [{"serviceName": "winit-preview-1", "status": "ACTIVE",
+{"services": [{"serviceName": "billing-preview-1", "status": "ACTIVE",
                "runningCount": 2, "desiredCount": 2,
-               "serviceArn": "arn:aws:ecs:us-east-1:111122223333:service/main/winit-preview-1"}]}
+               "serviceArn": "arn:aws:ecs:us-east-1:111122223333:service/main/billing-preview-1"}]}
 JSON
     ;;
   "elasticbeanstalk describe-environments")
@@ -101,9 +101,9 @@ assert "beanstalk environments are read" 1 \
 
 assert "a Repository tag attributes it" reports '.[] | select(.name == "nightly-reports") | .repo'
 assert "and says the tag did it" tag '.[] | select(.name == "nightly-reports") | .match'
-assert "a whole repo name in another case matches" WinIt-backend \
-  '.[] | select(.name == "winit-backend") | .repo'
-assert "and keeps the map's spelling" name '.[] | select(.name == "winit-backend") | .match'
+assert "a whole repo name in another case matches" Billing-API \
+  '.[] | select(.name == "billing-api") | .repo'
+assert "and keeps the map's spelling" name '.[] | select(.name == "billing-api") | .match'
 assert "a mapped hostname attributes it" ticket-api \
   '.[] | select(.name == "ticket-api-prod") | .repo'
 assert "and says the map did it" map '.[] | select(.name == "ticket-api-prod") | .match'
@@ -113,9 +113,9 @@ assert "the hostname is carried" ticket-api-prod.us-east-1.elasticbeanstalk.com 
 # The two that name nothing must stay unattributed, however suggestive.
 assert "a prefix is not a match" null '.[] | select(.name == "scraphome-api") | .repo'
 assert "nor is a stray name" null '.[] | select(.name == "testalevy") | .repo'
-assert "nor is a preview service" null '.[] | select(.name == "winit-preview-1") | .repo'
+assert "nor is a preview service" null '.[] | select(.name == "billing-preview-1") | .repo'
 assert "ecs state carries running counts" "ACTIVE 2/2" \
-  '.[] | select(.name == "winit-preview-1") | .state'
+  '.[] | select(.name == "billing-preview-1") | .state'
 
 # Every row is the same fixed shape: no tag values, no environment, nothing a
 # resource happened to carry beyond its name and where it answers.

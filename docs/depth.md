@@ -78,14 +78,14 @@ The question the scan could never answer, and the first one anybody asks of an
 unfamiliar organization:
 
 ```bash
-$ orgami depth --symbol createTicket
-  Attorney-Portal  createTicket    [function]  services/ticketService.js:446
-  winit-frontends  createTicket    [function]  src/data/services/traffic.ts:24
-  winit-ios        createTicket    [function]  Coordinators/TrafficCoordinator.swift:139
-  parkingpay-api   findOrCreateTicket [function]  db/methods/Ticket/findOrCreate.js:9
+$ orgami depth --symbol createInvoice
+  billing-api      createInvoice   [function]  services/invoiceService.js:446
+  web              createInvoice   [function]  src/data/services/invoices.ts:24
+  ios              createInvoice   [function]  Coordinators/InvoiceCoordinator.swift:139
+  payments-api     findOrCreateInvoice [function]  db/methods/Invoice/findOrCreate.js:9
 ```
 
-Three repositories with their own `createTicket` is the sort of thing nobody
+Three repositories with their own `createInvoice` is the sort of thing nobody
 knows until they go looking. Only exported definitions are indexed — an internal
 helper is not something another repo could have called anyway.
 

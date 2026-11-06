@@ -53,9 +53,9 @@ make the link, and each row records which one did:
 | `link` | the provider itself says which GitHub repository it builds from, and the organization matches |
 | `tag` | an AWS resource carries a tag naming the repository |
 
-Case is not part of the test — GitHub treats `WinIt-backend` and `winit-backend`
-as the same name — but nothing less than the whole name is: `winit-backend-dev`
-is not `WinIt-backend`, and `scraphome-api` is not `scraphome`.
+Case is not part of the test — GitHub treats `Billing-API` and `billing-api`
+as the same name — but nothing less than the whole name is: `billing-api-dev`
+is not `Billing-API`, and `scraphome-api` is not `scraphome`.
 
 Anything else lands in `unmatched`, with its state and hostname, and is counted
 in the summary line. An unattributed service is a fact worth seeing — it is
@@ -104,7 +104,7 @@ the finding. Tagging what you deploy with `Repository=<repo>` is what turns it
 into attribution, and it is worth doing once:
 
 ```
-Repository = winit-backend
+Repository = billing-api
 ```
 
 ## Where it shows up

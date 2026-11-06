@@ -51,7 +51,7 @@ note 20260811-090001-b scraphome broken-fetcher pattern \
   "The IAAI fetcher read only the first page after they paginated, so the job succeeded with half the lots."
 note 20260812-090002-c scraphome new-endpoint pattern \
   "Adding an endpoint means a route, a schema and a line in the worker manifest."
-note 20260813-090003-d WinIt-backend "" gotcha \
+note 20260813-090003-d Billing-API "" gotcha \
   "The health endpoint answers before Parse is connected, so it is not a readiness check."
 note 20260814-090004-e scraphome "" gotcha \
   "Every fetcher shares one proxy pool; exhausting it in one job starves the rest."
@@ -59,7 +59,7 @@ note 20260814-090004-e scraphome "" gotcha \
 cat >"$DIR/map/repos.json" <<'JSON'
 [{"name": "scraphome", "meta": {"language": "TypeScript"}, "frameworks": ["Fastify"],
   "commands": {"package_manager": "npm", "scripts": {"build:worker": "node scripts/build-worker.js"}}},
- {"name": "WinIt-backend", "meta": {"language": "JavaScript"}, "frameworks": [],
+ {"name": "Billing-API", "meta": {"language": "JavaScript"}, "frameworks": [],
   "commands": {"package_manager": "npm", "scripts": {}}}]
 JSON
 
@@ -75,7 +75,7 @@ cat >"$DIR/cache/prs/2026-W33.json" <<'JSON'
    "reviewThreads": {"nodes": []}},
   {"number": 12, "title": "fix(fetcher): retry the broken pool",
    "bodyText": "Not this repository.", "mergedAt": "2026-08-12T00:00:00Z",
-   "author": {"login": "tester"}, "repository": {"name": "WinIt-backend"},
+   "author": {"login": "tester"}, "repository": {"name": "Billing-API"},
    "reviewThreads": {"nodes": []}}
 ]}
 JSON
@@ -94,7 +94,7 @@ got=$(playbook_instance_count scraphome new-endpoint)
 got=$(playbook_topics scraphome | sort | paste -sd, -)
 [[ $got == "broken-fetcher,new-endpoint" ]] || fail "topics should be the pattern notes only, got '$got'"
 
-got=$(playbook_topics WinIt-backend | wc -l)
+got=$(playbook_topics Billing-API | wc -l)
 [[ $got == 0 ]] || fail "a repo with no pattern note has no topics, got $got"
 
 # --- the refusal -------------------------------------------------------------
@@ -146,7 +146,7 @@ grep -q 'broken fetcher' <<<"$(playbook_section scraphome)" ||
   fail "the written playbook is missing from the repo card"
 grep -q 'broken-fetcher' <<<"$(playbook_brief scraphome)" ||
   fail "the written playbook is missing from the session brief"
-[[ -z $(playbook_brief WinIt-backend) ]] ||
+[[ -z $(playbook_brief Billing-API) ]] ||
   fail "a repo with no playbook must add nothing to the brief"
 
 # --- when the model gets called, and who waits for it -------------------------

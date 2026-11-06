@@ -5,9 +5,9 @@ someone found at 2am, the reason the obvious fix does not work, the step missing
 from the README. `orgami note` records that, and the docs repo syncs it.
 
 ```bash
-orgami note "Parse Dashboard config lives in WinIt-ParseDashboard/index.js,
-             not the fork. Copying it into SSM by hand drops every user's apps[]."
-orgami notes --repo WinIt-backend
+orgami note --repo honox "Island components cannot access the Context object.
+             Read the value in the page and pass it to the island as a prop."
+orgami notes --repo honox
 orgami sync
 ```
 

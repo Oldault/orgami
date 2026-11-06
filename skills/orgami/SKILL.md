@@ -203,7 +203,7 @@ anywhere. Notes are one file each, synced through the docs repo, and they appear
 on the repo's page for everyone.
 
 ```bash
-orgami notes --repo WinIt-backend   # what has been recorded about this repo
+orgami notes --repo billing-api     # what has been recorded about this repo
 orgami note "..." --repo <repo> --tag gotcha
 ```
 
