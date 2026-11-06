@@ -33,6 +33,13 @@ mkdir -p "$stub"
 for t in systemctl claude gh; do
   printf '#!/bin/sh\necho "%s $*" >>"%s"\nexit 0\n' "$t" "$calls" >"$stub/$t"
 done
+# `disable` takes the timers.target.wants link away, as the real one does.
+cat >"$stub/systemctl" <<EOF
+#!/bin/sh
+echo "systemctl \$*" >>"$calls"
+[ "\$2" = disable ] && rm -f "$HOME/.config/systemd/user/timers.target.wants/\$4"
+exit 0
+EOF
 # gh auth status is what install.sh asks; failing it keeps install.sh quiet.
 printf '#!/bin/sh\necho "gh $*" >>"%s"\nexit 1\n' "$calls" >"$stub/gh"
 cat >"$stub/crontab" <<EOF
@@ -96,6 +103,9 @@ echo '{"default": "acme"}' >"$HOME/.orgami/config.json"
 jq -n --arg w "$HOME/work" '{org: "acme", docs_repo: "https://github.com/acme/orgami-docs", workspaces: [$w]}' \
   >"$HOME/.orgami/acme/config.json"
 
+# Somebody else's tool next to the link: ~/.local/bin is not left empty, so it stays.
+printf '#!/bin/sh\n' >"$HOME/.local/bin/other-tool"
+
 # Not ours, though it has our name: a link into a tree with no bin/orgami.
 mkdir -p "$fixture/elsewhere" "$HOME/.local/share/zsh/site-functions"
 ln -s "$fixture/elsewhere/completions/orgami.zsh" "$HOME/.local/share/zsh/site-functions/_orgami"
@@ -132,6 +142,11 @@ for f in .local/bin/orgami .local/share/bash-completion/completions/orgami .zsh/
   .config/systemd/user/orgami-daily@.service .local/state/orgami work/api/.git/hooks/post-merge; do
   [[ -e $HOME/$f || -L $HOME/$f ]] && fail "$HOME/$f is still there"
 done
+# The directories orgami's files were the only thing in go with them.
+for d in .claude/skills .config/systemd/user .config/systemd .local/state; do
+  [[ -e $HOME/$d ]] && fail "$HOME/$d is left empty: $(ls -A "$HOME/$d")"
+done
+[[ -f $HOME/.local/bin/other-tool ]] || fail "removed another tool from ~/.local/bin"
 grep -qx "systemctl --user disable --now orgami-weekly@acme.timer" "$calls" || fail "the timer was not stopped first"
 grep -qx "systemctl --user daemon-reload" "$calls" || fail "systemd was not told the units are gone"
 grep -qx "claude plugin uninstall orgami@orgami" "$calls" || fail "the plugin was not uninstalled"
@@ -158,6 +173,13 @@ echo "# local" >>"$clone/install.sh"
 git -C "$clone" checkout -q -- install.sh
 "$clone/bin/orgami" uninstall --purge --yes </dev/null >/dev/null 2>&1 || fail "--purge of a clean clone exited non-zero"
 [[ -e $clone ]] && fail "--purge left the clean clone at $clone"
+# Left: the directories something else is still in, and nothing empty of ours.
+# The two completion directories were made by this test, as a person would.
+[[ -f $HOME/.local/bin/other-tool && -L $HOME/.local/share/zsh/site-functions/_orgami ]] ||
+  fail "--purge removed a directory with somebody else's files in it"
+empty=$(cd "$HOME" && find . -mindepth 1 -type d -empty \
+  ! -path './work/*' ! -path './.local/share/bash-completion*' ! -path ./.zsh/completions | LC_ALL=C sort)
+[[ -z $empty ]] || fail "--purge left empty directories: $empty"
 [[ -f $fixture/elsewhere/keep ]] || fail "touched a file outside HOME"
 
 echo "uninstall: everything installed removed, every shared file kept its other entries"

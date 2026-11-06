@@ -36,6 +36,17 @@ check() {
 }
 
 check jq jq jq
+# Present is not enough: lib/ is tested down to jq 1.6, the floor lib/doctor.sh
+# (JQ_FLOOR) enforces, and an older one parses half of it.
+if command -v jq >/dev/null; then
+  jq_v=$(jq --version 2>/dev/null || true)
+  if [[ ! $jq_v =~ ([0-9]+)\.([0-9]+) ]] ||
+    ((BASH_REMATCH[1] < 1 || (BASH_REMATCH[1] == 1 && BASH_REMATCH[2] < 6))); then
+    missing+=(jq)
+    echo "missing: jq 1.6 or newer ($(command -v jq) is ${jq_v:-an unknown version}) — $(pkg_hint "$MGR" jq jq)," >&2
+    echo "         or a release binary from https://github.com/jqlang/jq/releases" >&2
+  fi
+fi
 check git git git
 check fzf fzf fzf
 check gum gum gum
@@ -102,7 +113,8 @@ if [[ $REPO == *"/.claude/plugins/"* ]]; then
 elif plugin_installed; then
   if [[ -L $SKILL_DIR/SKILL.md && $(readlink "$SKILL_DIR/SKILL.md") == "$REPO/skills/orgami/SKILL.md" ]]; then
     rm -f "$SKILL_DIR/SKILL.md"
-    rmdir "$SKILL_DIR" 2>/dev/null || true
+    # skills/ too when this script made it for that one link.
+    rmdir "$SKILL_DIR" 2>/dev/null && rmdir "$(dirname "$SKILL_DIR")" 2>/dev/null || true
     echo "removed $SKILL_DIR/SKILL.md — the Claude Code plugin supplies the skill"
   fi
 else

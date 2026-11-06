@@ -58,14 +58,24 @@ update_version() { jq -r '.version // "unknown"' "$1/manifest.json" 2>/dev/null;
 # running. A plugin hook runs the plugin's copy, and the clone that owns the CLI
 # on PATH is a different directory entirely — updating only the copy that
 # happens to be executing is how one of them stays a fortnight behind forever.
+#
+# The one on PATH counts only when it is this HOME's: install.sh links it into
+# ~/.local/bin. A run with HOME pointed at a scratch directory keeps the real
+# ~/.local/bin on PATH, and updating the clone behind it from there reaches past
+# the sandbox the caller set up. The running copy is always a target: it is the
+# one that was asked.
 update_targets() {
-  local path_bin dir
+  local path_bin dir home bindir
   {
     echo "$ROOT"
     path_bin=$(command -v orgami 2>/dev/null || true)
+    home=$(cd -- "$HOME" 2>/dev/null && pwd -P) || home=$HOME
     if [[ -n $path_bin ]]; then
-      dir=$(orgami_realpath "$path_bin")
-      (cd -- "$(dirname -- "$dir")/.." 2>/dev/null && pwd) || true
+      bindir=$(cd -- "$(dirname -- "$path_bin")" 2>/dev/null && pwd -P) || bindir=""
+      if [[ $path_bin == "$HOME"/* || $bindir == "$home"/* ]]; then
+        dir=$(orgami_realpath "$path_bin")
+        (cd -- "$(dirname -- "$dir")/.." 2>/dev/null && pwd) || true
+      fi
     fi
   } | awk 'NF && !seen[$0]++'
 }
@@ -114,26 +124,115 @@ update_cli() {
   if state=$(update_state_dir); then
     {
       echo "orgami updated $from -> $to"
-      git -C "$dir" log --oneline "$before..$after" 2>/dev/null | head -5 | sed 's/^/  /'
+      # git's own -n, not `| head`: head closing the pipe early kills git with
+      # SIGPIPE, and under pipefail that is exit 141 out of the whole update.
+      git -C "$dir" log --oneline -n 5 "$before..$after" 2>/dev/null | sed 's/^/  /'
     } >"$state/updated"
   fi
   [[ $quiet == 1 ]] || {
     echo "orgami $from -> $to"
-    git -C "$dir" log --oneline "$before..$after" 2>/dev/null | head -10 | sed 's/^/  /'
+    git -C "$dir" log --oneline -n 10 "$before..$after" 2>/dev/null | sed 's/^/  /'
   }
   return 0
 }
 
-# The plugin clone, through the tool that owns it.
+update_claude_dir() { echo "${CLAUDE_CONFIG_DIR:-$HOME/.claude}"; }
+
+# The installed plugin as Claude Code recorded it, "<version>\t<installPath>",
+# or nothing when orgami is not installed as a plugin here.
+update_plugin_record() {
+  jq -re '(.plugins["orgami@orgami"] // [])[0] // empty
+          | [.version // "", .installPath // ""] | @tsv' \
+    "$(update_claude_dir)/plugins/installed_plugins.json" 2>/dev/null
+}
+
+update_plugin_version() {
+  local rec
+  rec=$(update_plugin_record) || return 1
+  echo "${rec%%$'\t'*}"
+}
+
+# The marketplace clone Claude Code installs from: where known_marketplaces.json
+# says it is, which for `orgami update --dev` is a working checkout.
+update_marketplace_dir() {
+  local d loc
+  d=$(update_claude_dir)
+  loc=$(jq -r '.orgami.installLocation // empty' "$d/plugins/known_marketplaces.json" 2>/dev/null || true)
+  echo "${loc:-$d/plugins/marketplaces/orgami}"
+}
+
+# The version that clone offers, as of its last refresh.
+update_marketplace_version() {
+  jq -r '.version // empty' "$(update_marketplace_dir)/.claude-plugin/plugin.json" 2>/dev/null
+}
+
+# The plugin, through the tool that owns it. Two steps, because they move two
+# different things: `marketplace update` refreshes the catalog clone, and only
+# `plugin update` moves the installed copy the sessions load. The first alone
+# exits 0 and changes nothing a session runs, so success is the installed
+# version having moved, read back afterwards — never the exit status.
+# Returns 0 when it moved, 1 when it did not.
 update_plugin() {
-  local quiet=$1
+  local quiet=$1 before after offered state
   command -v claude >/dev/null || return 1
+  # Not installed as a plugin: installing it is bootstrap.sh's call, not an update's.
+  before=$(update_plugin_version) || return 1
   claude plugin marketplace update orgami >/dev/null 2>&1 || {
-    [[ $quiet == 1 ]] || log "could not update the Claude Code plugin — try: claude plugin marketplace update orgami"
+    [[ $quiet == 1 ]] || log "could not refresh the orgami marketplace — try: claude plugin marketplace update orgami"
     return 1
   }
-  [[ $quiet == 1 ]] || echo "Claude Code plugin updated — it loads at the next session"
-  return 0
+  offered=$(update_marketplace_version || true)
+  # A catalog that cannot be read is no proof there is nothing newer.
+  if [[ -z $offered || $offered != "$before" ]]; then
+    # No --yes: it accepts a marketplace-declared install command unseen, and
+    # orgami declares none, so one appearing is for a person to read.
+    claude plugin update orgami@orgami </dev/null >/dev/null 2>&1 || true
+  fi
+  after=$(update_plugin_version || true)
+
+  if [[ -n $after && $after != "$before" ]]; then
+    if state=$(update_state_dir); then
+      echo "Claude Code plugin updated $before -> $after" >>"$state/updated"
+    fi
+    [[ $quiet == 1 ]] || echo "Claude Code plugin $before -> $after — it loads at the next session"
+    return 0
+  fi
+  if [[ -n $offered && $offered != "$before" ]]; then
+    [[ $quiet == 1 ]] || log "the Claude Code plugin is still $before, the marketplace has $offered — run: claude plugin update orgami@orgami"
+  fi
+  return 1
+}
+
+# One line for the plugin in `update --check`: what is installed, and whether
+# the marketplace has something newer. Read-only — the catalog is compared as
+# it stands, and the remote is asked with ls-remote, which writes nothing.
+update_check_plugin() {
+  local rec ver path offered mdir head remote
+  if ! rec=$(update_plugin_record); then
+    command -v claude >/dev/null &&
+      echo "none — Claude Code plugin not installed. Install: claude plugin marketplace add Oldault/orgami && claude plugin install orgami@orgami"
+    return 0
+  fi
+  ver=${rec%%$'\t'*} path=${rec#*$'\t'}
+  offered=$(update_marketplace_version || true)
+  mdir=$(update_marketplace_dir)
+  if [[ -n $offered && $offered != "$ver" ]]; then
+    echo "$ver — Claude Code plugin ${path:-?}, $offered in the marketplace. Run: orgami update (or: claude plugin update orgami@orgami)"
+    return 0
+  fi
+  # `orgami update --dev` points the marketplace at a working checkout, which
+  # is ahead of its remote by design; its commits are not an update to fetch.
+  if [[ $mdir != "$(update_claude_dir)/plugins/"* ]]; then
+    echo "$ver — Claude Code plugin ${path:-?}, installed from the checkout $mdir"
+    return 0
+  fi
+  head=$(git -C "$mdir" rev-parse HEAD 2>/dev/null || true)
+  remote=$(git -C "$mdir" ls-remote origin HEAD 2>/dev/null | awk 'NR == 1 {print $1}' || true)
+  if [[ -n $head && -n $remote && $head != "$remote" ]]; then
+    echo "$ver — Claude Code plugin ${path:-?}, the marketplace has newer commits. Run: orgami update"
+  else
+    echo "$ver — Claude Code plugin ${path:-?}, up to date"
+  fi
 }
 
 # Point both installs at a working checkout, so an edit is live in the next
@@ -220,10 +319,8 @@ cmd_update() {
   if [[ $check == 1 ]]; then
     while read -r dir; do
       [[ -n $dir ]] || continue
-      if update_is_plugin_dir "$dir"; then
-        echo "$(update_version "$dir") — $dir, updated by claude plugin marketplace update"
-        continue
-      fi
+      # The plugin's copy gets its own line below, from Claude Code's record.
+      update_is_plugin_dir "$dir" && continue
       if why=$(update_why_not "$dir"); then
         echo "$(update_version "$dir") — $why"
         continue
@@ -235,11 +332,12 @@ cmd_update() {
       behind=$(git -C "$dir" rev-list --count 'HEAD..@{u}' 2>/dev/null || echo 0)
       if [[ ${behind:-0} -gt 0 ]]; then
         echo "$(update_version "$dir") — $dir, $behind commit(s) behind. Run: orgami update"
-        git -C "$dir" log --oneline "HEAD..@{u}" | head -10 | sed 's/^/  /'
+        git -C "$dir" log --oneline -n 10 "HEAD..@{u}" 2>/dev/null | sed 's/^/  /'
       else
         echo "$(update_version "$dir") — $dir, up to date"
       fi
     done < <(update_targets)
+    update_check_plugin
     return 0
   fi
 

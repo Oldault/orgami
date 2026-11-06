@@ -9,14 +9,32 @@
 #   --no-editors   skip the Claude Code and Cursor wiring
 #   --cursor       wire Cursor (its user hooks.json and mcp.json) without asking
 #   --no-cursor    leave Cursor alone
+#   --path         add ~/.local/bin to PATH in your shell profile without asking
+#   --no-path      leave the shell profile alone, and print the line instead
 #
 # Cursor is asked about when there is a terminal, and left alone when there is
-# not. ORGAMI_CURSOR=1 or 0 does the same as the two flags.
+# not. ORGAMI_CURSOR=1 or 0 does the same as the two flags. The PATH line is
+# asked about the same way, only when no profile already adds ~/.local/bin;
+# ORGAMI_PATH=1 or 0 does the same as --path and --no-path.
 #
 # Written for bash 3.2 too: on macOS `curl | bash` is /bin/bash 3.2, and this
 # script is what installs a newer one.
 
-set -euo pipefail
+set -Eeuo pipefail
+
+# set -e alone ends the script with whatever the failing command printed, which
+# after `sudo: gpg: command not found` is nothing at all about orgami. -E so it
+# fires inside functions too.
+# Inside run() the failing command reads `"$@"`, so run() keeps its own words
+# in RUNNING for the message.
+RUNNING=""
+on_err() {
+  local cmd=$BASH_COMMAND
+  [[ $cmd == '"$@"'* && -n $RUNNING ]] && cmd=$RUNNING
+  printf '\n\033[31morgami installer stopped: "%s" failed (exit %s, line %s).\033[0m\n' "$cmd" "$1" "$2" >&2
+  printf 'Nothing after it ran. Fix that and run the installer again; it picks up where it left off.\n' >&2
+}
+trap 'on_err $? $LINENO' ERR
 
 REPO_URL=${ORGAMI_REPO:-https://github.com/Oldault/orgami}
 SRC=${ORGAMI_SRC:-$HOME/.local/share/orgami}
@@ -24,6 +42,7 @@ DRY=0
 DEPS=1
 EDITORS=1
 CURSOR=${ORGAMI_CURSOR:-ask}
+ADD_PATH=${ORGAMI_PATH:-ask}
 
 for arg in "$@"; do
   case $arg in
@@ -32,8 +51,10 @@ for arg in "$@"; do
     --no-editors) EDITORS=0 ;;
     --cursor) CURSOR=1 ;;
     --no-cursor) CURSOR=0 ;;
+    --path) ADD_PATH=1 ;;
+    --no-path) ADD_PATH=0 ;;
     -h | --help)
-      sed -n '2,20p' "$0" 2>/dev/null || true
+      sed -n '2,23p' "$0" 2>/dev/null || true
       exit 0
       ;;
   esac
@@ -44,14 +65,21 @@ dim() { printf '\033[2m%s\033[0m\n' "$*"; }
 warn() { printf '\033[33m%s\033[0m\n' "$*" >&2; }
 step() { printf '\n\033[1;34m==>\033[0m \033[1m%s\033[0m\n' "$*"; }
 
+# Under `curl | bash` stdin is the rest of this script, so nothing run here may
+# read it: a package manager that asks a question (debconf for tzdata) reads
+# the script as its answers and loops. Questions go to /dev/tty or nowhere.
 run() {
   if [[ $DRY == 1 ]]; then
     dim "would run: $*"
   else
     dim "$*"
-    "$@"
+    RUNNING="$*"
+    "$@" </dev/null
   fi
 }
+
+# sudo resets the environment, so the frontend is set on the far side of it.
+apt_get() { run $SUDO env DEBIAN_FRONTEND=noninteractive apt-get "$@"; }
 
 # ---------------------------------------------------------------- environment
 
@@ -133,8 +161,17 @@ install_missing() {
           *) plain+=("$p") ;;
         esac
       done
-      run $SUDO apt-get update -qq
-      [[ ${#plain[@]} -gt 0 ]] && run $SUDO apt-get install -y "${plain[@]}"
+      # Adding those repositories needs curl for the keys and gpg to dearmor
+      # Charm's. A minimal Debian or Ubuntu image has neither gpg nor, often,
+      # curl, and the install would stop halfway with half the tools in.
+      if printf '%s\n' "${pkgs[@]}" | grep -qxE 'gh|gum'; then
+        command -v curl >/dev/null || plain+=(curl)
+      fi
+      if printf '%s\n' "${pkgs[@]}" | grep -qx gum; then
+        command -v gpg >/dev/null || plain+=(gnupg)
+      fi
+      apt_get update -qq
+      [[ ${#plain[@]} -gt 0 ]] && apt_get install -y "${plain[@]}"
       if printf '%s\n' "${pkgs[@]}" | grep -qx gh; then
         run $SUDO mkdir -p -m 755 /etc/apt/keyrings
         if [[ $DRY == 0 ]]; then
@@ -151,16 +188,16 @@ install_missing() {
         if [[ $DRY == 0 ]]; then
           $SUDO mkdir -p /etc/apt/keyrings
           curl -fsSL https://repo.charm.sh/apt/gpg.key |
-            $SUDO gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+            $SUDO gpg --batch --yes --dearmor -o /etc/apt/keyrings/charm.gpg
           echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" |
             $SUDO tee /etc/apt/sources.list.d/charm.list >/dev/null
         else
           dim "would add the Charm apt repository"
         fi
       fi
-      run $SUDO apt-get update -qq
+      apt_get update -qq
       for p in gh gum; do
-        if printf '%s\n' "${pkgs[@]}" | grep -qx "$p"; then run $SUDO apt-get install -y "$p"; fi
+        if printf '%s\n' "${pkgs[@]}" | grep -qx "$p"; then apt_get install -y "$p"; fi
       done
       ;;
     *)
@@ -199,6 +236,21 @@ if [[ $PLATFORM == macos ]] && ! bash_ok "$(command -v bash)"; then
   fi
 fi
 
+# jq on PATH is not enough: lib/ is tested down to 1.6 (Debian 12), and an
+# older one parses half of it. The same floor as lib/doctor.sh, JQ_FLOOR.
+JQ_FLOOR=1.6
+jq_ok() {
+  local v
+  v=$(jq --version 2>/dev/null) || return 1
+  [[ $v =~ ([0-9]+)\.([0-9]+) ]] || return 1
+  [[ ${BASH_REMATCH[1]} -gt 1 || (${BASH_REMATCH[1]} -eq 1 && ${BASH_REMATCH[2]} -ge 6) ]]
+}
+if [[ $DRY == 0 ]] && command -v jq >/dev/null && ! jq_ok; then
+  warn "$(command -v jq) is $(jq --version 2>/dev/null || echo 'an unknown version'), and orgami needs jq $JQ_FLOOR or newer."
+  warn "  Install a newer one from your package manager, or a release binary into ~/.local/bin:"
+  warn "  https://github.com/jqlang/jq/releases — then run: orgami doctor"
+fi
+
 command -v claude >/dev/null ||
   warn "claude is not installed — 'orgami report' needs it: curl -fsSL https://claude.ai/install.sh | bash"
 
@@ -227,7 +279,8 @@ if [[ $EDITORS == 1 ]]; then
     skill="$HOME/.claude/skills/orgami/SKILL.md"
     if [[ $DRY == 0 && -L $skill && $(readlink "$skill") == "$SRC/skills/orgami/SKILL.md" ]]; then
       rm -f "$skill"
-      rmdir "$(dirname "$skill")" 2>/dev/null || true
+      # skills/ too when install.sh made it for this link alone.
+      rmdir "$(dirname "$skill")" 2>/dev/null && rmdir "$(dirname "$(dirname "$skill")")" 2>/dev/null || true
     fi
   fi
 
@@ -264,11 +317,86 @@ fi
 
 # ------------------------------------------------------------------ next steps
 
+# The files a new shell of the login shell reads, one per line, and whether one
+# already puts ~/.local/bin on PATH. Ubuntu's, Debian's and Fedora's do once the
+# directory exists; Arch's does not, and then a new terminal will not find
+# orgami either. Bash on Linux gets two: a terminal reads ~/.bashrc, a login
+# shell reads ~/.bash_profile (or ~/.profile), and Arch's ~/.bashrc returns
+# before its end when the shell is not interactive, so `bash -lc` never reaches
+# a line appended there. The line checks PATH first, so two is not twice.
+# A shell profile is the person's own file, so the line is added only when they
+# say so — asked on the terminal, or --path — and printed otherwise.
+shell_rc() {
+  case $(basename "${SHELL:-bash}") in
+    zsh) echo "$HOME/.zshrc" ;;
+    fish) echo "$HOME/.config/fish/config.fish" ;;
+    bash)
+      if [[ $PLATFORM == macos ]]; then echo "$HOME/.bash_profile"; return 0; fi
+      echo "$HOME/.bashrc"
+      if [[ -f $HOME/.bash_profile ]]; then echo "$HOME/.bash_profile"
+      elif [[ -f $HOME/.bash_login ]]; then echo "$HOME/.bash_login"
+      elif [[ -f $HOME/.profile ]]; then echo "$HOME/.profile"; fi
+      ;;
+    *) echo "$HOME/.profile" ;;
+  esac
+}
+# The profile file that already mentions ~/.local/bin, if one does.
+profile_adding_local_bin() {
+  local f
+  for f in "$HOME/.profile" "$HOME/.bash_profile" "$HOME/.bashrc" "$HOME/.zshrc" "$HOME/.zprofile" \
+    "$HOME/.config/fish/config.fish"; do
+    if grep -qs '\.local/bin' "$f"; then echo "$f"; return 0; fi
+  done
+  return 1
+}
+
+ORGAMI_CMD=orgami
 case ":$PATH:" in
   *":$HOME/.local/bin:"*) ;;
   *)
-    warn "$HOME/.local/bin is not on your PATH — add it to your shell profile:"
-    warn '  export PATH="$HOME/.local/bin:$PATH"'
+    ORGAMI_CMD="$HOME/.local/bin/orgami"
+    rcs=$(shell_rc)
+    if adds=$(profile_adding_local_bin); then
+      # Read at login, not by each new terminal: on a desktop that is after
+      # logging out and back in, which is the part people do not expect.
+      warn "$HOME/.local/bin is not on this terminal's PATH yet. $adds adds it at the next login"
+      warn "(a login shell, or logging out and back in) — check with: bash -lc 'command -v orgami'"
+    else
+      # shellcheck disable=SC2016  # written to the profile as is, expanded by the shell
+      if [[ $rcs == *fish* ]]; then line='fish_add_path $HOME/.local/bin'
+      else line='case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH" ;; esac'; fi
+      if [[ $ADD_PATH == ask ]]; then
+        if have_tty; then
+          printf '%s is not on your PATH, and no shell profile here adds it. Add it to %s? [Y/n] ' \
+            "$HOME/.local/bin" "${rcs//$'\n'/ and }" >/dev/tty
+          read -r answer </dev/tty || answer=n
+          case $answer in [nN]*) ADD_PATH=0 ;; *) ADD_PATH=1 ;; esac
+        else
+          ADD_PATH=0
+        fi
+      fi
+      while IFS= read -r rc; do
+        if [[ $ADD_PATH == 1 && $DRY == 1 ]]; then
+          dim "would add to $rc: $line"
+        elif [[ $ADD_PATH == 1 ]]; then
+          mkdir -p "$(dirname "$rc")"
+          printf '\n# orgami: ~/.local/bin is where bootstrap.sh linked it\n%s\n' "$line" >>"$rc"
+          warn "Added $HOME/.local/bin to PATH in $rc."
+        fi
+      done <<<"$rcs"
+      if [[ $ADD_PATH == 1 ]]; then
+        [[ $DRY == 1 ]] || warn "A new terminal finds orgami."
+      else
+        warn "$HOME/.local/bin is not on your PATH, and no shell profile here adds it, so a new terminal will not find orgami either."
+        warn "Add it for $(basename "${SHELL:-bash}"), then open a new terminal:"
+        while IFS= read -r rc; do
+          if [[ $rc == *fish* ]]; then warn "  $line"
+          else warn "  echo '$line' >> \"$rc\""; fi
+        done <<<"$rcs"
+        warn "or run the installer again with --path to have it added."
+      fi
+    fi
+    warn "Until then, in this terminal: export PATH=\"\$HOME/.local/bin:\$PATH\""
     ;;
 esac
 
@@ -277,10 +405,10 @@ bold "Done."
 echo
 if ! gh auth status >/dev/null 2>&1; then
   echo "  1. gh auth login       sign in to GitHub"
-  echo "  2. orgami init         map an organization, or 'orgami join' to pick one up"
+  printf '  2. %-18s map an organization, or %s join to pick one up\n' "$ORGAMI_CMD init" "$ORGAMI_CMD"
 else
-  echo "  orgami init            map an organization"
-  echo "  orgami join            or pick up one a colleague already mapped"
+  printf '  %-22s map an organization\n' "$ORGAMI_CMD init"
+  printf '  %-22s or pick up one a colleague already mapped\n' "$ORGAMI_CMD join"
 fi
 echo
 dim "then: orgami schedule (weekly), orgami (the menu), orgami context (in a checkout)"

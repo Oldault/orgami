@@ -127,7 +127,11 @@ unset ORGAMI_COMPANY
 # --- flags are read off the same help text -----------------------------------
 
 got=$(offer orgami scan -- | sort | tr '\n' ' ')
-[[ $got == "--depth --only " ]] || bad "flags of 'orgami scan'" "got: $got"
+[[ $got == "--depth --jobs --only " ]] || bad "flags of 'orgami scan'" "got: $got"
+got=$(offer orgami drafts -- | sort | tr '\n' ' ')
+[[ $got == "--count --drop --json --keep --list " ]] || bad "flags of 'orgami drafts'" "got: $got"
+got=$(offer orgami context -- | tr '\n' ' ')
+[[ $got == "--org " ]] || bad "flags of 'orgami context'" "got: $got"
 
 got=$(offer orgami dns --d | sort | tr '\n' ' ')
 [[ $got == "--domain " ]] || bad "flags of 'orgami dns' narrowed by prefix" "got: $got"

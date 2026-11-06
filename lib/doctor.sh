@@ -29,6 +29,22 @@ bash_version_ok() {
   "$1" -c '[ "${BASH_VERSINFO[0]}" -gt 4 ] || { [ "${BASH_VERSINFO[0]}" -eq 4 ] && [ "${BASH_VERSINFO[1]}" -ge 4 ]; }' 2>/dev/null
 }
 
+# The oldest jq every program in lib/ parses and runs on. 1.6 is what Debian 12
+# ships, and test/jq_compat_test.sh runs the render paths on it and on 1.7.1
+# (Ubuntu 24.04, macOS 15). Nothing older is tested: 1.5 has no --rawfile, for
+# one. bootstrap.sh holds the same number; it runs before this file exists.
+JQ_FLOOR=1.6
+
+# jq_version_ok <jq> — at least JQ_FLOOR. `jq --version` says jq-1.6, jq-1.7.1,
+# or jq-1.5-1-a5b5cbe on some distributions; anything unparsable is not ok.
+jq_version_ok() {
+  local v maj min
+  v=$("$1" --version 2>/dev/null) || return 1
+  [[ $v =~ ([0-9]+)\.([0-9]+) ]] || return 1
+  maj=${BASH_REMATCH[1]} min=${BASH_REMATCH[2]}
+  ((maj > ${JQ_FLOOR%%.*} || (maj == ${JQ_FLOOR%%.*} && min >= ${JQ_FLOOR#*.})))
+}
+
 # The directories a scheduled run gets on PATH: what the systemd units and the
 # launchd plist in lib/schedule.sh set. A tool anywhere else is found from a
 # terminal and missing from every timer run.
@@ -40,10 +56,14 @@ doctor_timer_path() {
   fi
 }
 
+# on_timer_path <tool> — whether a run with the timer's PATH finds it at all.
+# Asked of the shell rather than read off the directory the terminal found it
+# in: where /usr/sbin is a link to /usr/bin (Arch), the terminal finds
+# /usr/sbin/gh first and the timer finds /usr/bin/gh, the same file.
 on_timer_path() {
-  local dir
-  dir=$(dirname "$1")
-  [[ ":$(doctor_timer_path):" == *":$dir:"* ]]
+  local tp
+  tp=$(doctor_timer_path)
+  (PATH=$tp && type -P "$1" >/dev/null 2>&1)
 }
 
 # The clone a binary lives in: the directory above its resolved bin/.
@@ -62,7 +82,7 @@ plugin_record() {
 }
 
 doctor_checks() {
-  local v b path_bash
+  local v path_bash
 
   # --- bash
   v="$BASH_VERSION"
@@ -77,13 +97,27 @@ doctor_checks() {
   fi
 
   # --- the hard dependencies
-  for b in jq git; do
-    if command -v "$b" >/dev/null 2>&1; then
-      doc_add "$b" 1 0 "$(command -v "$b")"
+  local jq_bin jq_v
+  jq_bin=$(command -v jq 2>/dev/null || true)
+  if [[ -z $jq_bin ]]; then
+    doc_add jq 0 1 "not on PATH" "install jq $JQ_FLOOR or newer with your package manager"
+  else
+    jq_v=$("$jq_bin" --version 2>/dev/null || echo "unknown version")
+    if ! jq_version_ok "$jq_bin"; then
+      doc_add jq 0 1 "$jq_bin is $jq_v, and orgami needs jq $JQ_FLOOR or newer" \
+        "install a newer jq from your package manager, or a release binary from https://github.com/jqlang/jq/releases into ~/.local/bin"
+    elif [[ $jq_v == jq-1.6* ]]; then
+      # Measured: orgami doc over 36 repositories, 72 s on 1.6 and 12 s on 1.7.1.
+      doc_add jq 1 0 "$jq_bin, $jq_v — works; 1.7 or newer runs orgami doc several times faster"
     else
-      doc_add "$b" 0 1 "not on PATH" "install $b with your package manager"
+      doc_add jq 1 0 "$jq_bin, $jq_v"
     fi
-  done
+  fi
+  if command -v git >/dev/null 2>&1; then
+    doc_add git 1 0 "$(command -v git)"
+  else
+    doc_add git 0 1 "not on PATH" "install git with your package manager"
+  fi
 
   # --- gh: present, signed in, scopes, protocol
   if ! command -v gh >/dev/null 2>&1; then
@@ -174,17 +208,19 @@ doctor_checks() {
   fi
 
   # A timer run starts with the PATH lib/schedule.sh gives it, not the shell's.
-  local t p far=""
+  # The fix names the tools it just listed, each linked from where it is now.
+  local t p far="" links=""
   for t in claude gh jq git; do
     p=$(command -v "$t" 2>/dev/null) || continue
     [[ $p == /* ]] || continue
-    on_timer_path "$p" || far+="${far:+, }$t ($p)"
+    on_timer_path "$t" && continue
+    far+="${far:+, }$t ($p)"
+    links+="${links:+ && }ln -s \"$p\" ~/.local/bin/$t"
   done
   if [[ -z $far ]]; then
     doc_add "timer PATH" 1 0 "every tool a scheduled run needs is on $(doctor_timer_path)"
   else
-    doc_add "timer PATH" 0 0 "a scheduled run will not find $far" \
-      "link each into ~/.local/bin, e.g. ln -s \"\$(command -v claude)\" ~/.local/bin/claude"
+    doc_add "timer PATH" 0 0 "a scheduled run will not find $far" "mkdir -p ~/.local/bin && $links"
   fi
 
   # --- orgami itself: on PATH, and which clones exist
@@ -207,10 +243,18 @@ doctor_checks() {
 
   local clones="CLI ${cli_dir:-none}${cli_sha:+ @ ${cli_sha:0:7}}"
   clones+="; plugin ${plugin_dir:-none}${plugin_sha:+ @ ${plugin_sha:0:7}}"
-  if [[ -n $cli_sha && -n $plugin_sha && $cli_sha != "$plugin_sha" ]]; then
-    doc_add clones 0 0 "$clones — the CLI and the plugin run different code" "orgami update"
-  else
+  local cli_ver=""
+  [[ -n $cli_dir ]] && cli_ver=$(jq -r '.version // empty' "$cli_dir/manifest.json" 2>/dev/null || true)
+  if [[ -z $cli_sha || -z $plugin_sha || $cli_sha == "$plugin_sha" ]]; then
     doc_add clones 1 0 "$clones"
+  elif [[ -n $cli_ver && $cli_ver == "$plugin_ver" ]]; then
+    # Claude Code moves a plugin when its version changes, the CLI clone moves on
+    # every commit, so between two releases the commits differ and nothing
+    # can be run to change that. Saying "orgami update" here is a loop.
+    doc_add clones 1 0 "$clones — both $cli_ver; the plugin moves at the next release"
+  else
+    doc_add clones 0 0 "$clones — the CLI is ${cli_ver:-?} and the plugin ${plugin_ver:-?}, so they run different code" \
+      "orgami update (it runs claude plugin update orgami@orgami for the plugin)"
   fi
 
   # --- Claude Code
@@ -227,7 +271,7 @@ doctor_checks() {
       doc_add "claude hooks" 1 0 "SessionStart and SessionEnd from $manifest"
     else
       doc_add "claude hooks" 0 0 "the installed plugin registers no SessionStart hook" \
-        "claude plugin marketplace update orgami && claude plugin install orgami@orgami"
+        "claude plugin marketplace update orgami && claude plugin update orgami@orgami"
     fi
     # The plugin supplies the skill, so a second copy linked by install.sh puts
     # it in every session's context twice.
@@ -515,9 +559,36 @@ uninstall_clone() {
   return 0
 }
 
+# The directories orgami's files went into that install.sh, bootstrap.sh or
+# systemctl may have created for them, deepest first. After the files go, each
+# goes too if nothing else is left in it: an empty ~/.local/bin is nothing
+# anyone keeps on purpose, and a full one is never touched.
+un_prune_dirs() {
+  local unit_dir="$HOME/.config/systemd/user"
+  printf '%s\n' "$CLAUDE_DIR/skills" "$unit_dir/timers.target.wants" "$unit_dir" "$HOME/.config/systemd" \
+    "$HOME/.local/bin" "$(dirname "$ORGAMI_SRC_DEFAULT")" "$HOME/.local/state" "$HOME/.local" "$HOME/.config"
+}
+
+uninstall_prune_plan() {
+  local d found=()
+  while IFS= read -r d; do
+    [[ -d $d && ! -L $d ]] && found+=("$d")
+  done < <(un_prune_dirs)
+  [[ ${#found[@]} -gt 0 ]] || return 0
+  local list
+  list=$(printf '%s, ' "${found[@]}")
+  un_plan prune - "then remove whichever of these is left empty: ${list%, }"
+}
+
 uninstall_do() {
   local kind=$1 target=$2 tmp
   case $kind in
+    prune)
+      local d
+      while IFS= read -r d; do
+        if [[ -d $d && ! -L $d ]]; then rmdir -- "$d" 2>/dev/null || true; fi
+      done < <(un_prune_dirs)
+      ;;
     rm) rm -f -- "$target" ;;
     rmdir) rmdir -- "$target" 2>/dev/null || log "kept $target — it holds files orgami did not put there" ;;
     rmrf) rm -rf -- "$target" ;;
@@ -606,6 +677,9 @@ cmd_uninstall() {
     fi
   done
   uninstall_clone "$purge"
+  # Only after something else: on its own it would be a plan forever, for a
+  # ~/.local/bin that holds other tools.
+  if [[ ${#UN_PLAN[@]} -gt 0 ]]; then uninstall_prune_plan; fi
 
   # What stays, named, so nobody wonders whether the team's copy went too.
   local c repo kept=()
