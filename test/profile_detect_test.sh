@@ -557,8 +557,129 @@ assert "the .yaml spelling of the file is read too" \
 d=$(tree)
 printf 'a repo with nothing to run\n' >"$d/README.md"
 assert "a tree with nothing to run says so in every field" \
-  '. == {scripts: {}, package_manager: "", runtime: "", procfile: []}' \
+  '. == {scripts: {}, package_manager: "", runtime: "", procfile: [], evidence: {}}' \
   "$(profile_commands "$d")"
+
+# --- monorepos -------------------------------------------------------------------
+#
+# The root package.json of a workspace says "workspaces" and little else; the
+# framework and the scripts are in the packages. Each package is judged on its
+# own, so the guard still holds inside one, and a command for a package cites
+# the line of that package's package.json.
+
+# A fresh, empty workspace cache: every case is a new tree.
+fresh() { profile_workspace_forget; }
+
+d=$(tree)
+printf '{"private": true, "scripts": {"lint": "eslint ."}}\n' >"$d/package.json"
+printf "packages:\n  - 'apps/*'   # the apps\n" >"$d/pnpm-workspace.yaml"
+touch "$d/pnpm-lock.yaml"
+mkdir -p "$d/apps/web" "$d/apps/api"
+cat >"$d/apps/web/package.json" <<'JSON'
+{
+  "name": "@acme/web",
+  "scripts": {
+    "dev": "vite",
+    "test": "vitest run"
+  },
+  "dependencies": {"react": "18.3.1"}
+}
+JSON
+cat >"$d/apps/api/package.json" <<'JSON'
+{
+  "name": "api",
+  "scripts": {
+    "deploy": "./ship.sh",
+    "test": "jest"
+  },
+  "dependencies": {"@nestjs/core": "10", "express": "4"}
+}
+JSON
+fresh
+out=$(framework "$d")
+assert "a workspace package's framework is the repo's framework" \
+  '(index("NestJS") != null) and (index("Express") != null)' "$out"
+assert "the React package beside it is still React" '(index("React")) != null' "$out"
+fresh
+out=$(profile_commands "$d")
+assert "a pnpm workspace script runs through --filter with the package name" \
+  '.scripts["test (apps/web)"] == "pnpm --filter @acme/web test"
+   and .scripts["test (apps/api)"] == "pnpm --filter api test"' "$out"
+assert "a workspace script outside the vocabulary never lands" \
+  '(.scripts | has("deploy (apps/api)")) | not' "$out"
+assert "the root's own scripts are still there" '.scripts.lint == "eslint ."' "$out"
+assert "a workspace script cites its package.json line" \
+  '.evidence["test (apps/web)"] == "apps/web/package.json:5"
+   and .evidence["dev (apps/web)"] == "apps/web/package.json:4"' "$out"
+assert "a root script cites the root package.json" '.evidence.lint == "package.json:1"' "$out"
+
+# npm's object form of the field, and its own workspace flag.
+d=$(tree)
+printf '{"workspaces": {"packages": ["pkgs/*"]}}\n' >"$d/package.json"
+mkdir -p "$d/pkgs/core"
+printf '{"name": "core", "scripts": {"build": "tsc"}}\n' >"$d/pkgs/core/package.json"
+fresh
+assert "an npm workspace runs through -w" \
+  '.scripts["build (pkgs/core)"] == "npm run build -w pkgs/core"' "$(profile_commands "$d")"
+
+d=$(tree)
+printf '{"workspaces": ["pkgs/*"]}\n' >"$d/package.json"
+touch "$d/yarn.lock"
+mkdir -p "$d/pkgs/core"
+printf '{"name": "core", "scripts": {"build": "tsc"}}\n' >"$d/pkgs/core/package.json"
+fresh
+assert "a yarn workspace runs through yarn workspace" \
+  '.scripts["build (pkgs/core)"] == "yarn workspace core build"' "$(profile_commands "$d")"
+
+# No declaration: a server/ beside a root React app is outside any workspace,
+# so its command runs in its own directory.
+d=$(tree)
+printf '{"dependencies": {"react": "18"}}\n' >"$d/package.json"
+mkdir -p "$d/server"
+printf '{"scripts": {"dev": "nest start --watch"}, "dependencies": {"@nestjs/core": "10"}}\n' \
+  >"$d/server/package.json"
+fresh
+out=$(framework "$d")
+assert "a nested server/ is read without a workspace declaration" \
+  '. == ["NestJS", "React"]' "$out"
+fresh
+assert "a package outside a workspace runs in its own directory" \
+  '.scripts["dev (server)"] == "npm --prefix server run dev"' "$(profile_commands "$d")"
+
+# The script npm init writes exits 1 on purpose: not a test command.
+d=$(tree)
+printf '{"scripts": {"test": "echo \\"Error: no test specified\\" && exit 1", "start": "node ."}}\n' \
+  >"$d/package.json"
+fresh
+out=$(profile_commands "$d")
+assert "npm's no-test placeholder is not a test command" '(.scripts | has("test")) | not' "$out"
+assert "the scripts beside the placeholder stay" '.scripts.start == "node ."' "$out"
+
+# AdonisJS serves its React pages through Inertia from the same package.
+assert "AdonisJS lands beside the React it renders" \
+  '. == ["AdonisJS", "React"]' "$(framework "$(deps @adonisjs/core react)")"
+
+# A plain C Makefile builds with `all`, and bare `make` runs it when it comes
+# first; `CC:=` and `name:=` are assignments, not targets.
+d=$(tree)
+printf 'cc:=gcc\nall: ft_ping\nclean:\ndebug:\nrun:\n' >"$d/Makefile"
+out=$(profile_commands "$d")
+assert "a leading all: target is the build command, bare make" '.scripts.build == "make"' "$out"
+assert "a debug target lands" '.scripts.debug == "make debug"' "$out"
+assert "an assignment is not a target" '(.scripts | has("cc")) | not' "$out"
+d=$(tree)
+printf 'clean:\nall:\n' >"$d/Makefile"
+assert "an all: target that is not first is make all" \
+  '.scripts.build == "make all"' "$(profile_commands "$d")"
+d=$(tree)
+printf 'all: build\nbuild:\n\tcc main.c\n' >"$d/Makefile"
+assert "a build: target beside all: keeps its own name" \
+  '.scripts == {"build": "make build"}' "$(profile_commands "$d")"
+
+d=$(tree)
+printf '(lang dune 3.0)\n' >"$d/dune-project"
+assert "a dune-project builds and tests with dune" \
+  '.scripts == {"build": "dune build", "test": "dune test"}' "$(profile_commands "$d")"
 
 if [[ $fail -eq 0 ]]; then
   echo "profile_framework/profile_commands: read what is committed, capped and in order"

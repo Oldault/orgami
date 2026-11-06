@@ -73,4 +73,22 @@ cmp -s "$cache" "$tmp/before.json" || { echo "FAIL a personal account replaced t
 check "no half-written file beside the cache" \
   "$(find "$home/acme/cache/prs" -name '2026-W10.json.*' | wc -l | tr -d ' ')" 0
 
+# --last N is this week and the N before it; --weeks-ago N is the one week.
+rm -f "$stub/personal"
+rm -rf "$home/acme/cache/prs"
+PATH="$bin:$PATH" STUB="$stub" ORGAMI_HOME="$home" ORGAMI_COMPANY=acme \
+  "$root/bin/orgami" pull --last 3 >"$tmp/out" 2>"$tmp/err" || { echo "FAIL pull --last 3:" >&2; cat "$tmp/err" >&2; exit 1; }
+check "--last 3 caches four weeks" "$(find "$home/acme/cache/prs" -name '*-W*.json' | wc -l | tr -d ' ')" 4
+rm -rf "$home/acme/cache/prs"
+PATH="$bin:$PATH" STUB="$stub" ORGAMI_HOME="$home" ORGAMI_COMPANY=acme \
+  "$root/bin/orgami" pull --weeks-ago 3 >"$tmp/out" 2>"$tmp/err" || { echo "FAIL pull --weeks-ago:" >&2; exit 1; }
+check "--weeks-ago 3 caches one week" "$(find "$home/acme/cache/prs" -name '*-W*.json' | wc -l | tr -d ' ')" 1
+
+# A report for an uncached week names the weeks that are cached.
+only=$(basename "$(find "$home/acme/cache/prs" -name '*-W*.json')" .json)
+if PATH="$bin:$PATH" ORGAMI_HOME="$home" ORGAMI_COMPANY=acme "$root/bin/orgami" report --stats-only --week 2000-W01 >"$tmp/out" 2>"$tmp/err"; then
+  echo "FAIL report on an uncached week exited 0" >&2; fail=1
+fi
+grep -q "cached: $only" "$tmp/err" || { echo "FAIL report hint: $(cat "$tmp/err")" >&2; fail=1; }
+
 exit $fail

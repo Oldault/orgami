@@ -66,20 +66,39 @@ cmd_pull() {
   load_company
   need gh
 
-  local weeks_ago=0 since="" until=""
+  # --last N is the current week and the N before it, so "--last 4" caches five
+  # files and "--last 0" (what the weekly timer runs) is still just this week.
+  # --weeks-ago N is the old single-week reading: only the week N weeks back.
+  local last=0 weeks_ago="" since="" until=""
   while [[ $# -gt 0 ]]; do
     case $1 in
-      --last) need_arg "$1" $#; weeks_ago=$2; shift 2 ;;
+      --last) need_arg "$1" $#; last=$2; shift 2 ;;
+      --weeks-ago) need_arg "$1" $#; weeks_ago=$2; shift 2 ;;
       --since) need_arg "$1" $#; since=$2; shift 2 ;;
       --until) need_arg "$1" $#; until=$2; shift 2 ;;
       *) die "unknown flag: $1" ;;
     esac
   done
+  [[ $last =~ ^[0-9]+$ ]] || die "--last wants a number of weeks, got '$last'"
+  [[ -z $weeks_ago || $weeks_ago =~ ^[0-9]+$ ]] || die "--weeks-ago wants a number, got '$weeks_ago'"
 
-  if [[ -z $since ]]; then
+  if [[ -n $since ]]; then
+    pull_week "$since" "$until"
+  elif [[ -n $weeks_ago ]]; then
     since=$(week_start "$weeks_ago")
-    until=$(date_shift "$since" +6)
+    pull_week "$since" "$(date_shift "$since" +6)"
+  else
+    local n
+    for ((n = last; n >= 0; n--)); do
+      since=$(week_start "$n")
+      pull_week "$since" "$(date_shift "$since" +6)" || return 1
+    done
   fi
+}
+
+# One week's cache file. Re-running the same week overwrites it.
+pull_week() {
+  local since=$1 until=${2-}
   [[ -n $until ]] || until=$(date -u +%Y-%m-%d)
 
   local label

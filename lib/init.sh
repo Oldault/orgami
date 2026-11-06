@@ -2,7 +2,7 @@
 # orgami init / use / list — one directory per company.
 
 INIT_USAGE='orgami init <company> --org <github-org> [--docs-repo <url> | --no-docs]
-              [--docs-path <dir>] [--exclude <pattern,...>] [--model <model>]
+              [--docs-path <dir>] [--exclude <regex,...>] [--model <model>]
               [--daily] [--daily-at HH:MM]'
 
 # init_check_org <org> — can the current gh token read this organization? Each
@@ -10,13 +10,14 @@ INIT_USAGE='orgami init <company> --org <github-org> [--docs-repo <url> | --no-d
 # to someone who typed their own login, or whose token lacks one scope.
 init_check_org() {
   local org=$1 err type st
-  gh auth status >/dev/null 2>&1 || die "gh is not signed in — run: gh auth login"
+  gh_auth_check
   valid_gh_name "$org" owner ||
     die "'$org' is not a GitHub organization login (letters, digits and single hyphens)"
 
   if ! err=$(gh api "orgs/$org" --jq .login 2>&1 >/dev/null); then
     # orgami reads an organization's repo list and its org: searches, which a
     # personal account does not have — the same refusal scan and pull make.
+    gh_auth_die "$err"
     type=$(gh api "users/$org" --jq .type 2>/dev/null || true)
     [[ $type == User ]] &&
       die "orgami maps GitHub organizations — $org is a personal account. Pass the organization instead: orgami init <company> --org <github-org> (gh org list shows yours)"
@@ -38,6 +39,14 @@ init_check_org() {
     log "the gh token has no read:org scope — if repositories are missing from the map: gh auth refresh -h github.com -s read:org"
   fi
   return 0
+}
+
+# exclude_bad <JSON array of patterns> — prints each one that is not a regular
+# expression jq can compile, one per line, as JSON. Patterns are regexes, not
+# globs, and `*-infra` reads like a glob; a pattern that cannot compile would
+# otherwise surface as a jq error in the middle of a scan.
+exclude_bad() {
+  jq -nr --argjson excl "$1" '$excl[] | . as $p | try ("" | test($p) | empty) catch ($p | tojson)'
 }
 
 cmd_init() {
@@ -78,12 +87,15 @@ cmd_init() {
   [[ $company != */* && $company != .* ]] ||
     die "'$company' cannot be a directory name under $ORGAMI_HOME — pick a short name like acme"
 
-  need gh
-  init_check_org "$org"
-
-  local exclude_json="[]"
+  local exclude_json="[]" bad
   [[ -z $exclude ]] ||
     exclude_json=$(jq -Rc 'split(",") | map(gsub("^\\s+|\\s+$"; "")) | map(select(. != ""))' <<<"$exclude")
+  bad=$(exclude_bad "$exclude_json")
+  [[ -z $bad ]] ||
+    die "--exclude ${bad%%$'\n'*} is not a regular expression — patterns are regexes matched against repo names, e.g. --exclude '-infra\$,^archived-'"
+
+  need gh
+  init_check_org "$org"
 
   local dir
   dir=$(company_dir "$company")

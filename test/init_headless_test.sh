@@ -29,6 +29,11 @@ echo "gh $*" >>"$GH_LOG"
 case "$1 $2" in
   "auth status")
     [[ $GH_STATE == signed-out ]] && { echo "You are not logged into any GitHub hosts." >&2; exit 1; }
+    case $GH_STATE in
+      bad-env) printf 'github.com\n  X Failed to log in to github.com using token (GH_TOKEN)\n  - The token in GH_TOKEN is invalid.\n' >&2; exit 1 ;;
+      bad-stored) printf 'github.com\n  X Failed to log in to github.com account someone (keyring)\n  - The token in keyring is invalid.\n  - To re-authenticate, run: gh auth login -h github.com\n' >&2; exit 1 ;;
+      offline) printf 'github.com\n  X Timeout trying to log in to github.com account someone (keyring)\n' >&2; exit 1 ;;
+    esac
     if [[ $GH_STATE == no-read-org ]]; then
       echo "  - Token scopes: 'gist', 'repo'"
     else
@@ -99,6 +104,15 @@ done
 # --- each way the org cannot be read
 GH_STATE=signed-out init beta --org acme-inc
 [[ $rc == 1 && $out == *"gh auth login"* ]] || fail "signed out: $out"
+# A bad token in GH_TOKEN wins over gh's stored login, so `gh auth login` is no
+# help: the message names the variable.
+GH_STATE=bad-env GH_TOKEN=ghp_bad init beta --org acme-inc
+[[ $rc == 1 && $out == *"GitHub rejected the token in GH_TOKEN"* && $out != *"not signed in"* ]] ||
+  fail "a rejected GH_TOKEN: $out"
+GH_STATE=bad-stored GH_TOKEN="" GITHUB_TOKEN="" init beta --org acme-inc
+[[ $rc == 1 && $out == *"rejected gh's stored token — run: gh auth login"* ]] || fail "a rejected stored token: $out"
+GH_STATE=offline GH_TOKEN="" GITHUB_TOKEN="" init beta --org acme-inc
+[[ $rc == 1 && $out == *"Timeout trying to log in"* && $out == *"check the network"* ]] || fail "gh offline: $out"
 GH_STATE=personal init beta --org somebody
 [[ $rc == 1 && $out == *"somebody is a personal account"* ]] || fail "personal account: $out"
 GH_STATE=missing init beta --org nobody-here
@@ -107,6 +121,9 @@ GH_STATE=saml init beta --org acme-inc
 [[ $rc == 1 && $out == *"single sign-on"* ]] || fail "SAML: $out"
 init beta --org 'acme;rm'
 [[ $rc == 1 && $out == *"not a GitHub organization login"* ]] || fail "bad login: $out"
+# Patterns are regexes; a glob would otherwise reach the scan as a jq error.
+GH_STATE=org init beta --org acme-inc --no-docs --exclude 'web,*-infra'
+[[ $rc == 1 && $out == *'--exclude "*-infra" is not a regular expression'* ]] || fail "glob --exclude: $out"
 [[ ! -e $tmp/home/beta ]] || fail "a refused init left a company directory"
 
 GH_STATE=no-read-org init beta --org acme-inc
@@ -134,6 +151,17 @@ url=$(GH_STATE=org GH_PROTO=ssh wiz ui_create_docs_repo acme-inc 2>/dev/null) ||
 [[ $url == git@github.com:acme-inc/orgami-reports.git ]] || fail "ssh gh user got $url"
 grep -q 'repo create acme-inc/orgami-reports --public' "$GH_LOG" || fail "public confirmed, not created public"
 grep -q 'gum confirm --default=no' "$GH_LOG" || fail "the public question does not default to no"
+
+# The wizard's exclude question: a glob is refused and asked again, a regex kept.
+printf '%s\n' yes '*-infra' yes '-infra$, ^archived-' >"$GUM_QUEUE"
+got=$(wiz ui_ask_exclude 2>"$tmp/wiz.err") || fail "ui_ask_exclude failed: $(cat "$tmp/wiz.err")"
+[[ $got == '["-infra$","^archived-"]' ]] || fail "the wizard kept $got"
+grep -q 'not a regular expression' "$tmp/wiz.err" || fail "the wizard did not say the glob is not a regex"
+printf '%s\n' yes '*-infra' no >"$GUM_QUEUE"
+! wiz ui_ask_exclude >/dev/null 2>&1 || fail "declining to retry a glob still saved a pattern"
+GH_STATE=bad-env GH_TOKEN=x wiz gh_auth_check >/dev/null 2>"$tmp/wiz.err" && fail "gh_auth_check passed a rejected GH_TOKEN"
+grep -q 'GH_TOKEN' "$tmp/wiz.err" || fail "the wizard's sign-in check does not name GH_TOKEN: $(cat "$tmp/wiz.err")"
+grep -q 'gh_auth_check' lib/ui.sh || fail "the wizard no longer runs gh_auth_check"
 
 [[ $(wiz ui_repo_slug https://github.com/acme-inc/handbook.git) == acme-inc/handbook ]] || fail "slug from https"
 [[ $(wiz ui_repo_slug git@github.com:acme-inc/handbook.git) == acme-inc/handbook ]] || fail "slug from ssh"
