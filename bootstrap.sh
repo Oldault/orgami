@@ -30,16 +30,20 @@ set -Eeuo pipefail
 # set -e alone ends the script with whatever the failing command printed, which
 # after `sudo: gpg: command not found` is nothing at all about orgami. -E so it
 # fires inside functions too.
-# Inside run() the failing command reads `"$@"`, so run() keeps its own words
-# in RUNNING for the message.
+# Inside quietly() the failing command reads `"$@"`, so quietly() keeps its own
+# words in RUNNING for the message.
 RUNNING=""
+QUIET_LOG=""
 on_err() {
   local cmd=$BASH_COMMAND
   [[ $cmd == '"$@"'* && -n $RUNNING ]] && cmd=$RUNNING
+  # A quiet command's output was held back as noise; now it is the reason.
+  [[ -n $QUIET_LOG && -s $QUIET_LOG ]] && cat "$QUIET_LOG" >&2
   printf '\n\033[31morgami installer stopped: "%s" failed (exit %s, line %s).\033[0m\n' "$cmd" "$1" "$2" >&2
   printf 'Nothing after it ran. Fix that and run the installer again; it picks up where it left off.\n' >&2
 }
 trap 'on_err $? $LINENO' ERR
+trap '[[ -z $QUIET_LOG ]] || rm -f "$QUIET_LOG"' EXIT
 
 REPO_URL=${ORGAMI_REPO:-https://github.com/Oldault/orgami}
 SRC=${ORGAMI_SRC:-$HOME/.local/share/orgami}
@@ -75,18 +79,38 @@ step() { printf '\n\033[1;34m==>\033[0m \033[1m%s\033[0m\n' "$*"; }
 # Under `curl | bash` stdin is the rest of this script, so nothing run here may
 # read it: a package manager that asks a question (debconf for tzdata) reads
 # the script as its answers and loops. Questions go to /dev/tty or nowhere.
-run() {
+#
+# What these commands print is pages of progress nobody reads: apt's "Reading
+# database ... 5%", debconf's notes, git's clone chatter. So a label is printed
+# instead (nothing when it is empty), the output is kept, and it is shown only
+# when the command fails, above the stop message that names the command.
+# --dry-run prints the whole command.
+quietly() {
+  local label=$1
+  shift
   if [[ $DRY == 1 ]]; then
     dim "would run: $*"
-  else
-    dim "$*"
-    RUNNING="$*"
-    "$@" </dev/null
+    return 0
   fi
+  [[ -z $label ]] || dim "  $label"
+  RUNNING="$*"
+  QUIET_LOG=$(mktemp)
+  "$@" </dev/null >"$QUIET_LOG" 2>&1
+  # Reached on failure only where the caller handles it (`quietly ... || ...`),
+  # since anywhere else the ERR trap has already stopped the installer.
+  local rc=$?
+  rm -f "$QUIET_LOG"
+  QUIET_LOG=""
+  RUNNING=""
+  return "$rc"
 }
 
 # sudo resets the environment, so the frontend is set on the far side of it.
-apt_get() { run $SUDO env DEBIAN_FRONTEND=noninteractive apt-get "$@"; }
+apt_get() {
+  local label=$1
+  shift
+  quietly "$label" $SUDO env DEBIAN_FRONTEND=noninteractive apt-get "$@"
+}
 
 # ---------------------------------------------------------------- environment
 
@@ -153,11 +177,11 @@ install_missing() {
   [[ ${#pkgs[@]} -gt 0 ]] || return 0
 
   case $MGR in
-    brew) run brew install "${pkgs[@]}" ;;
-    pacman) run $SUDO pacman -S --needed --noconfirm "${pkgs[@]}" ;;
-    dnf) run $SUDO dnf install -y "${pkgs[@]}" ;;
+    brew) quietly "installing ${pkgs[*]} with Homebrew" brew install "${pkgs[@]}" ;;
+    pacman) quietly "installing ${pkgs[*]} with pacman" $SUDO pacman -S --needed --noconfirm "${pkgs[@]}" ;;
+    dnf) quietly "installing ${pkgs[*]} with dnf" $SUDO dnf install -y "${pkgs[@]}" ;;
     winget)
-      for p in "${pkgs[@]}"; do run winget install -e --id "$p"; done
+      for p in "${pkgs[@]}"; do quietly "installing $p with winget" winget install -e --id "$p"; done
       ;;
     apt)
       # gh and gum publish their own repositories; the rest is plain apt.
@@ -177,34 +201,36 @@ install_missing() {
       if printf '%s\n' "${pkgs[@]}" | grep -qx gum; then
         command -v gpg >/dev/null || plain+=(gnupg)
       fi
-      apt_get update -qq
-      [[ ${#plain[@]} -gt 0 ]] && apt_get install -y "${plain[@]}"
+      apt_get "updating the package lists" update -qq
+      [[ ${#plain[@]} -gt 0 ]] && apt_get "installing ${plain[*]}" install -y "${plain[@]}"
       if printf '%s\n' "${pkgs[@]}" | grep -qx gh; then
-        run $SUDO mkdir -p -m 755 /etc/apt/keyrings
         if [[ $DRY == 0 ]]; then
+          dim "  adding the GitHub CLI apt repository"
+          $SUDO mkdir -p -m 755 /etc/apt/keyrings
           curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg |
             $SUDO tee /etc/apt/keyrings/githubcli-archive-keyring.gpg >/dev/null
           $SUDO chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg
           echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" |
             $SUDO tee /etc/apt/sources.list.d/github-cli.list >/dev/null
         else
-          dim "would add the GitHub CLI apt repository"
+          dim "would add the GitHub CLI apt repository: /etc/apt/keyrings/githubcli-archive-keyring.gpg, /etc/apt/sources.list.d/github-cli.list"
         fi
       fi
       if printf '%s\n' "${pkgs[@]}" | grep -qx gum; then
         if [[ $DRY == 0 ]]; then
+          dim "  adding the Charm apt repository"
           $SUDO mkdir -p /etc/apt/keyrings
           curl -fsSL https://repo.charm.sh/apt/gpg.key |
             $SUDO gpg --batch --yes --dearmor -o /etc/apt/keyrings/charm.gpg
           echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" |
             $SUDO tee /etc/apt/sources.list.d/charm.list >/dev/null
         else
-          dim "would add the Charm apt repository"
+          dim "would add the Charm apt repository: /etc/apt/keyrings/charm.gpg, /etc/apt/sources.list.d/charm.list"
         fi
       fi
-      apt_get update -qq
+      apt_get "updating the package lists" update -qq
       for p in gh gum; do
-        if printf '%s\n' "${pkgs[@]}" | grep -qx "$p"; then apt_get install -y "$p"; fi
+        if printf '%s\n' "${pkgs[@]}" | grep -qx "$p"; then apt_get "installing $p" install -y "$p"; fi
       done
       ;;
     *)
@@ -235,7 +261,7 @@ bash_ok() {
 if [[ $PLATFORM == macos ]] && ! bash_ok "$(command -v bash)"; then
   step "orgami needs bash 4.4 or newer; $(command -v bash) is $(bash -c 'echo $BASH_VERSION')"
   if [[ $MGR == brew && $DEPS == 1 ]]; then
-    run brew install bash
+    quietly "installing bash with Homebrew" brew install bash
     hash -r
     warn "open a new terminal afterwards, so the new bash comes first on PATH"
   else
@@ -258,32 +284,31 @@ if [[ $DRY == 0 ]] && command -v jq >/dev/null && ! jq_ok; then
   warn "  https://github.com/jqlang/jq/releases — then run: orgami doctor"
 fi
 
-command -v claude >/dev/null ||
-  warn "claude is not installed — 'orgami report' needs it: curl -fsSL https://claude.ai/install.sh | bash"
-
 # ---------------------------------------------------------------------- orgami
 
 step "Installing orgami ${REF:+$REF }into $SRC"
 if [[ -d $SRC/.git && -n $REF ]]; then
-  run git -C "$SRC" fetch --quiet --tags origin
-  run git -C "$SRC" -c advice.detachedHead=false checkout --quiet "$REF"
+  quietly "fetching releases" git -C "$SRC" fetch --quiet --tags origin
+  quietly "checking out $REF" git -C "$SRC" -c advice.detachedHead=false checkout --quiet "$REF"
 elif [[ -d $SRC/.git ]]; then
   # Pinned before and not now: back onto the branch the clone came from, which
   # is the one auto-update follows.
   if [[ $DRY == 0 ]] && ! git -C "$SRC" symbolic-ref -q HEAD >/dev/null; then
     branch=$(git -C "$SRC" rev-parse --abbrev-ref origin/HEAD)
-    run git -C "$SRC" checkout --quiet "${branch#origin/}"
+    quietly "back onto ${branch#origin/}" git -C "$SRC" checkout --quiet "${branch#origin/}"
   fi
-  run git -C "$SRC" pull --quiet --ff-only
+  quietly "updating $SRC" git -C "$SRC" pull --quiet --ff-only
 else
-  run mkdir -p "$(dirname "$SRC")"
+  quietly "" mkdir -p "$(dirname "$SRC")"
   if [[ -n $REF ]]; then
-    run git -c advice.detachedHead=false clone --quiet --branch "$REF" "$REPO_URL" "$SRC"
+    quietly "cloning $REPO_URL at $REF" git -c advice.detachedHead=false clone --quiet --branch "$REF" "$REPO_URL" "$SRC"
   else
-    run git clone --quiet "$REPO_URL" "$SRC"
+    quietly "cloning $REPO_URL" git clone --quiet "$REPO_URL" "$SRC"
   fi
 fi
-run bash "$SRC/install.sh"
+# install.sh's own report (what is missing, what it linked, what to run next)
+# is the closing block below, said once and with the PATH this install leaves.
+quietly "linking orgami into $HOME/.local/bin" bash "$SRC/install.sh"
 
 ORGAMI="$SRC/bin/orgami"
 
@@ -293,8 +318,10 @@ if [[ $EDITORS == 1 ]]; then
   if command -v claude >/dev/null; then
     step "Wiring Claude Code"
     # Both refuse when it is already there, which on a re-run is the normal case.
-    run claude plugin marketplace add Oldault/orgami || dim "the orgami marketplace is already added"
-    run claude plugin install orgami@orgami || warn "could not install the plugin — run: claude plugin install orgami@orgami"
+    quietly "adding the orgami marketplace" claude plugin marketplace add Oldault/orgami ||
+      dim "  the orgami marketplace is already added"
+    quietly "installing the orgami plugin" claude plugin install orgami@orgami ||
+      warn "could not install the plugin — run: claude plugin install orgami@orgami"
     # The plugin supplies the skill; the link install.sh made would load it twice.
     skill="$HOME/.claude/skills/orgami/SKILL.md"
     if [[ $DRY == 0 && -L $skill && $(readlink "$skill") == "$SRC/skills/orgami/SKILL.md" ]]; then
@@ -370,17 +397,23 @@ profile_adding_local_bin() {
   return 1
 }
 
-ORGAMI_CMD=orgami
+# What the closing block says about PATH, gathered here and printed there: a
+# warning in the middle of the install scrolls away behind the next step, and
+# the person reading "Done." is the one who has to act on it.
+path_note=()
+here_line='export PATH="$HOME/.local/bin:$PATH"'
+[[ $(basename "${SHELL:-bash}") == fish ]] && here_line='set -gx PATH $HOME/.local/bin $PATH'
+ON_PATH=1
 case ":$PATH:" in
   *":$HOME/.local/bin:"*) ;;
   *)
-    ORGAMI_CMD="$HOME/.local/bin/orgami"
+    ON_PATH=0
     rcs=$(shell_rc)
     if adds=$(profile_adding_local_bin); then
       # Read at login, not by each new terminal: on a desktop that is after
       # logging out and back in, which is the part people do not expect.
-      warn "$HOME/.local/bin is not on this terminal's PATH yet. $adds adds it at the next login"
-      warn "(a login shell, or logging out and back in) — check with: bash -lc 'command -v orgami'"
+      path_note+=("$HOME/.local/bin is not on this terminal's PATH yet. $adds adds it at the next")
+      path_note+=("login (a login shell, or logging out and back in) — check with: bash -lc 'command -v orgami'")
     else
       # shellcheck disable=SC2016  # written to the profile as is, expanded by the shell
       if [[ $rcs == *fish* ]]; then line='fish_add_path $HOME/.local/bin'
@@ -397,38 +430,96 @@ case ":$PATH:" in
       fi
       while IFS= read -r rc; do
         if [[ $ADD_PATH == 1 && $DRY == 1 ]]; then
-          dim "would add to $rc: $line"
+          path_note+=("Would add $HOME/.local/bin to PATH in $rc: $line")
         elif [[ $ADD_PATH == 1 ]]; then
           mkdir -p "$(dirname "$rc")"
           printf '\n# orgami: ~/.local/bin is where bootstrap.sh linked it\n%s\n' "$line" >>"$rc"
-          warn "Added $HOME/.local/bin to PATH in $rc."
+          path_note+=("Added $HOME/.local/bin to PATH in $rc.")
         fi
       done <<<"$rcs"
       if [[ $ADD_PATH == 1 ]]; then
-        [[ $DRY == 1 ]] || warn "A new terminal finds orgami."
+        [[ $DRY == 1 ]] || path_note+=("A new terminal finds orgami; this one does not until step 1.")
       else
-        warn "$HOME/.local/bin is not on your PATH, and no shell profile here adds it, so a new terminal will not find orgami either."
-        warn "Add it for $(basename "${SHELL:-bash}"), then open a new terminal:"
+        path_note+=("$HOME/.local/bin is not on your PATH, and no shell profile here adds it, so a new")
+        path_note+=("terminal will not find orgami either. Add it for $(basename "${SHELL:-bash}"), then open a new terminal:")
         while IFS= read -r rc; do
-          if [[ $rc == *fish* ]]; then warn "  $line"
-          else warn "  echo '$line' >> \"$rc\""; fi
+          if [[ $rc == *fish* ]]; then path_note+=("  $line")
+          else path_note+=("  echo '$line' >> \"$rc\""); fi
         done <<<"$rcs"
-        warn "or run the installer again with --path to have it added."
+        path_note+=("or run the installer again with --path to have it added.")
       fi
     fi
-    warn "Until then, in this terminal: export PATH=\"\$HOME/.local/bin:\$PATH\""
     ;;
 esac
 
+# One line per tool: what this run found, installed, or could not.
+tool_status() {
+  local t=$1
+  local found=0
+  command -v "$t" >/dev/null && found=1
+  [[ $t == python3 && $PLATFORM == gitbash ]] && command -v python >/dev/null && found=1
+  # :- because bash 3.2 under set -u calls an empty array unbound.
+  if [[ " ${missing[*]:-} " != *" $t "* ]]; then
+    if [[ $t == jq && $DRY == 0 ]] && ! jq_ok; then
+      echo "already present, but $(jq --version 2>/dev/null) — orgami needs jq $JQ_FLOOR or newer"
+    else
+      echo "already present"
+    fi
+  elif [[ $DRY == 1 ]]; then
+    if [[ $DEPS == 1 ]]; then echo "would be installed"; else echo "missing — skipped (--no-deps)"; fi
+  elif [[ $found == 1 ]]; then
+    echo "installed"
+  elif [[ $DEPS == 0 ]]; then
+    echo "missing — skipped (--no-deps)"
+  elif [[ $MGR == winget ]]; then
+    echo "installed, but not on this terminal's PATH — open a new terminal"
+  else
+    echo "missing — install it by hand"
+  fi
+}
+
 echo
-bold "Done."
+if [[ $DRY == 1 ]]; then bold "Done (dry run — nothing was changed)."; else bold "Done."; fi
 echo
-if ! gh auth status >/dev/null 2>&1; then
-  echo "  1. gh auth login       sign in to GitHub"
-  printf '  2. %-18s map an organization, or %s join to pick one up\n' "$ORGAMI_CMD init" "$ORGAMI_CMD"
+for t in git gh jq fzf gum python3; do
+  printf '  %-8s %s\n' "$t" "$(tool_status "$t")"
+done
+if command -v claude >/dev/null; then
+  printf '  %-8s %s\n' claude "already present"
 else
-  printf '  %-22s map an organization\n' "$ORGAMI_CMD init"
-  printf '  %-22s or pick up one a colleague already mapped\n' "$ORGAMI_CMD join"
+  printf '  %-8s %s\n' claude "not installed — only the written recaps, digests, session notes and playbooks" \
+    "" "need it; --stats-only gives the numbers without it." \
+    "" "To add it: curl -fsSL https://claude.ai/install.sh | bash"
 fi
+if [[ $DRY == 1 && -d $SRC/.git ]]; then
+  printf '  %-8s %s\n' orgami "would be updated in $SRC${REF:+ to $REF}"
+elif [[ $DRY == 1 ]]; then
+  printf '  %-8s %s\n' orgami "would be installed in $SRC${REF:+ at $REF}, linked as $HOME/.local/bin/orgami"
+else
+  printf '  %-8s %s\n' orgami "$SRC${REF:+ at $REF}, linked as $HOME/.local/bin/orgami"
+fi
+
+if [[ ${#path_note[@]} -gt 0 ]]; then
+  echo
+  printf '\033[33m%s\033[0m\n' "${path_note[@]}"
+fi
+
+# Numbered from what is left to do here, and every step has a form that runs
+# with no terminal: interactive `orgami init` dies without one, so its flag
+# form is given too.
+echo
+bold "Next:"
+n=0
+nth() { n=$((n + 1)); printf '  %d. %-38s %s\n' "$n" "$1" "$2"; }
+also() {
+  if [[ -z $2 ]]; then printf '     %s\n' "$1"; else printf '     %-38s %s\n' "$1" "$2"; fi
+}
+[[ $ON_PATH == 1 ]] || nth "$here_line" "puts orgami on this terminal's PATH"
+gh auth status >/dev/null 2>&1 || nth "gh auth login" "sign in to GitHub"
+nth "orgami init" "map an organization, step by step"
+also "orgami init <name> --org <github-org> --no-docs" ""
+also "" "the same, with no terminal to answer on"
+also "orgami join" "or pick up one a colleague already mapped"
+nth "orgami doctor" "check what is installed and what is missing"
 echo
 dim "then: orgami schedule (weekly), orgami (the menu), orgami context (in a checkout)"

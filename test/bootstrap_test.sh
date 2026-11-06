@@ -6,7 +6,10 @@
 # is dearmored, a failed command stops the installer naming that command, a
 # rerun gets past the keyring the stopped run left, an old jq is warned about,
 # and the PATH line for the shell's rc file is printed unless --path says to
-# write it.
+# write it. Package managers run quietly, their output shown only when one
+# fails, and the closing block carries everything a terminal-less run needs:
+# a line per tool, the PATH, and next steps that need no terminal. --dry-run
+# changes nothing.
 #
 # Run under `env -i` with a PATH of stubs and links to a few base tools: apt,
 # apt-get, sudo, dpkg and curl are stubs, apt-get drops a stub binary for each
@@ -36,11 +39,12 @@ for t in bash sh env grep sed uname dirname basename mkdir cat readlink rm rmdir
   ln -s "$p" "$base/$t"
 done
 
-# A repository to clone: install.sh only says it ran.
+# A repository to clone: install.sh leaves a mark, and says so the way the
+# real one chatters, which the installer keeps out of sight.
 src="$fixture/src"
 git init -q "$src"
 mkdir -p "$src/bin"
-printf '#!/bin/sh\necho "install.sh ran"\n' >"$src/install.sh"
+printf '#!/bin/sh\necho "linked install.sh noise"\n: >"$HOME/install.sh-ran"\n' >"$src/install.sh"
 printf '#!/bin/sh\nexit 0\n' >"$src/bin/orgami"
 git -C "$src" add -A
 git -C "$src" -c user.name=t -c user.email=t@t commit -qm init
@@ -90,7 +94,10 @@ setup() {
 if IFS= read -r _; then in=data; else in=empty; fi
 echo "\$* | DEBIAN_FRONTEND=\${DEBIAN_FRONTEND:-} | stdin=\$in" >>"$log"
 [ "\$1" = install ] || exit 0
-[ $rc = 0 ] || exit $rc
+# What a real apt-get prints on a bare image, on both streams.
+echo "(Reading database ... 5%"
+echo "debconf: delaying package configuration, since apt-utils is not installed" >&2
+[ $rc = 0 ] || { echo "E: Unable to locate package \$3" >&2; exit $rc; }
 for p in "\$@"; do
   case \$p in -*|install) continue ;; gnupg) p=gpg ;; esac
   case \$p in
@@ -123,9 +130,37 @@ check "fresh: every apt-get runs noninteractive with an empty stdin" \
 check "fresh: gh and gum installed after their repositories" \
   "$(grep -c '^install -y \(gh\|gum\) ' "$log")" "2"
 check "fresh: the PATH line for ~/.bashrc is printed, not written" \
-  "$(grep -c ">> \"$home/.bashrc\"" "$fixture/fresh/err") $([[ -e $home/.bashrc ]] && echo written || echo untouched)" \
+  "$(grep -c ">> \"$home/.bashrc\"" <<<"$out") $([[ -e $home/.bashrc ]] && echo written || echo untouched)" \
   "1 untouched"
-check "fresh: orgami's own install.sh ran" "$(grep -c 'install.sh ran' <<<"$out")" "1"
+check "fresh: orgami's own install.sh ran" "$([[ -e $home/install.sh-ran ]] && echo ran)" "ran"
+check "fresh: apt's and install.sh's chatter is kept out of sight" \
+  "$(cat - "$fixture/fresh/err" <<<"$out" | grep -c 'Reading database\|apt-utils\|install.sh noise\|DEBIAN_FRONTEND' || true)" "0"
+# Everything after "Done." is what a person with no terminal acts on.
+closing=$(sed -n '/^.*Done\./,$p' <<<"$out")
+check "fresh: a line per tool, installed or already present" \
+  "$(grep -cE '^  (gh|jq|fzf|gum|python3) +installed$' <<<"$closing") $(grep -cE '^  git +already present$' <<<"$closing")" "5 1"
+check "fresh: claude is optional, and the line says what needs it" \
+  "$(grep -c "^  claude   not installed — only the written recaps, digests, session notes and playbooks" <<<"$closing")" "1"
+check "fresh: the closing block says ~/.local/bin is not on PATH, with the export line first" \
+  "$(grep -c "$home/.local/bin is not on your PATH" <<<"$closing") $(grep -m1 '^  1\. ' <<<"$closing" | grep -c 'export PATH="\$HOME/.local/bin:\$PATH"')" "1 1"
+check "fresh: the profile line is in the closing block too" \
+  "$(grep -c ">> \"$home/.bashrc\"" <<<"$closing")" "1"
+check "fresh: next steps give init's flag form and doctor" \
+  "$(grep -c 'orgami init <name> --org <github-org> --no-docs' <<<"$closing") $(grep -c 'orgami doctor' <<<"$closing")" "1 1"
+check "fresh: nothing about PATH is said before the end" \
+  "$(grep -c 'PATH' "$fixture/fresh/err" || true)" "0"
+
+# --- --dry-run on the same fresh machine --------------------------------------
+setup dry
+rc=0
+out=$(boot --dry-run 2>"$fixture/dry/err") || rc=$?
+check "dry run: finishes" "$rc" "0"
+check "dry run: no apt-get, no clone, no profile line, no install.sh" \
+  "$(wc -l <"$log" | tr -d ' ') $(ls -A "$home" | wc -l | tr -d ' ')" "0 0"
+check "dry run: each command it would run is printed whole" \
+  "$(grep -c 'would run: sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y' <<<"$out") $(grep -c "would run: bash $home/.local/share/orgami/install.sh" <<<"$out")" "3 1"
+check "dry run: the closing block says nothing changed" \
+  "$(grep -c 'Done (dry run — nothing was changed)' <<<"$out") $(grep -cE '^  gh +would be installed$' <<<"$out")" "1 1"
 
 # --- Arch: no profile adds ~/.local/bin, and --path says to add it ------------
 # Arch's ~/.bashrc returns at once in a shell that is not interactive, and its
@@ -162,6 +197,9 @@ boot >/dev/null 2>"$fixture/broken/err" || rc=$?
 check "broken: the installer exits with apt-get's status" "$rc" "100"
 check "broken: the message names the command that failed" \
   "$(grep -c 'orgami installer stopped: "sudo env DEBIAN_FRONTEND=noninteractive apt-get install' "$fixture/broken/err")" "1"
+check "broken: apt-get's own output is shown in full, above the message" \
+  "$(grep -o 'E: Unable to locate package\|Reading database\|orgami installer stopped' "$fixture/broken/err" | tr '\n' '|')" \
+  "Reading database|E: Unable to locate package|orgami installer stopped|"
 
 # --- a rerun after a run that stopped once Charm's key was written ------------
 # The stop message says to run the installer again, so the second run has to
@@ -182,6 +220,20 @@ rc=0
 boot >/dev/null 2>"$fixture/oldjq/err" || rc=$?
 check "old jq: the installer still finishes" "$rc" "0"
 check "old jq: the floor is said" "$(grep -c 'needs jq 1.6 or newer' "$fixture/oldjq/err")" "1"
+
+# --- claude present, its marketplace already added ----------------------------
+# `claude plugin marketplace add` fails on a rerun, and the installer handles
+# that failure itself: it must neither stop nor print claude's complaint.
+setup claude
+printf '#!/bin/sh\n[ "$2" = marketplace ] && { echo "already added: orgami" >&2; exit 1; }\nexit 0\n' >"$stubs/claude"
+chmod +x "$stubs/claude"
+rc=0
+out=$(env -i HOME="$home" SHELL=/bin/bash PATH="$stubs:$base" ORGAMI_REPO="$fixture/orgami.git" \
+  bash -s -- <"$fixture/bootstrap.sh" 2>"$fixture/claude/err") || rc=$?
+check "claude: a marketplace already added does not stop the installer" "$rc" "0"
+check "claude: said once, without claude's own words" \
+  "$(grep -c 'the orgami marketplace is already added' <<<"$out") $(cat - "$fixture/claude/err" <<<"$out" | grep -c 'already added: orgami' || true)" "1 0"
+check "claude: listed as already present" "$(grep -cE '^  claude +already present$' <<<"$out")" "1"
 
 # --- a pinned install, moved, then unpinned ----------------------------------
 # Pinned means the tag on its own, with no branch: update_why_not then finds no
