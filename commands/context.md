@@ -8,7 +8,8 @@ of this conversation.
 Inside a checkout it prints that repo's page: framework, the exact commands to
 run and test it, what it talks to and what talks to it, endpoints, environment,
 deployment, which repos it usually changes with, recent merged pull requests and
-team notes. Anywhere else it prints the organization overview.
+team notes. Outside a mapped checkout it says the repo is not in the map; pass
+`--org` for the organization overview.
 
 If it fails — `orgami` not found, no company configured, gh not signed in —
 run `orgami doctor --json` and tell the user the `fix` of each failing check

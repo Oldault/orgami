@@ -22,9 +22,10 @@ orgami context
 With the plugin installed a short version of this is already in your context from
 session start; run the command when you need the full page.
 
-Run it inside a checkout and it prints that repo's page. Run it anywhere else
-and it prints the organization overview. `orgami context <repo>` names one
-directly. This is the first thing to run when work begins in an unfamiliar repo
+Run it inside a mapped checkout and it prints that repo's page. Anywhere else
+it prints one line saying the repo is not in the map; `orgami context --org`
+prints the organization overview. `orgami context <repo>` names one directly,
+and fails for a name the map does not hold. This is the first thing to run when work begins in an unfamiliar repo
 — one command, one screen, no file hunting.
 
 The repo page carries: language and framework, the exact commands to run, build
@@ -47,7 +48,7 @@ that message and rerun with the flag; do not try to answer a prompt.
 | `orgami dns` asking which domains | `--domain <d>` and `--yes`, only when the user asked for the reading |
 | `orgami publish` confirming | `--dry-run` to look; `--yes` only when the user asked to publish |
 | `orgami view`, the menu | `orgami query <name> --json`, `orgami card <repo>` |
-| `orgami drafts` (one question per draft) | `orgami drafts --count`, then tell the user to run `orgami drafts` in a terminal |
+| `orgami drafts` (one question per draft) | `orgami drafts --list` (`--json` for data), show the user, then `orgami drafts --keep <id>` or `--drop <id>` for what they chose |
 
 **When anything fails** — a command not found, a die about gh, an empty map, a
 hook that injected nothing — run `orgami doctor --json` before guessing. It
@@ -58,6 +59,7 @@ them install something or sign in, which is theirs to run.
 
 Read-only and safe to run whenever it helps: `context`, `card`, `query`,
 `notes`, `playbook(s)`, `runbook`, `latest`, `list`, `doctor`, `drafts --count`,
+`drafts --list`,
 `depth --symbol`, `update --check`, and every `--dry-run`.
 
 These write somewhere other people see, so run them **only when the user asks
@@ -72,8 +74,10 @@ Machine-readable output, for when you would otherwise parse prose:
 `orgami dns --json`, `orgami doctor --json`, and the files under
 `~/.orgami/<c>/map/` (`graph.json`, `repos.json`, `live.json`, `dns.json`).
 With the plugin, the same map is also served as MCP tools (`orgami_context`,
-`orgami_query`, `orgami_search`, `orgami_notes`, …); with no company
-configured they answer with an error saying how to set one up.
+`orgami_query`, `orgami_search`, `orgami_notes`, `orgami_drafts`, …); with no
+company configured they answer with an error saying how to set one up. An
+empty state — no notes, no `DECISIONS.md`, no drafts — is an answer, not an
+error. `orgami_drafts` keep and drop are the user's call: ask first.
 
 ## When you need more
 
@@ -182,8 +186,10 @@ case for the first question and much rarer for the second.
 Sessions are also read back on their own — at the end of one, and again at the
 start of the next for any that were killed before they could be — and anything
 they establish is drafted. `orgami drafts` keeps or discards what was written
-for the user. That is a safety net, not a substitute: it only sees what was said
-in the conversation.
+for the user. When the session context says drafts are waiting, run
+`orgami drafts --list`, show them, and run `orgami drafts --keep <id>` or
+`--drop <id>` only after the user chooses. That is a safety net, not a
+substitute: it only sees what was said in the conversation.
 
 ## Shared team memory
 
@@ -362,7 +368,11 @@ Two rules for using it:
 tracker or the e-signature seats, because no repository mentions them.
 `map/dns.json`, written by `orgami dns`, is the other half: verification tokens,
 MX, SPF `include:`, the DMARC destination, conventional CNAMEs and nameservers,
-read out of the organization's own public DNS.
+read out of the organization's own public DNS. `vendors` holds only accounts
+on domains something says the organization owns (the config's `domains`, its
+GitHub profile, a host named after it); a fallback reading of hosts with no
+ownership signal goes to `unverified` and `unverified_vendors`, which are not
+the organization's accounts and should not be presented as such.
 
 Three rules for using it:
 

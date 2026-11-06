@@ -10,7 +10,12 @@ agents_block() {
   local repo=$1
   echo "$MARK_START"
   echo
-  "$ORGAMI_BIN" brief "$repo" 2>/dev/null | sed 's/^team notes on this repo:/Team notes on this repo:/'
+  # brief ends with "· why: <this machine's DECISIONS.md>". The block is meant
+  # to be committed, so a path under someone's home would be wrong for everyone
+  # else; the pointer is dropped here, and the CLI lines below say where to look.
+  "$ORGAMI_BIN" brief "$repo" 2>/dev/null |
+    sed -e 's/^team notes on this repo:/Team notes on this repo:/' \
+      -e 's# · why: /[^ ]*DECISIONS\.md$##'
   cat <<'TAIL'
 
 The full page, the organization map, recorded decisions and the team's notes are
@@ -172,11 +177,32 @@ mcp_config_json() {
     '{mcpServers: {orgami: {command: $bin, args: ["mcp"]}}}'
 }
 
+# Whether the Claude Code plugin is on this machine, from the file Claude Code
+# keeps its installed plugins in; `claude plugin list` would start a process
+# and need the CLI on PATH.
+mcp_plugin_installed() {
+  [[ -n ${CLAUDE_PLUGIN_ROOT-} ]] && return 0
+  local f=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/plugins/installed_plugins.json
+  [[ -f $f ]] || return 1
+  jq -e '[(.plugins // .) | keys[] | select(test("^orgami(@|$)"))] | length > 0' "$f" >/dev/null 2>&1
+}
+
 cmd_mcp_config() {
   local client=${1:-}
   case $client in
-    cursor | windsurf | claude-desktop | zed | vscode)
+    cursor | windsurf | claude-desktop)
       mcp_config_json
+      ;;
+    # Zed reads "context_servers" from its settings.json, and VS Code reads a
+    # top-level "servers" key (with a transport "type") from .vscode/mcp.json.
+    # Neither looks at "mcpServers", so the Cursor shape registers nothing there.
+    zed)
+      jq -n --arg bin "$(mcp_bin)" \
+        '{context_servers: {orgami: {command: $bin, args: ["mcp"], env: {}}}}'
+      ;;
+    vscode)
+      jq -n --arg bin "$(mcp_bin)" \
+        '{servers: {orgami: {type: "stdio", command: $bin, args: ["mcp"]}}}'
       ;;
     opencode)
       jq -n --arg bin "$(mcp_bin)" \
@@ -191,7 +217,14 @@ args = ["mcp"]
 EOF
       ;;
     claude-code)
-      echo "claude mcp add orgami -- $(mcp_bin) mcp"
+      # The plugin declares the server itself; adding it by hand as well gives
+      # two orgami servers with the same tools. The reply is a comment so that
+      # piping the output to a shell still does nothing.
+      if mcp_plugin_installed; then
+        echo "# the orgami plugin is installed and already provides this server (plugin:orgami:orgami) — nothing to add"
+      else
+        echo "claude mcp add orgami -- $(mcp_bin) mcp"
+      fi
       ;;
     *)
       cat >&2 <<'EOF'
@@ -200,7 +233,7 @@ usage: orgami mcp --config <client>
   cursor          merge into ~/.cursor/mcp.json, or .cursor/mcp.json in a project
   opencode        merge into ~/.config/opencode/opencode.json, or ./opencode.json
   codex           append to ~/.codex/config.toml
-  claude-code     a command to run
+  claude-code     a command to run (nothing, when the orgami plugin is installed)
   windsurf        merge into ~/.codeium/windsurf/mcp_config.json
   zed             merge into the "context_servers" block of Zed's settings
   vscode          merge into .vscode/mcp.json
